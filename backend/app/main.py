@@ -19,3 +19,12 @@ def health_check():
         "service": "anti-proxy-backend",
         "version": "0.1.0",
     }
+
+
+@app.get("/ready")
+def readiness_check():
+    return {
+        "status": "ready",
+        "service": "anti-proxy-backend",
+        "version": "0.1.0",
+    }
