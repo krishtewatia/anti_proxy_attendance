@@ -161,3 +161,31 @@ The Vision Service encapsulates all perception and emits structured, timestamped
 ```
 
 The Backend attendance service consumes this payload to evaluate session rosters, accumulate presence intervals, and apply anti-proxy policies without knowing internal CV mechanics.
+
+---
+
+## 7. Step 4.10.6 — Simultaneous Multi-Person Ingestion, Tracking & Recognition Benchmark
+
+### Objective:
+Verify whether multiple individuals can be simultaneously detected in the same frame, independently tracked without identity swapping, independently recognized against the biometric gallery, and generate discrete movement events.
+
+### Methodology:
+- **Test Asset**: `multi_person_simultaneous.mp4` (1152x1024 @ 29.8 FPS), created via `create_multi_person_video.py` by compositing two real walking video streams side-by-side with synchronized temporal alignment.
+- **Execution Script**: `vision-service/tests/multi_person_benchmark.py`.
+- **Doorway Boundary**: Calibrated perspective threshold line from `(0, 585)` to `(1152, 650)`.
+
+### Empirical Findings:
+
+| Metric | Target | Benchmark Measured | Gateway Status |
+| :--- | :---: | :---: | :---: |
+| **Concurrent Detections ($\ge 2$ faces/frame)** | $\ge 5$ frames | **11 sampled frames (44.0%)** | **PASS** |
+| **Concurrent Active Tracks ($\ge 2$ tracks)** | $\ge 2$ tracks | **4 sampled frames (16.0%)** | **PASS** |
+| **Independent Track Identity Accuracy** | 100% | **Track 7 $\rightarrow$ `person_01` (100.0%)<br>Track 9 $\rightarrow$ `person_02` (100.0%)** | **PASS** |
+| **Zero Identity Swap Collisions** | 0 swaps | **0 identity swaps across all active frames** | **PASS** |
+| **Concurrent Movement Events Emitted** | $\ge 2$ events | **Track 9: `ENTRY` at $t=3.59$s<br>Track 7: `ENTRY` at $t=3.99$s** | **PASS** |
+
+### Summary & Architectural Conclusion:
+1. **Multi-face Detection**: InsightFace SCRFD reliably detected multiple faces simultaneously in the same canvas without mutual suppression.
+2. **Track Disambiguation**: ByteTrack's Kalman filter and IoU association segregated the two subjects into discrete Track IDs (`Track 7` in Lane 1, `Track 9` in Lane 2) with zero track merging.
+3. **Biometric Decoupling**: Track-level voting buffers accumulated evidence independently, unanimously assigning `person_01` and `person_02` with high margins.
+4. **Independent Transit**: Both tracks crossed the doorway boundary within 400 milliseconds of each other, successfully emitting two separate, properly attributed `ENTRY` events.
