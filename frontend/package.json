@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:integration": "node --experimental-strip-types scripts/test_api_integration.ts",
+    "test:auth": "node --experimental-strip-types scripts/test_auth_client.ts",
+    "test:live-auth": "node --experimental-strip-types scripts/test_live_auth_flow.ts",
+    "test:routing": "node --experimental-strip-types scripts/test_routing.ts",
+    "test:create-session": "node --experimental-strip-types scripts/test_create_session.ts"
   },
   "dependencies": {
     "react": "^19.2.8",
