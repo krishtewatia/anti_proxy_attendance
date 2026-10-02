@@ -25,6 +25,7 @@ export interface AttendanceSummaryItem {
   presence_percentage: number;
   required_presence_percentage: number;
   status: string;
+  manually_corrected?: boolean;
 }
 
 export interface AttendanceSessionResponse {
@@ -35,4 +36,24 @@ export interface AttendanceSessionResponse {
 export interface SessionFinalizationResponse {
   session_id: string;
   records: AttendanceRecord[];
+}
+
+export interface AttendanceCorrectionCreate {
+  new_status: AttendanceStatus;
+  new_presence_seconds: number;
+  reason: string;
+}
+
+export interface AttendanceCorrectionResponse {
+  correction_id: string;
+  attendance_id: string;
+  session_id: string;
+  identity: string;
+  corrected_by: string;
+  previous_status: AttendanceStatus;
+  new_status: AttendanceStatus;
+  previous_presence_seconds: number;
+  new_presence_seconds: number;
+  reason: string;
+  corrected_at: string;
 }

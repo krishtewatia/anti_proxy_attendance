@@ -8,6 +8,10 @@ from pymongo.errors import DuplicateKeyError
 from app.core.config import settings
 from app.database import get_database
 from app.schemas.vision_event import VisionEventCreate, VisionEventResponse
+from app.services.session_resolution_service import (
+    find_active_session_for_classroom,
+    resolve_classroom_for_camera,
+)
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -37,9 +41,20 @@ async def ingest_vision_event(
             processed_at=existing.get("created_at"),
         )
 
-    # 2. Prepare document for persistence
+    # 2. Prepare document for persistence & enrich with active session
     event_doc = event.model_dump()
     event_doc["created_at"] = datetime.now(timezone.utc)
+
+    classroom_id = resolve_classroom_for_camera(event.camera_id)
+    active_session = await find_active_session_for_classroom(
+        classroom_id=classroom_id,
+        timestamp=event.timestamp,
+        db=db,
+    )
+    event_doc["classroom_id"] = classroom_id
+    event_doc["session_id"] = (
+        active_session["session_id"] if active_session else None
+    )
 
     # 3. Store in MongoDB with unique constraint protection
     try:

@@ -4,3 +4,4 @@ export * from './attendance.ts';
 export * from './vision_event.ts';
 export * from './student.ts';
 export * from './auth.ts';
+export * from './audit.ts';

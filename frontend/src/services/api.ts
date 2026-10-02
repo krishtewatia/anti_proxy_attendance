@@ -1,10 +1,15 @@
 import type {
+  AttendanceCorrectionCreate,
+  AttendanceCorrectionResponse,
   AttendanceSessionResponse,
+  AuditEventResponse,
   SessionCreate,
   SessionFinalizationResponse,
   SessionResponse,
   SessionRosterResponse,
   SessionRosterUpdate,
+  StudentProfile,
+  StudentProfileBind,
   TokenResponse,
   UserCreate,
   UserLogin,
@@ -97,25 +102,46 @@ export const api = {
     return request<SessionResponse[]>("/api/v1/sessions");
   },
 
-  updateRoster(
+  getSession(sessionId: string): Promise<SessionResponse> {
+    return request<SessionResponse>(
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}`
+    );
+  },
+
+  getSessionRoster(sessionId: string): Promise<SessionRosterResponse> {
+    return request<SessionRosterResponse>(
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/roster`
+    );
+  },
+
+  updateSessionRoster(
     sessionId: string,
-    data: SessionRosterUpdate,
+    identitiesOrData: string[] | SessionRosterUpdate
   ): Promise<SessionRosterResponse> {
+    const payload: SessionRosterUpdate = Array.isArray(identitiesOrData)
+      ? { identities: identitiesOrData }
+      : identitiesOrData;
+
     return request<SessionRosterResponse>(
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/roster`,
       {
         method: "POST",
-        body: JSON.stringify(data),
-      },
+        body: JSON.stringify(payload),
+      }
     );
+  },
+
+  updateRoster(
+    sessionId: string,
+    data: SessionRosterUpdate | string[],
+  ): Promise<SessionRosterResponse> {
+    return this.updateSessionRoster(sessionId, data);
   },
 
   getRoster(
     sessionId: string,
   ): Promise<SessionRosterResponse> {
-    return request<SessionRosterResponse>(
-      `/api/v1/sessions/${encodeURIComponent(sessionId)}/roster`,
-    );
+    return this.getSessionRoster(sessionId);
   },
 
   finalizeSession(
@@ -137,6 +163,61 @@ export const api = {
     );
   },
 
+  correctAttendance(
+    sessionId: string,
+    attendanceId: string,
+    data: AttendanceCorrectionCreate,
+  ): Promise<AttendanceCorrectionResponse> {
+    return request<AttendanceCorrectionResponse>(
+      `/api/v1/attendance/${encodeURIComponent(sessionId)}/records/${encodeURIComponent(attendanceId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          new_status: data.new_status,
+          new_presence_seconds: data.new_presence_seconds,
+          reason: data.reason,
+        }),
+      },
+    );
+  },
+
+  getAttendanceCorrections(
+    sessionId: string,
+    attendanceId: string,
+  ): Promise<AttendanceCorrectionResponse[]> {
+    return request<AttendanceCorrectionResponse[]>(
+      `/api/v1/attendance/${encodeURIComponent(sessionId)}/records/${encodeURIComponent(attendanceId)}/corrections`,
+    );
+  },
+
+  getStudentProfile(): Promise<StudentProfile> {
+    return request<StudentProfile>("/api/v1/students/profile");
+  },
+
+  getMyStudentProfile(): Promise<StudentProfile> {
+    return this.getStudentProfile();
+  },
+
+  bindStudentProfile(
+    identityOrData: string | StudentProfileBind,
+  ): Promise<StudentProfile> {
+    const payload: StudentProfileBind =
+      typeof identityOrData === "string"
+        ? { identity: identityOrData }
+        : identityOrData;
+
+    return request<StudentProfile>("/api/v1/students/profile", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  bindStudentIdentity(
+    identityOrData: string | StudentProfileBind,
+  ): Promise<StudentProfile> {
+    return this.bindStudentProfile(identityOrData);
+  },
+
   ingestVisionEvent(
     event: VisionEventCreate,
   ): Promise<VisionEventResponse> {
@@ -144,6 +225,22 @@ export const api = {
       method: "POST",
       body: JSON.stringify(event),
     });
+  },
+
+  getAuditEvents(params?: {
+    resource_type?: string;
+    resource_id?: string;
+  }): Promise<AuditEventResponse[]> {
+    const query = new URLSearchParams();
+    if (params?.resource_type) {
+      query.set("resource_type", params.resource_type);
+    }
+    if (params?.resource_id) {
+      query.set("resource_id", params.resource_id);
+    }
+    const queryString = query.toString();
+    const endpoint = queryString ? `/api/v1/audit?${queryString}` : "/api/v1/audit";
+    return request<AuditEventResponse[]>(endpoint);
   },
 
   checkHealth(): Promise<{

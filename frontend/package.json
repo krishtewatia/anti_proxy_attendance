@@ -12,7 +12,13 @@
     "test:auth": "node --experimental-strip-types scripts/test_auth_client.ts",
     "test:live-auth": "node --experimental-strip-types scripts/test_live_auth_flow.ts",
     "test:routing": "node --experimental-strip-types scripts/test_routing.ts",
-    "test:create-session": "node --experimental-strip-types scripts/test_create_session.ts"
+    "test:create-session": "node --experimental-strip-types scripts/test_create_session.ts",
+    "test:get-session": "node --experimental-strip-types scripts/test_get_session.ts",
+    "test:session-roster": "node --experimental-strip-types scripts/test_session_roster.ts",
+    "test:session-attendance": "node --experimental-strip-types scripts/test_session_attendance.ts",
+    "test:attendance-correction": "node --experimental-strip-types scripts/test_attendance_correction.ts",
+    "test:student-profile": "node --experimental-strip-types scripts/test_student_profile.ts",
+    "test:audit-logs": "node --experimental-strip-types scripts/test_audit_logs.ts"
   },
   "dependencies": {
     "react": "^19.2.8",

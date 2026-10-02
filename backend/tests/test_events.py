@@ -1,4 +1,4 @@
-"""Integration and unit tests for Event Ingestion API (Step 3.2)."""
+from datetime import datetime, timezone
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -205,3 +205,145 @@ async def test_forbidden_backend_fields_rejected(client, mock_db):
 
     count = await mock_db[settings.EVENTS_COLLECTION].count_documents({})
     assert count == 0
+
+
+@pytest.mark.anyio
+async def test_event_ingestion_matching_room_active_session_assigns_session_id(
+    client, mock_db
+):
+    """Matching room and active session assigns session_id and classroom_id."""
+    # 1. Insert an active session in ROOM_101
+    start_time = datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc)
+    end_time = datetime(2026, 10, 20, 11, 30, 0, tzinfo=timezone.utc)
+
+    await mock_db["sessions"].insert_one({
+        "session_id": "session_operating_systems_101",
+        "course_name": "Operating Systems",
+        "classroom_id": "ROOM_101",
+        "start_time": start_time,
+        "end_time": end_time,
+        "required_presence_percentage": 75.0,
+        "status": "SCHEDULED",
+        "created_by": "teacher_01",
+    })
+
+    # 2. Ingest event at 10:15 UTC (within session window) from camera at ROOM_101 door
+    payload = {
+        "event_id": "evt_match_active_01",
+        "camera_id": "CAM_ROOM_101_DOOR",
+        "track_id": 10,
+        "identity": "person_01",
+        "direction": "ENTRY",
+        "timestamp": "2026-10-20T10:15:00Z",
+        "evidence": {
+            "peak_similarity": 0.85,
+            "mean_similarity": 0.80,
+            "supporting_frames": 10,
+            "total_frames": 10,
+            "consistency_pct": 100.0,
+        },
+    }
+
+    response = await client.post("/api/v1/events", json=payload)
+    assert response.status_code == 201
+
+    # 3. Verify event document in DB has enriched fields
+    doc = await mock_db[settings.EVENTS_COLLECTION].find_one(
+        {"event_id": "evt_match_active_01"}
+    )
+    assert doc is not None
+    assert doc["classroom_id"] == "ROOM_101"
+    assert doc["session_id"] == "session_operating_systems_101"
+
+
+@pytest.mark.anyio
+async def test_event_ingestion_different_room_session_id_is_null(client, mock_db):
+    """Event in a different room than active session gets session_id null."""
+    # Session is in ROOM_101
+    start_time = datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc)
+    end_time = datetime(2026, 10, 20, 11, 30, 0, tzinfo=timezone.utc)
+
+    await mock_db["sessions"].insert_one({
+        "session_id": "session_operating_systems_101",
+        "course_name": "Operating Systems",
+        "classroom_id": "ROOM_101",
+        "start_time": start_time,
+        "end_time": end_time,
+        "required_presence_percentage": 75.0,
+        "status": "SCHEDULED",
+        "created_by": "teacher_01",
+    })
+
+    # Event is from LAB-3 camera at 10:15 UTC (no session in LAB-3)
+    payload = {
+        "event_id": "evt_diff_room_01",
+        "camera_id": "CAM_LAB-3_DOOR",
+        "track_id": 11,
+        "identity": "person_01",
+        "direction": "ENTRY",
+        "timestamp": "2026-10-20T10:15:00Z",
+        "evidence": {
+            "peak_similarity": 0.82,
+            "mean_similarity": 0.78,
+            "supporting_frames": 8,
+            "total_frames": 8,
+            "consistency_pct": 100.0,
+        },
+    }
+
+    response = await client.post("/api/v1/events", json=payload)
+    assert response.status_code == 201
+
+    doc = await mock_db[settings.EVENTS_COLLECTION].find_one(
+        {"event_id": "evt_diff_room_01"}
+    )
+    assert doc is not None
+    assert doc["classroom_id"] == "LAB-3"
+    assert doc["session_id"] is None
+
+
+@pytest.mark.anyio
+async def test_event_ingestion_outside_session_window_session_id_is_null(
+    client, mock_db
+):
+    """Event outside the session window in same classroom gets session_id null."""
+    start_time = datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc)
+    end_time = datetime(2026, 10, 20, 11, 30, 0, tzinfo=timezone.utc)
+
+    await mock_db["sessions"].insert_one({
+        "session_id": "session_operating_systems_101",
+        "course_name": "Operating Systems",
+        "classroom_id": "ROOM_101",
+        "start_time": start_time,
+        "end_time": end_time,
+        "required_presence_percentage": 75.0,
+        "status": "SCHEDULED",
+        "created_by": "teacher_01",
+    })
+
+    # Event is in ROOM_101, but at 09:30 UTC (30 minutes before class starts)
+    payload = {
+        "event_id": "evt_outside_window_01",
+        "camera_id": "CAM_ROOM_101_DOOR",
+        "track_id": 12,
+        "identity": "person_01",
+        "direction": "ENTRY",
+        "timestamp": "2026-10-20T09:30:00Z",
+        "evidence": {
+            "peak_similarity": 0.88,
+            "mean_similarity": 0.85,
+            "supporting_frames": 9,
+            "total_frames": 9,
+            "consistency_pct": 100.0,
+        },
+    }
+
+    response = await client.post("/api/v1/events", json=payload)
+    assert response.status_code == 201
+
+    doc = await mock_db[settings.EVENTS_COLLECTION].find_one(
+        {"event_id": "evt_outside_window_01"}
+    )
+    assert doc is not None
+    assert doc["classroom_id"] == "ROOM_101"
+    assert doc["session_id"] is None
