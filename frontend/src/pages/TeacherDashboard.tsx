@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { AuditLogs } from "../components/audit";
 import { CreateSessionModal } from "../components/session";
 import { api } from "../services";
 import type { SessionResponse, UserResponse } from "../types";
@@ -7,6 +8,7 @@ import "./teacher-dashboard.css";
 interface TeacherDashboardProps {
   user: UserResponse;
   onLogout: () => void;
+  onNavigate?: (path: string) => void;
 }
 
 function formatSessionDateTime(startIso: string, endIso: string): {
@@ -52,6 +54,7 @@ function formatSessionDateTime(startIso: string, endIso: string): {
 
 export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   user,
+  onNavigate,
 }) => {
   const [sessions, setSessions] = useState<SessionResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -292,8 +295,31 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 session.end_time
               );
 
+              const handleCardClick = () => {
+                const targetUrl = `/dashboard/teacher/sessions/${session.session_id}`;
+                if (onNavigate) {
+                  onNavigate(targetUrl);
+                } else if (typeof window !== "undefined") {
+                  window.history.pushState({}, "", targetUrl);
+                  window.dispatchEvent(new PopStateEvent("popstate"));
+                }
+              };
+
               return (
-                <article key={session.session_id} className="session-card">
+                <article
+                  key={session.session_id}
+                  className="session-card session-card-clickable"
+                  onClick={handleCardClick}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleCardClick();
+                    }
+                  }}
+                  title={`View details for ${session.course_name}`}
+                >
                   <div>
                     <div className="session-card-top">
                       <h3 className="session-course-name">{session.course_name}</h3>
@@ -359,6 +385,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             })}
           </div>
         )}
+      </section>
+
+      {/* Teacher Global Audit Trail Section */}
+      <section className="dashboard-audit-section" style={{ marginTop: "2rem" }}>
+        <AuditLogs
+          title="Recent Audit Activity"
+          subtitle="Chronological audit records across all sessions, roster updates, finalizations, and corrections."
+        />
       </section>
 
       {/* Create Attendance Session Modal */}

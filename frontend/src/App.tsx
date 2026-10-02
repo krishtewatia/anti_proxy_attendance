@@ -3,7 +3,8 @@ import { AuthPage } from "./pages/AuthPage";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AppLayout } from "./components/layout/AppLayout";
 import { TeacherDashboard } from "./pages/TeacherDashboard";
-import { StudentDashboardPlaceholder } from "./pages/StudentDashboardPlaceholder";
+import { SessionDetails } from "./pages/SessionDetails";
+import { StudentDashboard } from "./pages/StudentDashboard";
 import { AdminDashboardPlaceholder } from "./pages/AdminDashboardPlaceholder";
 import { auth } from "./services";
 import type { TokenResponse, UserResponse } from "./types";
@@ -69,6 +70,32 @@ export function App() {
             <TeacherDashboard
               user={currentUser}
               onLogout={handleLogout}
+              onNavigate={navigate}
+            />
+          </AppLayout>
+        )}
+      </ProtectedRoute>
+    );
+  }
+
+  // Route 1B: Teacher Session Details: /dashboard/teacher/sessions/:sessionId
+  const sessionDetailsMatch = currentPath.match(
+    /^\/dashboard\/teacher\/sessions\/([^/]+)$/
+  );
+  if (sessionDetailsMatch) {
+    const sessionId = decodeURIComponent(sessionDetailsMatch[1]);
+    return (
+      <ProtectedRoute
+        allowedRoles={["TEACHER"]}
+        currentUser={currentUser}
+        onNavigate={navigate}
+      >
+        {currentUser && (
+          <AppLayout user={currentUser} onLogout={handleLogout}>
+            <SessionDetails
+              sessionId={sessionId}
+              user={currentUser}
+              onNavigate={navigate}
             />
           </AppLayout>
         )}
@@ -86,9 +113,10 @@ export function App() {
       >
         {currentUser && (
           <AppLayout user={currentUser} onLogout={handleLogout}>
-            <StudentDashboardPlaceholder
+            <StudentDashboard
               user={currentUser}
               onLogout={handleLogout}
+              onNavigate={navigate}
             />
           </AppLayout>
         )}
