@@ -64,61 +64,95 @@ Windows Host
 
 ---
 
-## 3. Quickstart Guide
+## 3. Quickstart & Startup Lifecycle
 
-### Step 1: Start Database, Backend, and Frontend (Docker)
+### Recommended: One-Click Startup Script
+The project includes automated startup and shutdown scripts for Windows:
+
 ```powershell
-# Start MongoDB, Backend, and Frontend containers:
-docker compose up -d
+# Start everything (Docker MongoDB, Backend, Frontend + Standby Vision Agent):
+powershell -ExecutionPolicy Bypass -File scripts/start_dev.ps1
+```
+*What this script does:*
+1. Starts Docker containers (`anti-proxy-mongodb`, `anti-proxy-backend`, `anti-proxy-frontend`).
+2. Waits for FastAPI backend to pass `/health`.
+3. Preloads the native Windows Vision Agent (`run_local_webcam.py`) in **Standby Mode** on port 8088.
+4. **The physical camera remains completely CLOSED and released** until the teacher starts an attendance session in the ERP portal.
+
+To cleanly stop the system and release all camera and container handles:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/stop_dev.ps1 [-StopDocker]
+```
+
+---
+
+### Manual Startup Method
+
+#### Step 1: Start Docker Services
+```powershell
+docker compose up -d mongodb backend frontend
 ```
 Verify health:
-- **Frontend**: [http://localhost:3000](http://localhost:3000)
+- **Frontend ERP Portal**: [http://localhost:3000](http://localhost:3000)
 - **Backend API**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Backend Health**: [http://localhost:8000/health](http://localhost:8000/health)
 
-### Step 2: Camera Discovery & Hardware Diagnostics
-Run the camera discovery tool to detect and verify all available Windows camera devices:
+#### Step 2: Camera Discovery & Hardware Diagnostics
 ```powershell
 # Discover available camera devices:
 .\vision-service\.venv\Scripts\python.exe vision-service/list_cameras.py
-```
-*Example output:*
-```text
-============================================================
-COLLEGE ATTENDANCE SYSTEM — CAMERA DISCOVERY
-============================================================
-Index 0 -> available (640x480 via DirectShow)
-Index 1 -> unavailable
-Index 2 -> unavailable
-Index 3 -> unavailable
 
-Available cameras summary:
-  [0] HP True Vision 5MP Camera (640x480 via DirectShow)
-```
-
-Test camera opening and frame acquisition directly:
-```powershell
 # Run standalone camera test on index 0:
 .\vision-service\.venv\Scripts\python.exe vision-service/test_camera.py --camera-index 0
 ```
 
-### Step 3: Run the Native Vision Service
-Launch the vision service natively on Windows:
+#### Step 3: Run the Native Vision Agent
+Launch the vision agent natively on Windows:
 ```powershell
-# Default (auto-selects first available camera):
+# Auto-probes available camera (defaults to Standby until session starts):
 .\vision-service\.venv\Scripts\python.exe vision-service/run_local_webcam.py
-
-# Or specify a device index (e.g. index 0 or 1):
-.\vision-service\.venv\Scripts\python.exe vision-service/run_local_webcam.py --camera-index 0
 ```
-Endpoints exposed by the Vision Service:
 - **Live Annotated MJPEG Stream**: [http://localhost:8088/preview.mjpg](http://localhost:8088/preview.mjpg)
 - **Telemetry & Status**: [http://localhost:8088/status](http://localhost:8088/status)
-- **Session Reset**: `POST http://localhost:8088/reset`
+- **Control / Reset**: `POST http://localhost:8088/reset`
 
 ---
 
-## 4. Phone as USB Webcam Support
+## 4. Automatic Camera Lifecycle
+
+The system enforces a clean hardware ownership lifecycle:
+
+```text
+Teacher logs into ERP
+        ↓
+Teacher selects Class + Subject
+        ↓
+Teacher clicks "Take Attendance"
+        ↓
+Backend marks session ACTIVE
+        ↓
+Vision Agent detects active session within 500ms
+        ↓
+Vision Agent OPENS physical webcam (DirectShow)
+        ↓
+Live MJPEG feed starts streaming to Teacher ERP
+        ↓
+Students stand before webcam → Recognized → Marked PRESENT
+        ↓
+Teacher clicks "End Attendance & Finalize"
+        ↓
+Backend marks session FINALIZED
+        ↓
+Vision Agent detects no active session
+        ↓
+Vision Agent RELEASES physical webcam cleanly
+        ↓
+Camera immediately available to other Windows applications
+```
+
+---
+
+## 5. Phone as USB Webcam Support
 
 To use an Android or iOS smartphone as the attendance camera:
 1. Connect phone to the laptop via **USB cable**.

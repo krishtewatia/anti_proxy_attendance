@@ -1,38 +1,44 @@
-"""Standalone Local Webcam AI Face Recognition Attendance Runner.
+"""Standalone Local Webcam AI Face Recognition Attendance Agent.
 
-Captures directly from a single local camera (laptop built-in webcam or USB-connected phone),
-runs InsightFace detection (SCRFD) + ArcFace recognition, marks students present one-time per session,
-dispatches directly to the college attendance backend, and exposes an annotated MJPEG stream on port 8088.
+Runs as a native Windows camera agent:
+- Preloads InsightFace (SCRFD + ArcFace) and biometric student gallery into memory.
+- Keeps HTTP preview server active on port 8088 for status, telemetry, and live MJPEG streaming.
+- Automatically monitors attendance session state from the FastAPI backend.
+- Opens the physical webcam ONLY when an active attendance session exists.
+- Automatically releases the physical webcam when attendance ends, freeing it for other Windows apps.
+- Re-opens camera dynamically if new sessions begin, safely resetting in-memory attendance tracking.
+- Recovers gracefully with exponential backoff if the webcam is disconnected or busy.
 
 Usage:
+  python vision-service/run_local_webcam.py
   python vision-service/run_local_webcam.py --camera-index 0
-  python vision-service/run_local_webcam.py --camera-index 1
+  python vision-service/run_local_webcam.py --camera-index auto
   python vision-service/run_local_webcam.py --list-cameras
 """
 
 from __future__ import annotations
 
 import argparse
+import atexit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
 import os
 from pathlib import Path
+import signal
+import sys
 import threading
 import time
-from typing import Optional, Set
+from typing import Any, Optional, Set
 import cv2
 import numpy as np
 import requests
 
 # Ensure vision-service root is in sys.path
-import sys
-
 SERVICE_ROOT = Path(__file__).resolve().parent
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
-from camera.base import VideoFrame, VideoSourceType
 from camera.webcam_source import WebcamVideoSource
 from events.event_dispatcher import EventDispatcher
 from list_cameras import get_available_cameras
@@ -60,6 +66,8 @@ class WebcamStreamState:
         self.camera_name: str = "Webcam"
         self.resolution: str = "640x480"
         self.backend_name: str = "DirectShow"
+        self.camera_active: bool = False
+        self.status_message: str = "Standby (Camera idle)"
 
     def update_frame(self, frame_bgr: np.ndarray) -> None:
         ret, buf = cv2.imencode(".jpg", frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -67,6 +75,15 @@ class WebcamStreamState:
             with self.lock:
                 self.latest_jpeg = buf.tobytes()
                 self.last_frame_time = time.time()
+                self.camera_active = True
+                self.status_message = "Live attendance active"
+
+    def clear_frame(self) -> None:
+        with self.lock:
+            self.latest_jpeg = None
+            self.camera_active = False
+            self.fps = 0.0
+            self.status_message = "Standby (Camera released)"
 
     def get_frame(self) -> Optional[bytes]:
         with self.lock:
@@ -75,12 +92,11 @@ class WebcamStreamState:
     def reset_session(self, session_id: Optional[str] = None) -> None:
         with self.lock:
             self.marked_identities.clear()
-            if session_id:
-                self.active_session_id = session_id
+            self.active_session_id = session_id
             if self.pipeline:
                 self.pipeline.session_marked_students.clear()
                 self.pipeline.last_recognized_student = None
-        logger.info("[SESSION] Reset attendance state. Active session: %s", self.active_session_id)
+        logger.info("[SESSION] Attendance state reset. Active session: %s", session_id)
 
 
 stream_state = WebcamStreamState()
@@ -125,7 +141,10 @@ class WebcamHTTPHandler(BaseHTTPRequestHandler):
                         self.wfile.write(b"\r\n")
                     except (BrokenPipeError, ConnectionResetError):
                         break
-                time.sleep(0.05)
+                    time.sleep(0.04)
+                else:
+                    # When camera is closed or waiting for session, sleep briefly
+                    time.sleep(0.1)
 
         elif path in ("/status", "/health"):
             pipe = stream_state.pipeline
@@ -135,11 +154,18 @@ class WebcamHTTPHandler(BaseHTTPRequestHandler):
                 cam_name = stream_state.camera_name
                 res_str = stream_state.resolution
                 be_str = stream_state.backend_name
+                cam_active = stream_state.camera_active
+                last_ft = stream_state.last_frame_time
+                fps_val = stream_state.fps
+                st_msg = stream_state.status_message
+
+            cam_connected = cam_active and ((time.time() - last_ft) < 3.0)
 
             data = {
                 "status": "online",
-                "fps": round(stream_state.fps, 1),
-                "camera_connected": (time.time() - stream_state.last_frame_time) < 3.0,
+                "camera_active": cam_active,
+                "camera_connected": cam_connected,
+                "fps": round(fps_val, 1) if cam_connected else 0.0,
                 "camera_name": cam_name,
                 "resolution": res_str,
                 "backend": be_str,
@@ -150,6 +176,7 @@ class WebcamHTTPHandler(BaseHTTPRequestHandler):
                 "marked_students": present_list,
                 "last_recognized": pipe.last_recognized_student if pipe else None,
                 "last_recognized_student": pipe.last_recognized_student if pipe else None,
+                "status_message": st_msg,
             }
             body = json.dumps(data).encode("utf-8")
             self.send_response(200)
@@ -180,7 +207,13 @@ class WebcamHTTPHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(b'{"status": "reset", "present_count": 0}')
+            self.wfile.write(
+                json.dumps({
+                    "status": "reset",
+                    "active_session_id": new_sess_id,
+                    "present_count": 0,
+                }).encode("utf-8")
+            )
         elif path == "/extract-embedding":
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
@@ -212,8 +245,19 @@ class WebcamHTTPHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
 
-def start_preview_server(port: int = 8088) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer(("0.0.0.0", port), WebcamHTTPHandler)
+def start_preview_server(port: int = 8088) -> Optional[ThreadingHTTPServer]:
+    """Start HTTP preview and control server on specified port with conflict check."""
+    try:
+        server = ThreadingHTTPServer(("0.0.0.0", port), WebcamHTTPHandler)
+    except OSError as exc:
+        logger.error(
+            "Port %d is already in use by another process. "
+            "Another vision agent is likely already running. (%s)",
+            port,
+            exc,
+        )
+        return None
+
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
     logger.info("Live Webcam MJPEG preview stream listening on http://0.0.0.0:%d/preview.mjpg", port)
@@ -227,8 +271,7 @@ def check_backend_active_session(backend_url: str) -> Optional[dict]:
         resp = requests.get(url, timeout=1.5)
         if resp.status_code == 200:
             data = resp.json()
-            if data.get("has_active_session"):
-                return data
+            return data
     except Exception:
         pass
     return None
@@ -268,17 +311,13 @@ def post_student_present_to_backend(
 
 
 def main() -> None:
-    import atexit
-    import signal
-
     parser = argparse.ArgumentParser(
-        description="AI Face Recognition Attendance System — Single Local Webcam Runner"
+        description="AI Face Recognition Attendance System — Single Local Webcam Agent"
     )
     parser.add_argument(
         "--camera-index",
-        type=int,
-        default=None,
-        help="OpenCV webcam device index (0 for built-in, 1 or 2 for USB phone webcam)",
+        default=os.getenv("CAMERA_INDEX", "auto"),
+        help="OpenCV webcam device index (0, 1, 2, or 'auto' for auto-discovery)",
     )
     parser.add_argument(
         "--list-cameras",
@@ -288,7 +327,7 @@ def main() -> None:
     parser.add_argument(
         "--session-id",
         default=None,
-        help="Target attendance session ID (if omitted, automatically targets the active session)",
+        help="Optional fixed attendance session ID (if omitted, automatically syncs with backend active session)",
     )
     parser.add_argument(
         "--port",
@@ -329,6 +368,12 @@ def main() -> None:
         default=True,
         help="Dispatch confirmed attendance events to FastAPI backend (default: True)",
     )
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=0.5,
+        help="Seconds between backend active-session polls (default: 0.5s)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -342,49 +387,20 @@ def main() -> None:
         list_main()
         return
 
-    # Check available cameras on system
-    discovered = get_available_cameras()
-    if not discovered:
-        print("\n" + "=" * 60)
-        print("Could not open camera.")
-        print("")
-        print("Please:")
-        print("  - connect your webcam or USB phone camera")
-        print("  - check Windows camera permissions (Settings > Privacy & Security > Camera)")
-        print("  - verify the selected camera index (run: python vision-service/list_cameras.py)")
-        print("  - ensure another application is not exclusively locking the camera")
-        print("=" * 60 + "\n")
-        sys.exit(1)
-
-    # Determine selected camera index
-    if args.camera_index is None:
-        selected_index = discovered[0]["index"]
-        selected_cam_name = discovered[0]["name"]
-        selected_backend = discovered[0].get("backend", "DirectShow")
-        logger.info("Auto-selected first available camera: [%d] %s", selected_index, selected_cam_name)
-    else:
-        selected_index = args.camera_index
-        matched = next((c for c in discovered if c["index"] == selected_index), None)
-        if matched:
-            selected_cam_name = matched["name"]
-            selected_backend = matched.get("backend", "DirectShow")
-            logger.info("Selected camera [%d]: %s", selected_index, selected_cam_name)
+    # Check available cameras on system for diagnostic log
+    try:
+        discovered = get_available_cameras()
+        if discovered:
+            logger.info("Discovered %d connected camera device(s):", len(discovered))
+            for cam in discovered:
+                logger.info("  [%d] %s (%dx%d via %s)", cam["index"], cam["name"], cam["width"], cam["height"], cam["backend"])
         else:
-            selected_cam_name = f"Camera Device {selected_index}"
-            selected_backend = "DirectShow"
-            logger.warning(
-                "Camera index %d was not in detected list %s. Attempting direct open...",
-                selected_index,
-                [c["index"] for c in discovered],
-            )
+            logger.warning("No camera devices currently detected. Agent will attempt auto-probe when session begins.")
+    except Exception as exc:
+        logger.debug("Initial camera discovery probe skipped: %s", exc)
 
-    stream_state.camera_name = selected_cam_name
-    stream_state.backend_name = selected_backend
-    if args.session_id:
-        stream_state.active_session_id = args.session_id
-
-    # 2. Initialize Face Models
-    logger.info("Initializing InsightFace detection (SCRFD) and recognition (ArcFace)...")
+    # 2. Initialize Face Models (SCRFD + ArcFace) once at startup
+    logger.info("Preloading InsightFace detection (SCRFD) and recognition (ArcFace) into memory...")
     app = create_face_analysis()
 
     # 3. Load Biometric Gallery
@@ -411,11 +427,11 @@ def main() -> None:
             dedup_by_track=False,
         )
 
-    # 5. Initialize One-Time Attendance Pipeline
+    # 5. Initialize One-Time Attendance Live Pipeline
     pipeline = LiveCVPipeline(
         app=app,
         gallery=gallery,
-        source_id=f"WEBCAM_{selected_index}",
+        source_id="WEBCAM_AGENT",
         camera_id="LOCAL_WEBCAM",
         similarity_threshold=0.50,
         min_supporting_frames=2,
@@ -424,97 +440,164 @@ def main() -> None:
     pipeline.mode = "ONE_TIME_ATTENDANCE"
     stream_state.pipeline = pipeline
 
-    # 6. Start HTTP Preview Server
-    start_preview_server(port=args.port)
+    # 6. Start HTTP Control & Preview Server
+    server = start_preview_server(port=args.port)
+    if server is None:
+        logger.warning("Exiting duplicate vision agent instance.")
+        sys.exit(0)
 
-    # 7. Open Physical Webcam
-    webcam = WebcamVideoSource(
-        device_index=selected_index,
-        source_id=f"WEBCAM_{selected_index}",
-        width=args.width,
-        height=args.height,
-    )
+    # 7. Safe Cleanup Registration
+    webcam_ref: list[Optional[WebcamVideoSource]] = [None]
 
     def _safe_cleanup():
-        try:
-            webcam.close()
-        except Exception:
-            pass
+        w = webcam_ref[0]
+        if w is not None:
+            try:
+                w.close()
+            except Exception:
+                pass
+            webcam_ref[0] = None
+        stream_state.clear_frame()
         if args.show:
             try:
                 cv2.destroyAllWindows()
             except Exception:
                 pass
+        logger.info("Vision agent shutdown complete. Camera is released.")
 
     atexit.register(_safe_cleanup)
 
-    try:
-        webcam.open()
-    except Exception as exc:
-        print("\n" + "=" * 60)
-        print("Could not open camera.")
-        print("")
-        print(f"Error: {exc}")
-        print("")
-        print("Please:")
-        print("  - connect your webcam or USB phone camera")
-        print("  - check Windows camera permissions (Settings > Privacy & Security > Camera)")
-        print("  - verify the selected camera index (run: python vision-service/list_cameras.py)")
-        print("  - ensure another application is not exclusively locking the camera")
-        print("=" * 60 + "\n")
-        sys.exit(1)
+    def _handle_signal(sig, frame):
+        logger.info("Received signal %s. Shutting down gracefully...", sig)
+        _safe_cleanup()
+        sys.exit(0)
 
-    stream_state.resolution = f"{webcam._actual_width}x{webcam._actual_height}"
+    signal.signal(signal.SIGINT, _handle_signal)
+    signal.signal(signal.SIGTERM, _handle_signal)
+
+    # Convert camera index argument
+    configured_cam_index: Any = args.camera_index
+    if str(configured_cam_index).isdigit():
+        configured_cam_index = int(configured_cam_index)
 
     print("\n" + "=" * 60)
-    print("AI FACE RECOGNITION ATTENDANCE SYSTEM ACTIVE")
-    print(f"Camera Device Index : {selected_index} ({selected_cam_name})")
-    print(f"Captured Resolution : {stream_state.resolution}")
-    print(f"Web Preview Stream  : http://localhost:{args.port}/preview.mjpg")
-    print(f"Backend API URL     : {args.backend_url}")
-    print("Stand in front of the camera to be marked PRESENT.")
+    print("AI FACE RECOGNITION ATTENDANCE AGENT ACTIVE")
+    print(f"Configured Camera Index : {configured_cam_index}")
+    print("Camera Device Status    : STANDBY (Closed until attendance starts)")
+    print(f"Web Control / Preview   : http://localhost:{args.port}/preview.mjpg")
+    print(f"Backend API URL         : {args.backend_url}")
+    print("Standing by for teacher to start attendance session in ERP...")
     print("=" * 60 + "\n")
 
-    frame_count = 0
-    consecutive_empty = 0
-    t0 = time.time()
-    last_session_check = 0.0
+    current_session_id: Optional[str] = None
+    retry_backoff: float = 1.0
+    last_poll_time: float = 0.0
+    last_fps_time: float = time.time()
+    frames_in_second: int = 0
+    consecutive_read_failures: int = 0
 
     try:
         while True:
-            vframe = webcam.read()
-            if vframe is None or vframe.frame is None:
-                consecutive_empty += 1
-                if consecutive_empty > 60:
-                    logger.warning("Camera stream interrupted: No frames received for 60 consecutive cycles.")
-                    consecutive_empty = 0
-                time.sleep(0.01)
-                continue
-
-            consecutive_empty = 0
             now = time.time()
 
-            # Periodically sync active session from FastAPI backend if not fixed via CLI
-            if not args.session_id and (now - last_session_check > 2.0):
-                last_session_check = now
-                active_meta = check_backend_active_session(args.backend_url)
-                if active_meta:
-                    sess_id = active_meta["session_id"]
-                    if stream_state.active_session_id != sess_id:
-                        logger.info("[ACTIVE SESSION] Detected active session: %s (%s - %s)", sess_id, active_meta.get("class_code"), active_meta.get("subject"))
-                        stream_state.reset_session(sess_id)
+            # -------------------------------------------------------------
+            # STEP A: Poll backend active session (every ~0.5s)
+            # -------------------------------------------------------------
+            if now - last_poll_time > args.poll_interval:
+                last_poll_time = now
+                if not args.session_id:
+                    active_meta = check_backend_active_session(args.backend_url)
+                    if active_meta and active_meta.get("has_active_session"):
+                        target_session_id = active_meta.get("session_id")
+                    else:
+                        target_session_id = None
                 else:
-                    if stream_state.active_session_id is not None:
-                        logger.info("[ACTIVE SESSION] Attendance session ended. Resetting vision state.")
-                        stream_state.reset_session(None)
+                    target_session_id = args.session_id
 
-            # Process frame through face recognition pipeline
-            res = pipeline.process_frame(vframe)
+                # Synchronize with stream_state (fast path or backend sync)
+                if target_session_id != stream_state.active_session_id:
+                    stream_state.reset_session(target_session_id)
 
-            # Direct FastAPI attendance registration
-            if res.tracks and args.dispatch:
-                target_sess = args.session_id or stream_state.active_session_id
-                if target_sess:
+            target_session_id = stream_state.active_session_id
+
+            # -------------------------------------------------------------
+            # STEP B: Attendance Session is ACTIVE -> Camera MUST be open
+            # -------------------------------------------------------------
+            if target_session_id is not None:
+                # Check for session change (e.g. Session A ended and Session B started immediately)
+                if current_session_id != target_session_id:
+                    logger.info("[AGENT] Session changed to %s. Resetting camera and attendance state.", target_session_id)
+                    current_session_id = target_session_id
+                    if webcam_ref[0] is not None:
+                        webcam_ref[0].close()
+                        webcam_ref[0] = None
+                        stream_state.clear_frame()
+
+                # If camera is not yet open, open it now!
+                if webcam_ref[0] is None or not webcam_ref[0].is_opened:
+                    stream_state.status_message = "Connecting physical webcam..."
+                    logger.info("[AGENT] Active session detected: %s. Opening physical webcam...", target_session_id)
+                    try:
+                        new_webcam = WebcamVideoSource(
+                            device_index=configured_cam_index,
+                            width=args.width,
+                            height=args.height,
+                        )
+                        new_webcam.open()
+                        webcam_ref[0] = new_webcam
+                        stream_state.camera_active = True
+                        stream_state.resolution = f"{new_webcam._actual_width}x{new_webcam._actual_height}"
+                        stream_state.backend_name = new_webcam._backend_used
+                        stream_state.camera_name = f"Camera {new_webcam._selected_index} ({new_webcam._backend_used})"
+                        stream_state.status_message = "Live attendance active"
+                        retry_backoff = 1.0
+                        consecutive_read_failures = 0
+                        logger.info(
+                            "[AGENT] ✓ Camera READY: %s (%s). Face recognition started for session %s.",
+                            stream_state.camera_name,
+                            stream_state.resolution,
+                            target_session_id,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "[AGENT] Could not open camera: %s. Retrying in %.1fs...",
+                            exc,
+                            retry_backoff,
+                        )
+                        stream_state.status_message = "Camera unavailable"
+                        if webcam_ref[0] is not None:
+                            webcam_ref[0].close()
+                            webcam_ref[0] = None
+                        stream_state.clear_frame()
+                        time.sleep(retry_backoff)
+                        retry_backoff = min(retry_backoff * 1.5, 5.0)
+                        continue
+
+                # Camera is open: read frame
+                webcam = webcam_ref[0]
+                vframe = webcam.read()
+                if vframe is None or vframe.frame is None:
+                    consecutive_read_failures += 1
+                    if consecutive_read_failures >= 15:
+                        logger.warning(
+                            "[AGENT] 15 consecutive empty frames from camera. Releasing device to recover..."
+                        )
+                        webcam.close()
+                        webcam_ref[0] = None
+                        stream_state.clear_frame()
+                        consecutive_read_failures = 0
+                        time.sleep(1.0)
+                        continue
+                    time.sleep(0.02)
+                    continue
+
+                consecutive_read_failures = 0
+
+                # Run face detection (SCRFD) + recognition (ArcFace)
+                res = pipeline.process_frame(vframe)
+
+                # Dispatch confirmed recognized students
+                if res.tracks and args.dispatch:
                     for tr in res.tracks:
                         if tr.is_confirmed and tr.identity and tr.identity != "UNKNOWN":
                             with stream_state.lock:
@@ -523,42 +606,55 @@ def main() -> None:
                                 ok = post_student_present_to_backend(
                                     backend_url=args.backend_url,
                                     identity=tr.identity,
-                                    session_id=target_sess,
+                                    session_id=target_session_id,
                                 )
                                 if ok:
                                     with stream_state.lock:
                                         stream_state.marked_identities.add(tr.identity)
 
-            # Render clean teacher-friendly video annotations
-            annotated = pipeline.render_annotated_frame(vframe.frame, res)
-            stream_state.update_frame(annotated)
+                # Render annotations and update MJPEG stream
+                annotated = pipeline.render_annotated_frame(vframe.frame, res)
+                stream_state.update_frame(annotated)
 
-            # Optional local OpenCV window
-            if args.show:
-                cv2.imshow("Anti-Proxy Attendance — Live Webcam", annotated)
-                key = cv2.waitKey(1) & 0xFF
-                if key == 27 or key == ord("q"):
-                    break
+                # Calculate live FPS
+                frames_in_second += 1
+                t_now = time.time()
+                if t_now - last_fps_time >= 1.0:
+                    stream_state.fps = frames_in_second / (t_now - last_fps_time)
+                    frames_in_second = 0
+                    last_fps_time = t_now
 
-            frame_count += 1
-            if frame_count % 30 == 0:
-                stream_state.fps = 30.0 / (now - t0 + 1e-6)
-                t0 = now
-                detected_faces = len(res.tracks) if res.tracks else 0
-                candidates = [t.identity for t in res.tracks if t.identity and t.identity != "UNKNOWN"] if res.tracks else []
-                logger.info(
-                    "[DEV LOG] Frame: %d | Res: %s | FPS: %.1f | Faces: %d | Candidate: %s | Marked: %d | Session: %s",
-                    frame_count,
-                    stream_state.resolution,
-                    stream_state.fps,
-                    detected_faces,
-                    candidates if candidates else "none",
-                    len(stream_state.marked_identities),
-                    stream_state.active_session_id or "NO_ACTIVE_SESSION",
-                )
+                # Optional desktop GUI window
+                if args.show:
+                    cv2.imshow("Anti-Proxy Attendance — Live Webcam", annotated)
+                    key = cv2.waitKey(1) & 0xFF
+                    if key in (27, ord("q")):
+                        break
+
+                time.sleep(0.01)
+
+            # -------------------------------------------------------------
+            # STEP C: NO Active Session -> Camera MUST be closed / released
+            # -------------------------------------------------------------
+            else:
+                if webcam_ref[0] is not None and webcam_ref[0].is_opened:
+                    logger.info("[AGENT] Attendance session finalized or inactive. Releasing physical webcam...")
+                    webcam_ref[0].close()
+                    webcam_ref[0] = None
+                    stream_state.clear_frame()
+                    current_session_id = None
+                    if args.show:
+                        try:
+                            cv2.destroyAllWindows()
+                        except Exception:
+                            pass
+                    logger.info("[AGENT] ✓ Physical webcam released cleanly. Standing by for next session.")
+
+                # Idle sleep (zero camera capture, zero CPU consumption)
+                time.sleep(0.3)
 
     except KeyboardInterrupt:
-        logger.info("Shutting down webcam runner...")
+        logger.info("KeyboardInterrupt received. Shutting down webcam agent...")
     finally:
         _safe_cleanup()
 
