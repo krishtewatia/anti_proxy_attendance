@@ -21,6 +21,8 @@ export interface AttendanceRecord {
 export interface AttendanceSummaryItem {
   attendance_id: string;
   identity: string;
+  student_id?: string;
+  student_name?: string;
   presence_duration_seconds: number;
   presence_percentage: number;
   required_presence_percentage: number;
@@ -30,6 +32,9 @@ export interface AttendanceSummaryItem {
 
 export interface AttendanceSessionResponse {
   session_id: string;
+  course_name?: string;
+  total_students?: number;
+  present_count?: number;
   records: AttendanceSummaryItem[];
 }
 

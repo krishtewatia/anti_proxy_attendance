@@ -1,0 +1,147 @@
+"""Teacher service layer for profiles, assigned classes, and dashboard telemetry."""
+
+import logging
+from uuid import uuid4
+
+from app.database.attendance import get_attendance_by_session
+from app.database.session_roster import get_session_roster
+from app.database.sessions import (
+    get_active_session_by_teacher,
+    get_sessions_by_owner,
+)
+from app.database.teacher_profiles import (
+    get_teacher_profile_by_teacher_id,
+    get_teacher_profile_by_user_id,
+    upsert_teacher_profile,
+)
+from app.database.users import create_user, get_user_by_email
+from app.schemas.teacher import (
+    TeacherDashboardResponse,
+    TeacherProfileResponse,
+    TeacherRegisterRequest,
+    TeacherSessionSummaryItem,
+)
+from app.security.passwords import hash_password
+
+logger = logging.getLogger(__name__)
+
+
+class DuplicateTeacherError(Exception):
+    """Raised when a teacher email or ID already exists."""
+
+
+async def register_teacher_account(req: TeacherRegisterRequest) -> TeacherProfileResponse:
+    """Create a new teacher account with assigned classes and subjects."""
+    existing_user = await get_user_by_email(req.email)
+    if existing_user is not None:
+        raise DuplicateTeacherError(f"A user with email '{req.email}' already exists")
+
+    existing_profile = await get_teacher_profile_by_teacher_id(req.teacher_id)
+    if existing_profile is not None:
+        raise DuplicateTeacherError(f"Teacher ID '{req.teacher_id}' is already registered")
+
+    user_id = f"user_{uuid4().hex}"
+    pw_hash = hash_password(req.password)
+    await create_user(
+        user_id=user_id,
+        email=req.email,
+        password_hash=pw_hash,
+        role="TEACHER",
+    )
+
+    _ = await upsert_teacher_profile(
+        user_id=user_id,
+        teacher_id=req.teacher_id,
+        name=req.name,
+        email=req.email,
+        department=req.department,
+        assigned_classes=req.assigned_classes,
+        assigned_subjects=req.assigned_subjects,
+    )
+
+    return TeacherProfileResponse(
+        user_id=user_id,
+        teacher_id=req.teacher_id,
+        name=req.name,
+        email=req.email,
+        department=req.department,
+        assigned_classes=req.assigned_classes,
+        assigned_subjects=req.assigned_subjects,
+    )
+
+
+async def get_teacher_profile(user_id: str) -> TeacherProfileResponse:
+    """Retrieve teacher profile by user_id, falling back to defaults if not yet established."""
+    doc = await get_teacher_profile_by_user_id(user_id)
+    if not doc:
+        # Create a basic profile if needed
+        return TeacherProfileResponse(
+            user_id=user_id,
+            teacher_id="T-DEFAULT",
+            name="Teacher",
+            email="teacher@demo.edu",
+            department="Academic Department",
+            assigned_classes=["DS-B", "DS-C"],
+            assigned_subjects=["Machine Learning", "Deep Learning"],
+        )
+
+    return TeacherProfileResponse(
+        user_id=doc["user_id"],
+        teacher_id=doc.get("teacher_id", "T001"),
+        name=doc.get("name", "Professor"),
+        email=doc.get("email", ""),
+        department=doc.get("department", "General"),
+        assigned_classes=doc.get("assigned_classes", []),
+        assigned_subjects=doc.get("assigned_subjects", []),
+    )
+
+
+async def _summarize_session(session: dict) -> TeacherSessionSummaryItem:
+    """Compute summary stats for a single attendance session."""
+    s_id = session["session_id"]
+    roster_doc = await get_session_roster(s_id)
+    roster_len = len(roster_doc.identities) if roster_doc else 0
+
+    records = await get_attendance_by_session(s_id)
+    present_cnt = sum(1 for r in records if r.get("status") == "PRESENT")
+    total_cnt = max(roster_len, len(records))
+
+    pct = round((present_cnt / total_cnt * 100), 1) if total_cnt > 0 else 0.0
+
+    return TeacherSessionSummaryItem(
+        session_id=s_id,
+        course_name=session.get("course_name", "Attendance"),
+        class_code=session.get("class_code"),
+        subject=session.get("subject"),
+        total_students=total_cnt,
+        present_count=present_cnt,
+        attendance_percentage=pct,
+        status=session.get("status", "ACTIVE"),
+        created_at=session.get("created_at"),
+    )
+
+
+async def get_teacher_dashboard(user_id: str) -> TeacherDashboardResponse:
+    """Generate complete teacher dashboard payload."""
+    profile = await get_teacher_profile(user_id)
+
+    # 1. Check if teacher has an active session
+    active_doc = await get_active_session_by_teacher(user_id)
+    active_summary = await _summarize_session(active_doc) if active_doc else None
+
+    # 2. Retrieve past sessions
+    all_sessions = await get_sessions_by_owner(user_id)
+    previous_sessions: list[TeacherSessionSummaryItem] = []
+
+    for s in all_sessions:
+        # Exclude currently active session from past list
+        if active_doc and s["session_id"] == active_doc["session_id"]:
+            continue
+        summary = await _summarize_session(s)
+        previous_sessions.append(summary)
+
+    return TeacherDashboardResponse(
+        teacher=profile,
+        active_session=active_summary,
+        previous_sessions=previous_sessions,
+    )

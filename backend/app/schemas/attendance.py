@@ -1,27 +1,58 @@
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
 
 class AttendanceInterval(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    """Legacy interval model retained for backwards compatibility."""
 
-    entry_time: datetime
-    exit_time: datetime
+    model_config = ConfigDict(extra="ignore")
+
+    entry_time: Optional[datetime] = None
+    exit_time: Optional[datetime] = None
 
 
 class AttendanceRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    """Clean One-Time AI Face Recognition Attendance Record."""
+
+    model_config = ConfigDict(extra="ignore")
 
     attendance_id: str
     session_id: str
     identity: str
+    student_id: Optional[str] = None
+    student_name: Optional[str] = None
+    status: Literal["PRESENT", "ABSENT"] = "ABSENT"
+    marked_at: Optional[datetime] = None
 
-    presence_intervals: list[AttendanceInterval]
+    # Optional legacy fields for backward compatibility
+    presence_intervals: list[AttendanceInterval] = []
+    presence_duration_seconds: float = 0.0
+    presence_percentage: float = 0.0
+    required_presence_percentage: float = 0.0
+    requires_review: bool = False
+    anomalies: list[str] = []
 
-    presence_duration_seconds: float
-    presence_percentage: float
-    required_presence_percentage: float
 
-    status: Literal["PRESENT", "ABSENT"]
+class MarkAttendanceRequest(BaseModel):
+    """Payload to mark a student present in a session."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    identity: str
+    session_id: Optional[str] = None
+    confidence: Optional[float] = None
+    timestamp: Optional[datetime] = None
+
+
+class MarkAttendanceResponse(BaseModel):
+    """Response returned when marking a student."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    status: Literal["marked", "already_present", "not_found", "error"]
+    identity: str
+    student_id: Optional[str] = None
+    student_name: Optional[str] = None
+    message: str

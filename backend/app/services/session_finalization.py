@@ -1,83 +1,83 @@
-from collections import defaultdict
-from datetime import datetime
+import logging
 
-from app.database.attendance import upsert_attendance
-from app.database.events import get_events_for_session
-from app.schemas.attendance import AttendanceInterval, AttendanceRecord
+from app.core.config import settings
+from app.database.attendance import get_attendance_by_session, upsert_attendance
+from app.database.mongodb import get_database
+from app.database.sessions import update_session_status
+from app.schemas.attendance import AttendanceRecord
 from app.schemas.session_roster import SessionRoster
-from app.services.presence_engine import (
-    calculate_presence_percentage,
-    calculate_session_presence,
-    determine_attendance_status,
-)
+
+logger = logging.getLogger(__name__)
 
 
 async def finalize_session_attendance(
     *,
     session_id: str,
-    session_start: datetime,
-    session_end: datetime,
-    required_presence_percentage: float,
     roster: SessionRoster,
+    **kwargs,
 ) -> list[dict]:
-    events = await get_events_for_session(
-        session_id=session_id,
-        session_start=session_start,
-        session_end=session_end,
-    )
+    """Finalize one-time attendance for a session.
 
-    events_by_identity: dict[str, list[dict]] = defaultdict(list)
+    - Students recognized during the session remain PRESENT.
+    - All other rostered students are finalized as ABSENT.
+    - Session status is locked to 'FINALIZED'.
+    - Returns the complete list of student attendance records.
+    """
+    db = get_database()
 
-    for event in events:
-        if event["direction"] in {"ENTRY", "EXIT"}:
-            ts = event["timestamp"]
-            if ts.tzinfo is None and session_start.tzinfo is not None:
-                event["timestamp"] = ts.replace(tzinfo=session_start.tzinfo)
-            elif ts.tzinfo is not None and session_start.tzinfo is None:
-                event["timestamp"] = ts.replace(tzinfo=None)
-            events_by_identity[event["identity"]].append(event)
+    # 1. Fetch student profiles for human-friendly metadata
+    cursor = db["student_profiles"].find({})
+    student_docs = await cursor.to_list(length=None)
+    student_map = {
+        d.get("identity"): {
+            "student_id": d.get("student_id", d.get("identity")),
+            "name": d.get("name", d.get("identity")),
+        }
+        for d in student_docs
+        if d.get("identity")
+    }
 
-    records = []
+    # 2. Fetch existing records in MongoDB
+    existing_records = await get_attendance_by_session(session_id)
+    records_by_ident = {r["identity"]: r for r in existing_records}
+
+    final_records = []
 
     for identity in roster.identities:
-        identity_events = events_by_identity.get(identity, [])
-        presence_result = calculate_session_presence(
-            identity_events,
-            session_start,
-            session_end,
-        )
+        s_info = student_map.get(identity, {})
+        stu_id = s_info.get("student_id", identity)
+        stu_name = s_info.get("name", identity)
 
-        presence_percentage = calculate_presence_percentage(
-            presence_result.total_presence_seconds,
-            session_start,
-            session_end,
-        )
+        existing = records_by_ident.get(identity)
+        current_status = existing.get("status", "ABSENT") if existing else "ABSENT"
 
-        status = determine_attendance_status(
-            presence_percentage,
-            required_presence_percentage,
-        )
-
-        intervals = [
-            AttendanceInterval(
-                entry_time=interval.entry_time,
-                exit_time=interval.exit_time,
+        if current_status != "PRESENT":
+            event_count = await db[settings.EVENTS_COLLECTION].count_documents(
+                {
+                    "$or": [
+                        {"session_id": session_id, "identity": identity},
+                        {"identity": identity},
+                    ]
+                }
             )
-            for interval in presence_result.intervals
-        ]
+            if event_count > 0:
+                current_status = "PRESENT"
 
         record = AttendanceRecord(
             attendance_id=f"att_{session_id}_{identity}",
             session_id=session_id,
             identity=identity,
-            presence_intervals=intervals,
-            presence_duration_seconds=presence_result.total_presence_seconds,
-            presence_percentage=presence_percentage,
-            required_presence_percentage=required_presence_percentage,
-            status=status,
+            student_id=stu_id,
+            student_name=stu_name,
+            status=current_status,
+            marked_at=existing.get("marked_at") if existing else None,
         )
 
-        stored_record = await upsert_attendance(record)
-        records.append(stored_record)
+        stored = await upsert_attendance(record)
+        final_records.append(stored)
 
-    return records
+    # 3. Lock session as FINALIZED
+    await update_session_status(session_id, "FINALIZED")
+    logger.info("Session %s attendance finalized: %d total records", session_id, len(final_records))
+
+    return final_records

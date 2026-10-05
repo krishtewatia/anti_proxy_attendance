@@ -1,9 +1,10 @@
-"""Service for resolving camera identifiers and active attendance sessions."""
-
+import logging
 from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.database.sessions import find_active_session_in_db
+
+logger = logging.getLogger(__name__)
 
 # Pre-configured camera mappings for known doorways and cameras
 DEFAULT_CAMERA_CLASSROOM_MAP: dict[str, str] = {
@@ -11,6 +12,11 @@ DEFAULT_CAMERA_CLASSROOM_MAP: dict[str, str] = {
     "CAM_ROOM_101": "ROOM_101",
     "cam_01": "ROOM_101",
     "cam_entrance": "ROOM_101",
+    "PHONE_CAM_01": "ROOM_101",
+    "phone_cam_01": "ROOM_101",
+    "webcam_01": "ROOM_101",
+    "cam_door_in": "ROOM_101",
+    "cam_door_out": "ROOM_101",
 }
 
 # In-memory mutable registry
@@ -60,13 +66,40 @@ def resolve_classroom_for_camera(camera_id: str) -> str:
             "-EXIT",
         ):
             if candidate.upper().endswith(suffix):
-                candidate = candidate[:-len(suffix)]
+                candidate = candidate[: -len(suffix)]
                 break
 
         if candidate:
             return candidate
 
     return camera_id
+
+
+async def resolve_classroom_for_camera_db(
+    camera_id: str,
+    db: AsyncIOMotorDatabase | None = None,
+) -> str:
+    """
+    Resolve camera to classroom, checking dynamic database first, then registry/convention.
+    Caches dynamic results in _CAMERA_REGISTRY for fast subsequent lookups.
+    """
+    if not camera_id:
+        return ""
+
+    if db is not None:
+        try:
+            cam = await db["cameras"].find_one({"camera_id": camera_id}, {"classroom_id": 1})
+            if cam and cam.get("classroom_id"):
+                _CAMERA_REGISTRY[camera_id] = cam["classroom_id"]
+                return cam["classroom_id"]
+        except Exception as exc:
+            logger.debug(
+                "Database lookup for camera '%s' failed (%s), using registry/convention fallback",
+                camera_id,
+                exc,
+            )
+
+    return resolve_classroom_for_camera(camera_id)
 
 
 async def find_active_session_for_classroom(

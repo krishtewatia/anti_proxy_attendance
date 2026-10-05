@@ -16,18 +16,14 @@ async def create_session_roster(roster: SessionRoster) -> dict:
         upsert=True,
     )
 
-    return await collection.find_one(
-        {"session_id": roster.session_id}
-    )
+    return await collection.find_one({"session_id": roster.session_id})
 
 
 async def get_session_roster(session_id: str) -> SessionRoster | None:
     db = get_database()
     collection = db[ROSTER_COLLECTION]
 
-    document = await collection.find_one(
-        {"session_id": session_id}
-    )
+    document = await collection.find_one({"session_id": session_id})
 
     if document is None:
         return None

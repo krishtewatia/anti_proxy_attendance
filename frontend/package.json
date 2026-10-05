@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "test": "node --experimental-strip-types scripts/run_all_tests.ts",
     "test:integration": "node --experimental-strip-types scripts/test_api_integration.ts",
     "test:auth": "node --experimental-strip-types scripts/test_auth_client.ts",
     "test:live-auth": "node --experimental-strip-types scripts/test_live_auth_flow.ts",
@@ -18,7 +19,8 @@
     "test:session-attendance": "node --experimental-strip-types scripts/test_session_attendance.ts",
     "test:attendance-correction": "node --experimental-strip-types scripts/test_attendance_correction.ts",
     "test:student-profile": "node --experimental-strip-types scripts/test_student_profile.ts",
-    "test:audit-logs": "node --experimental-strip-types scripts/test_audit_logs.ts"
+    "test:audit-logs": "node --experimental-strip-types scripts/test_audit_logs.ts",
+    "test:live-session": "node --experimental-strip-types scripts/test_live_session_feed.ts"
   },
   "dependencies": {
     "react": "^19.2.8",

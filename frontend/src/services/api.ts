@@ -1,13 +1,16 @@
 import type {
+  AdminUserInfo,
   AttendanceCorrectionCreate,
   AttendanceCorrectionResponse,
   AttendanceSessionResponse,
   AuditEventResponse,
   SessionCreate,
   SessionFinalizationResponse,
+  SessionLiveSnapshotResponse,
   SessionResponse,
   SessionRosterResponse,
   SessionRosterUpdate,
+  StudentDirectoryItem,
   StudentProfile,
   StudentProfileBind,
   TokenResponse,
@@ -16,11 +19,31 @@ import type {
   UserResponse,
   VisionEventCreate,
   VisionEventResponse,
+  AcademicClass,
+  AcademicStructureResponse,
+  StudentAttendanceDashboardResponse,
+  StudentProfileResponse,
+  StudentRegisterRequest,
+  Subject,
+  TeacherAssignClassesRequest,
+  TeacherDashboardResponse,
+  TeacherProfileResponse,
+  TeacherRegisterRequest,
 } from "../types";
 import { clearStoredAuth, getStoredToken } from "./auth.ts";
 
-const API_BASE_URL =
-  import.meta.env?.VITE_API_BASE_URL ?? "http://localhost:8000";
+export const getApiBaseUrl = (): string => {
+  if (import.meta.env?.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  if (typeof window !== "undefined" && window.location.hostname) {
+    const proto = window.location.protocol || "http:";
+    return `${proto}//${window.location.hostname}:8000`;
+  }
+  return "http://localhost:8000";
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 async function request<T>(
   path: string,
@@ -108,6 +131,12 @@ export const api = {
     );
   },
 
+  getSessionLiveSnapshot(sessionId: string): Promise<SessionLiveSnapshotResponse> {
+    return request<SessionLiveSnapshotResponse>(
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/live-snapshot`
+    );
+  },
+
   getSessionRoster(sessionId: string): Promise<SessionRosterResponse> {
     return request<SessionRosterResponse>(
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/roster`
@@ -161,6 +190,59 @@ export const api = {
     return request<AttendanceSessionResponse>(
       `/api/v1/attendance/${encodeURIComponent(sessionId)}`,
     );
+  },
+
+  markAttendance(
+    identity: string,
+    sessionId?: string,
+  ): Promise<{
+    status: "marked" | "already_present" | "not_found" | "error";
+    identity: string;
+    student_id?: string;
+    student_name?: string;
+    message: string;
+  }> {
+    const endpoint = sessionId
+      ? `/api/v1/attendance/${encodeURIComponent(sessionId)}/mark`
+      : `/api/v1/attendance/mark`;
+    return request(endpoint, {
+      method: "POST",
+      body: JSON.stringify({ identity, session_id: sessionId }),
+    });
+  },
+
+  getAttendanceExportUrl(sessionId: string): string {
+    return `${API_BASE_URL}/api/v1/attendance/${encodeURIComponent(sessionId)}/export`;
+  },
+
+  async getVisionStatus(): Promise<{
+    status: string;
+    active_tracks: number;
+    marked_students_count: number;
+    marked_students: string[];
+    last_recognized_student: string | null;
+    last_status?: "marked" | "already_present" | "unknown";
+  } | null> {
+    try {
+      const host = typeof window !== "undefined" ? window.location.hostname || "localhost" : "localhost";
+      const res = await fetch(`http://${host}:8088/status`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // Vision service offline or not running
+    }
+    return null;
+  },
+
+  async resetVisionSession(): Promise<boolean> {
+    try {
+      const host = typeof window !== "undefined" ? window.location.hostname || "localhost" : "localhost";
+      const res = await fetch(`http://${host}:8088/reset`, { method: "POST" });
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   correctAttendance(
@@ -218,11 +300,44 @@ export const api = {
     return this.bindStudentProfile(identityOrData);
   },
 
+  getStudentsDirectory(): Promise<StudentDirectoryItem[]> {
+    return request<StudentDirectoryItem[]>("/api/v1/students/directory");
+  },
+
+  simulateTransitEvent(
+    identity: string,
+    direction: "ENTRY" | "EXIT",
+    cameraId: string = "CAM_ROOM_101_DOOR"
+  ): Promise<VisionEventResponse> {
+    const event: VisionEventCreate = {
+      event_id: `evt_sim_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      camera_id: cameraId,
+      track_id: Math.floor(Math.random() * 9000) + 1000,
+      identity,
+      direction,
+      timestamp: new Date().toISOString(),
+      evidence: {
+        peak_similarity: 0.95,
+        mean_similarity: 0.92,
+        supporting_frames: 18,
+        total_frames: 20,
+        consistency_pct: 90.0,
+      },
+    };
+    return this.ingestVisionEvent(event);
+  },
+
   ingestVisionEvent(
     event: VisionEventCreate,
+    apiKey: string = "test_vision_api_key_for_smoke_test_12345",
   ): Promise<VisionEventResponse> {
+    const headers: Record<string, string> = {};
+    if (apiKey) {
+      headers["X-API-Key"] = apiKey;
+    }
     return request<VisionEventResponse>("/api/v1/events", {
       method: "POST",
+      headers,
       body: JSON.stringify(event),
     });
   },
@@ -241,6 +356,226 @@ export const api = {
     const queryString = query.toString();
     const endpoint = queryString ? `/api/v1/audit?${queryString}` : "/api/v1/audit";
     return request<AuditEventResponse[]>(endpoint);
+  },
+
+  deleteSession(sessionId: string): Promise<{ deleted: boolean; session_id: string }> {
+    return request<{ deleted: boolean; session_id: string }>(
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}`,
+      { method: "DELETE" },
+    );
+  },
+
+  adminGetUsers(role?: string): Promise<AdminUserInfo[]> {
+    const query = role ? `?role=${encodeURIComponent(role)}` : "";
+    return request<AdminUserInfo[]>(`/api/v1/admin/users${query}`);
+  },
+
+  adminGetSessions(): Promise<SessionResponse[]> {
+    return request<SessionResponse[]>("/api/v1/admin/sessions");
+  },
+
+  adminCreateSession(
+    session: SessionCreate,
+    assignedTeacherId?: string,
+  ): Promise<SessionResponse> {
+    const query = assignedTeacherId
+      ? `?assigned_teacher_id=${encodeURIComponent(assignedTeacherId)}`
+      : "";
+    return request<SessionResponse>(`/api/v1/admin/sessions${query}`, {
+      method: "POST",
+      body: JSON.stringify(session),
+    });
+  },
+
+  adminDeleteSession(
+    sessionId: string,
+  ): Promise<{ deleted: boolean; session_id: string }> {
+    return request<{ deleted: boolean; session_id: string }>(
+      `/api/v1/admin/sessions/${encodeURIComponent(sessionId)}`,
+      { method: "DELETE" },
+    );
+  },
+
+  adminFinalizeSession(
+    sessionId: string,
+  ): Promise<{ session_id: string; status: string; records_finalized: number }> {
+    return request<{ session_id: string; status: string; records_finalized: number }>(
+      `/api/v1/admin/sessions/${encodeURIComponent(sessionId)}/finalize`,
+      { method: "POST" },
+    );
+  },
+
+  // --- Phase 2: Student Endpoints ---
+  registerStudent(
+    data: StudentRegisterRequest,
+  ): Promise<StudentProfileResponse> {
+    return request<StudentProfileResponse>("/api/v1/students/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  getFullStudentProfile(): Promise<StudentProfileResponse> {
+    return request<StudentProfileResponse>("/api/v1/students/me");
+  },
+
+  getSessionAttendance(
+    sessionId: string,
+  ): Promise<AttendanceSessionResponse> {
+    return this.getAttendance(sessionId);
+  },
+
+  getToken(): string | null {
+    return getStoredToken();
+  },
+
+  getStudentDashboard(): Promise<StudentAttendanceDashboardResponse> {
+    return request<StudentAttendanceDashboardResponse>("/api/v1/students/dashboard");
+  },
+
+  uploadStudentPhoto(photo_base64: string): Promise<{ status: string; message: string; has_biometric: boolean }> {
+    return request<{ status: string; message: string; has_biometric: boolean }>("/api/v1/students/photo", {
+      method: "POST",
+      body: JSON.stringify({ photo_base64 }),
+    });
+  },
+
+  // --- Phase 2: Teacher Endpoints ---
+  registerTeacher(
+    data: TeacherRegisterRequest,
+  ): Promise<TeacherProfileResponse> {
+    return request<TeacherProfileResponse>("/api/v1/teachers/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  getTeacherDashboard(): Promise<TeacherDashboardResponse> {
+    return request<TeacherDashboardResponse>("/api/v1/teachers/dashboard");
+  },
+
+  getTeacherProfile(): Promise<TeacherProfileResponse> {
+    return request<TeacherProfileResponse>("/api/v1/teachers/profile");
+  },
+
+  // --- Phase 2: Academic Endpoints ---
+  getAcademicStructure(): Promise<AcademicStructureResponse> {
+    return request<AcademicStructureResponse>("/api/v1/academic/structure");
+  },
+
+  getClasses(): Promise<AcademicClass[]> {
+    return request<AcademicClass[]>("/api/v1/academic/classes");
+  },
+
+  getSubjects(): Promise<Subject[]> {
+    return request<Subject[]>("/api/v1/academic/subjects");
+  },
+
+  getClassStudents(classCode: string): Promise<StudentDirectoryItem[]> {
+    return request<StudentDirectoryItem[]>(`/api/v1/academic/classes/${encodeURIComponent(classCode)}/students`);
+  },
+
+  // --- Phase 2: Session Start / End & Manual Correction ---
+  startSession(sessionId: string): Promise<SessionResponse> {
+    return request<SessionResponse>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/start`, {
+      method: "POST",
+    });
+  },
+
+  endSession(sessionId: string): Promise<SessionResponse> {
+    return request<SessionResponse>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/end`, {
+      method: "POST",
+    });
+  },
+
+  updateAttendanceStatus(
+    sessionId: string,
+    attendanceId: string,
+    status: "PRESENT" | "ABSENT",
+  ): Promise<{ attendance_id: string; session_id: string; status: string; message: string }> {
+    return request<{ attendance_id: string; session_id: string; status: string; message: string }>(
+      `/api/v1/attendance/${encodeURIComponent(sessionId)}/records/${encodeURIComponent(attendanceId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      },
+    );
+  },
+
+  // --- Phase 2: Admin Multi-Role Management ---
+  getAdminStudents(): Promise<StudentProfileResponse[]> {
+    return request<StudentProfileResponse[]>("/api/v1/admin/students");
+  },
+
+  createAdminStudent(data: StudentRegisterRequest): Promise<StudentProfileResponse> {
+    return request<StudentProfileResponse>("/api/v1/admin/students", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteAdminStudent(userId: string): Promise<{ status: string; user_id: string }> {
+    return request<{ status: string; user_id: string }>(`/api/v1/admin/students/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+    });
+  },
+
+  getAdminTeachers(): Promise<TeacherProfileResponse[]> {
+    return request<TeacherProfileResponse[]>("/api/v1/admin/teachers");
+  },
+
+  createAdminTeacher(data: TeacherRegisterRequest): Promise<TeacherProfileResponse> {
+    return request<TeacherProfileResponse>("/api/v1/admin/teachers", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteAdminTeacher(userId: string): Promise<{ status: string; user_id: string }> {
+    return request<{ status: string; user_id: string }>(`/api/v1/admin/teachers/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+    });
+  },
+
+  assignTeacherClasses(
+    teacherId: string,
+    data: TeacherAssignClassesRequest,
+  ): Promise<TeacherProfileResponse> {
+    return request<TeacherProfileResponse>(`/api/v1/admin/teachers/${encodeURIComponent(teacherId)}/assign`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  addAdminClass(data: { class_code: string; branch: string; section: string; semester?: number }): Promise<AcademicClass> {
+    return request<AcademicClass>("/api/v1/admin/academic/classes", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  addAdminSubject(data: { name: string; code?: string; branch?: string }): Promise<Subject> {
+    return request<Subject>("/api/v1/admin/academic/subjects", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  getAdminSessions(filters?: {
+    branch?: string;
+    section?: string;
+    subject?: string;
+    teacher?: string;
+    status?: string;
+  }): Promise<SessionResponse[]> {
+    const params = new URLSearchParams();
+    if (filters?.branch) params.set("branch", filters.branch);
+    if (filters?.section) params.set("section", filters.section);
+    if (filters?.subject) params.set("subject", filters.subject);
+    if (filters?.teacher) params.set("teacher", filters.teacher);
+    if (filters?.status) params.set("status", filters.status);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return request<SessionResponse[]>(`/api/v1/admin/sessions${qs}`);
   },
 
   checkHealth(): Promise<{

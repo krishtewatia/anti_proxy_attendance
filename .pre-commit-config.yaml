@@ -1,10 +1,55 @@
+# ==============================================================================
+# Pre-Commit Configuration for Anti-Proxy Attendance Stack
+# Enforces code hygiene, secret scanning, formatting, and SAST before commits.
+# ==============================================================================
+
 repos:
+  # ----------------------------------------------------------------------------
+  # 1. Standard File & Syntax Hygiene
+  # ----------------------------------------------------------------------------
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-json
-        exclude: tsconfig.*\.json
+        exclude: ^frontend/tsconfig.*\.json$
       - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=10000"]
+        exclude: ^vision-service/tests/video_test/.*\.mp4$
+
+  # ----------------------------------------------------------------------------
+  # 2. Secret Detection (Gitleaks)
+  # ----------------------------------------------------------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.0
+    hooks:
+      - id: gitleaks
+
+  # ----------------------------------------------------------------------------
+  # 3. Python Linting & Formatting (Ruff)
+  # ----------------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.9
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        files: ^(backend/app/|vision-service/(camera|pipeline|events|tools)/|scripts/)
+      - id: ruff-format
+        files: ^(backend/app/|vision-service/(camera|pipeline|events|tools)/|scripts/)
+
+  # ----------------------------------------------------------------------------
+  # 4. Python Security Analysis (Bandit)
+  # ----------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: bandit
+        name: Bandit Security Scanner
+        entry: backend/.venv/Scripts/bandit.exe
+        language: system
+        types: [python]
+        files: ^backend/app/
+        args: ["-c", "pyproject.toml", "-ll"]

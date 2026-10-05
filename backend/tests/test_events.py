@@ -23,7 +23,11 @@ async def client(mock_db):
     """Async test client with database dependency override."""
     app.dependency_overrides[get_database] = lambda: mock_db
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+        headers={"X-API-Key": "test-vision-service-key-2026"},
+    ) as ac:
         yield ac
     app.dependency_overrides.clear()
 

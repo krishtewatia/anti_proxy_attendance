@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class DirectionType(str, Enum):
     """Directional transit event types emitted by Vision Service."""
+
     ENTRY = "ENTRY"
     EXIT = "EXIT"
     UNRESOLVED = "UNRESOLVED"
@@ -15,6 +16,7 @@ class DirectionType(str, Enum):
 
 class VisionEvidence(BaseModel):
     """Evidence metrics collected over the duration of a face tracklet."""
+
     model_config = ConfigDict(extra="forbid")
 
     peak_similarity: float = Field(
@@ -57,6 +59,7 @@ class VisionEvidence(BaseModel):
 
 class VisionEventCreate(BaseModel):
     """Standardized event payload transmitted by Vision Service to FastAPI."""
+
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(
@@ -95,6 +98,7 @@ class VisionEventCreate(BaseModel):
 
 class VisionEventResponse(BaseModel):
     """Acknowledgement response returned to Vision Service upon ingestion."""
+
     event_id: str
     status: str = Field(
         ...,
@@ -107,4 +111,8 @@ class VisionEventResponse(BaseModel):
     processed_at: Optional[datetime] = Field(
         default=None,
         description="Timestamp when event was ingested.",
+    )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Active session ID if mapped to an active session.",
     )

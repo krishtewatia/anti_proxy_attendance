@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 
 from pymongo.errors import DuplicateKeyError
 
-from app.core.config import settings
 from app.database.mongodb import get_database
 
 USERS_COLLECTION = "users"
@@ -43,15 +42,32 @@ async def get_user_by_email(email: str) -> dict | None:
     db = get_database()
     collection = db[USERS_COLLECTION]
 
-    return await collection.find_one(
-        {"email": email.lower()}
-    )
+    return await collection.find_one({"email": email.lower()})
 
 
 async def get_user_by_id(user_id: str) -> dict | None:
     db = get_database()
     collection = db[USERS_COLLECTION]
 
-    return await collection.find_one(
-        {"user_id": user_id}
-    )
+    return await collection.find_one({"user_id": user_id})
+
+
+async def get_all_users(role: str | None = None) -> list[dict]:
+    """Retrieve all user profiles excluding password hashes (Admin query)."""
+    db = get_database()
+    collection = db[USERS_COLLECTION]
+
+    query = {}
+    if role:
+        query["role"] = role.upper()
+
+    cursor = collection.find(query, {"password_hash": 0}).sort("created_at", -1)
+    return await cursor.to_list(length=None)
+
+
+async def delete_user_by_id(user_id: str) -> bool:
+    """Delete a user account by user_id."""
+    db = get_database()
+    collection = db[USERS_COLLECTION]
+    res = await collection.delete_one({"user_id": user_id})
+    return res.deleted_count > 0

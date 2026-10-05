@@ -23,13 +23,14 @@ async def ensure_audit_indexes(db: AsyncIOMotorDatabase | None = None) -> None:
     )
 
 
-async def create_audit_event(event: dict) -> dict:
+async def create_audit_event(event: dict, db: AsyncIOMotorDatabase | None = None) -> dict:
     """
     Append an immutable audit event record to MongoDB.
 
     This collection is strictly append-only for audit integrity.
     """
-    db = get_database()
+    if db is None:
+        db = get_database()
     collection = db[AUDIT_EVENTS_COLLECTION]
 
     await ensure_audit_indexes(db)

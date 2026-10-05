@@ -1,0 +1,157 @@
+/* ==========================================================================
+   COLLEGE ERP - Administration Management Styles
+   ========================================================================== */
+
+.erp-admin-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Metric Cards Grid (Section 12) */
+.erp-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.erp-metric-card {
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-md);
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--erp-shadow-xs);
+  display: flex;
+  flex-direction: column;
+}
+
+.erp-metric-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--erp-text-muted);
+}
+
+.erp-metric-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--erp-navy);
+  margin: 0.25rem 0 0.15rem 0;
+  line-height: 1.2;
+}
+
+.erp-metric-subtext {
+  font-size: 0.75rem;
+  color: var(--erp-text-muted);
+}
+
+/* Filter and Action Bar */
+.erp-table-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.erp-search-input {
+  width: 320px;
+  max-width: 100%;
+  padding: 0.55rem 0.85rem;
+  border-radius: var(--erp-radius-sm);
+  border: 1px solid var(--erp-border-strong);
+  background: #ffffff;
+  color: var(--erp-text-main);
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.erp-search-input:focus {
+  border-color: var(--erp-primary);
+  box-shadow: 0 0 0 3px var(--erp-primary-light);
+}
+
+/* Modal Dialogs */
+.erp-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1.5rem;
+}
+
+.erp-modal-card {
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-lg);
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.erp-modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--erp-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.erp-modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--erp-navy);
+  margin: 0;
+}
+
+.erp-modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--erp-text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.erp-modal-close-btn:hover {
+  color: var(--erp-text-main);
+}
+
+.erp-modal-body {
+  padding: 1.5rem;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.erp-modal-footer {
+  padding: 1rem 1.5rem;
+  background: var(--erp-surface-subtle);
+  border-top: 1px solid var(--erp-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+/* Forms in Admin (Section 14) */
+.erp-form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 580px) {
+  .erp-form-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

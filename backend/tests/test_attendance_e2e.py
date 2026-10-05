@@ -159,6 +159,7 @@ async def test_complete_attendance_flow():
             response = await client.post(
                 "/api/v1/events",
                 json=payload,
+                headers={"X-API-Key": "test-vision-service-key-2026"},
             )
 
             assert response.status_code == 201

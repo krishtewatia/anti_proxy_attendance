@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { auth } from "../../services";
+import React, { useState, useEffect } from "react";
+import { api } from "../../services";
 
 interface RegisterFormProps {
   onSuccess: (registeredEmail: string) => void;
@@ -12,72 +12,143 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   onSuccess,
   onSwitchToLogin,
 }) => {
+  const [role, setRole] = useState<"STUDENT" | "TEACHER">("STUDENT");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<"TEACHER" | "STUDENT">("TEACHER");
+
+  // Student-specific fields
+  const [studentId, setStudentId] = useState("");
+  const [rollNumber, setRollNumber] = useState("");
+  const [branch, setBranch] = useState("Data Science");
+  const [section, setSection] = useState("B");
+  const [photoBase64, setPhotoBase64] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  // Teacher-specific fields
+  const [teacherId, setTeacherId] = useState("");
+  const [department, setDepartment] = useState("Data Science");
+
+  // Dynamic academic branches & sections
+  const [branches, setBranches] = useState<string[]>(["Data Science", "Computer Science", "AI & ML"]);
+  const [sections, setSections] = useState<string[]>(["A", "B", "C"]);
+
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Attempt to load live academic structure for dropdowns
+    api.getAcademicStructure()
+      .then((struct) => {
+        if (struct.branches && struct.branches.length > 0) {
+          setBranches(struct.branches.map((b) => b.name));
+          const currentB = struct.branches.find((b) => b.name === "Data Science") || struct.branches[0];
+          if (currentB && currentB.sections) {
+            setSections(currentB.sections);
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback to default lists
+      });
+  }, []);
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setErrorMessage("Please upload a valid image file (JPG or PNG).");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = reader.result as string;
+      setPhotoBase64(b64);
+      setPhotoPreview(b64);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
     const trimmedEmail = email.trim();
+    const trimmedName = name.trim();
 
-    // 1. Email format check
-    if (!trimmedEmail) {
-      setErrorMessage("Please enter an email address.");
+    if (!trimmedName) {
+      setErrorMessage("Please enter your full name.");
       return;
     }
-    if (!EMAIL_REGEX.test(trimmedEmail)) {
+
+    if (!trimmedEmail || !EMAIL_REGEX.test(trimmedEmail)) {
       setErrorMessage("Please enter a valid email address.");
       return;
     }
 
-    // 2. Password length check
-    if (password.length < 8) {
-      setErrorMessage("Password must be at least 8 characters long.");
+    if (password.length < 6) {
+      setErrorMessage("Password must be at least 6 characters long.");
       return;
     }
 
-    // 3. Confirm password match
     if (password !== confirmPassword) {
       setErrorMessage("Passwords do not match.");
-      return;
-    }
-
-    // 4. Role check (strictly TEACHER or STUDENT)
-    if (role !== "TEACHER" && role !== "STUDENT") {
-      setErrorMessage("Please select a valid account type.");
       return;
     }
 
     setLoading(true);
 
     try {
-      await auth.register({
-        email: trimmedEmail,
-        password,
-        role,
-      });
+      if (role === "STUDENT") {
+        if (!studentId.trim()) {
+          setErrorMessage("Please enter your Student ID (e.g. DS20260125).");
+          setLoading(false);
+          return;
+        }
+        if (!rollNumber.trim()) {
+          setErrorMessage("Please enter your ERP / Roll Number.");
+          setLoading(false);
+          return;
+        }
+
+        await api.registerStudent({
+          name: trimmedName,
+          email: trimmedEmail,
+          password,
+          student_id: studentId.trim(),
+          roll_number: rollNumber.trim(),
+          branch,
+          section,
+          photo_base64: photoBase64 || undefined,
+        });
+      } else {
+        if (!teacherId.trim()) {
+          setErrorMessage("Please enter your Teacher ID (e.g. T001).");
+          setLoading(false);
+          return;
+        }
+
+        await api.registerTeacher({
+          name: trimmedName,
+          email: trimmedEmail,
+          password,
+          teacher_id: teacherId.trim(),
+          department,
+          assigned_classes: [`${branch === "Data Science" ? "DS" : "CS"}-${section}`],
+          assigned_subjects: ["Machine Learning"],
+        });
+      }
 
       onSuccess(trimmedEmail);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-
-      if (
-        message.includes("409") ||
-        message.toLowerCase().includes("already exists")
-      ) {
-        setErrorMessage("An account with this email already exists.");
-      } else if (
-        message.includes("422") ||
-        message.toLowerCase().includes("validation")
-      ) {
-        setErrorMessage("Please check the information entered.");
+      if (message.includes("409") || message.toLowerCase().includes("already exists")) {
+        setErrorMessage("An account with this email or ID already exists.");
       } else {
-        setErrorMessage("Unable to complete registration. Please try again.");
+        setErrorMessage(message || "Unable to complete registration. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -87,143 +158,262 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   return (
     <form className="auth-form" onSubmit={handleSubmit} noValidate>
       {errorMessage && (
-        <div className="alert-banner error" role="alert">
-          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <div className="alert-banner error" role="alert" style={{ marginBottom: "1rem" }}>
+          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="20" height="20">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 7.5h.008v.008H12v-.008z" />
           </svg>
           <span>{errorMessage}</span>
         </div>
       )}
 
-      {/* Account Type Selector (Teacher / Student only) */}
-      <div className="form-group">
-        <label className="role-group-label">Select Account Type</label>
-        <div className="role-grid" role="radiogroup" aria-label="Account Type">
-          <div
-            className={`role-card ${role === "TEACHER" ? "selected" : ""}`}
-            onClick={() => setRole("TEACHER")}
-            role="radio"
-            aria-checked={role === "TEACHER"}
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") setRole("TEACHER");
-            }}
-          >
-            <svg className="role-card-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342" />
-            </svg>
-            <span className="role-card-title">Teacher</span>
-            <span className="role-card-desc">Sessions & Roster</span>
-          </div>
-
+      {/* Account Type Selector */}
+      <div className="form-group" style={{ marginBottom: "1.25rem" }}>
+        <label className="role-group-label" style={{ fontWeight: 600, display: "block", marginBottom: "0.5rem" }}>
+          Select Role
+        </label>
+        <div className="role-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
           <div
             className={`role-card ${role === "STUDENT" ? "selected" : ""}`}
             onClick={() => setRole("STUDENT")}
             role="radio"
             aria-checked={role === "STUDENT"}
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") setRole("STUDENT");
+            style={{
+              padding: "0.85rem",
+              borderRadius: "8px",
+              cursor: "pointer",
+              border: role === "STUDENT" ? "2px solid #1d4ed8" : "1px solid #e2e8f0",
+              background: role === "STUDENT" ? "#eff6ff" : "#ffffff",
+              textAlign: "center",
             }}
           >
-            <svg className="role-card-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-            </svg>
-            <span className="role-card-title">Student</span>
-            <span className="role-card-desc">Attendance Records</span>
+            <div style={{ fontWeight: 600, fontSize: "0.95rem", color: role === "STUDENT" ? "#1d4ed8" : "#0f172a" }}>Student</div>
+            <div style={{ fontSize: "0.75rem", color: "#64748b" }}>Self-registration & Photo</div>
+          </div>
+
+          <div
+            className={`role-card ${role === "TEACHER" ? "selected" : ""}`}
+            onClick={() => setRole("TEACHER")}
+            role="radio"
+            aria-checked={role === "TEACHER"}
+            style={{
+              padding: "0.85rem",
+              borderRadius: "8px",
+              cursor: "pointer",
+              border: role === "TEACHER" ? "2px solid #1d4ed8" : "1px solid #e2e8f0",
+              background: role === "TEACHER" ? "#eff6ff" : "#ffffff",
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontWeight: 600, fontSize: "0.95rem", color: role === "TEACHER" ? "#1d4ed8" : "#0f172a" }}>Teacher</div>
+            <div style={{ fontSize: "0.75rem", color: "#64748b" }}>Classroom Sessions</div>
           </div>
         </div>
       </div>
 
-      <div className="form-group">
-        <label className="form-label" htmlFor="register-email">
-          Email Address
-        </label>
-        <div className="input-container">
-          <svg className="input-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-          </svg>
-          <input
-            id="register-email"
-            type="email"
-            className="auth-input"
-            placeholder="you@institution.edu"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            required
-            disabled={loading}
-          />
-        </div>
+      {/* Common: Full Name */}
+      <div className="form-group" style={{ marginBottom: "0.85rem" }}>
+        <label className="form-label" htmlFor="register-name">Full Name</label>
+        <input
+          id="register-name"
+          type="text"
+          className="auth-input"
+          placeholder={role === "STUDENT" ? "e.g. Rahul Sharma" : "e.g. Dr. A. Sharma"}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          disabled={loading}
+        />
       </div>
 
-      <div className="form-group">
-        <label className="form-label" htmlFor="register-password">
-          Password (min. 8 characters)
-        </label>
-        <div className="input-container">
-          <svg className="input-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-          </svg>
+      {/* Common: Email Address */}
+      <div className="form-group" style={{ marginBottom: "0.85rem" }}>
+        <label className="form-label" htmlFor="register-email">Email Address</label>
+        <input
+          id="register-email"
+          type="email"
+          className="auth-input"
+          placeholder="your.email@campus.edu"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={loading}
+        />
+      </div>
+
+      {/* Role-Specific: Student Fields */}
+      {role === "STUDENT" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.85rem" }}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="register-student-id">Student ID</label>
+              <input
+                id="register-student-id"
+                type="text"
+                className="auth-input"
+                placeholder="e.g. DS202601"
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="register-roll-no">ERP / Roll No</label>
+              <input
+                id="register-roll-no"
+                type="text"
+                className="auth-input"
+                placeholder="e.g. 20261234"
+                value={rollNumber}
+                onChange={(e) => setRollNumber(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "0.75rem", marginBottom: "0.85rem" }}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="register-branch">Branch</label>
+              <select
+                id="register-branch"
+                className="auth-input"
+                value={branch}
+                onChange={(e) => setBranch(e.target.value)}
+                disabled={loading}
+                style={{ background: "#ffffff", color: "#0f172a" }}
+              >
+                {branches.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="register-section">Section</label>
+              <select
+                id="register-section"
+                className="auth-input"
+                value={section}
+                onChange={(e) => setSection(e.target.value)}
+                disabled={loading}
+                style={{ background: "#ffffff", color: "#0f172a" }}
+              >
+                {sections.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Biometric Photo Upload */}
+          <div className="form-group" style={{ marginBottom: "1rem" }}>
+            <label className="form-label" style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>Profile Photograph / Face Scan</span>
+              <span style={{ fontSize: "0.75rem", color: "#1d4ed8" }}>Required for Attendance</span>
+            </label>
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginTop: "0.35rem" }}>
+              {photoPreview ? (
+                <img
+                  src={photoPreview}
+                  alt="Student face preview"
+                  style={{ width: "54px", height: "54px", borderRadius: "50%", objectFit: "cover", border: "2px solid #1d4ed8" }}
+                />
+              ) : (
+                <div style={{ width: "54px", height: "54px", borderRadius: "50%", background: "#f1f5f9", border: "1px solid #cbd5e1", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: "1.25rem" }}>
+                  👤
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                disabled={loading}
+                style={{ fontSize: "0.85rem", color: "#475569" }}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Role-Specific: Teacher Fields */}
+      {role === "TEACHER" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.85rem" }}>
+          <div className="form-group">
+            <label className="form-label" htmlFor="register-teacher-id">Teacher ID</label>
+            <input
+              id="register-teacher-id"
+              type="text"
+              className="auth-input"
+              placeholder="e.g. T001"
+              value={teacherId}
+              onChange={(e) => setTeacherId(e.target.value)}
+              required
+              disabled={loading}
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="register-dept">Department</label>
+            <input
+              id="register-dept"
+              type="text"
+              className="auth-input"
+              placeholder="e.g. Data Science"
+              value={department}
+              onChange={(e) => setDepartment(e.target.value)}
+              required
+              disabled={loading}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Password & Confirm */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1.25rem" }}>
+        <div className="form-group">
+          <label className="form-label" htmlFor="register-password">Password</label>
           <input
             id="register-password"
             type="password"
             className="auth-input"
-            placeholder="At least 8 characters"
+            placeholder="Min. 6 chars"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
             required
             disabled={loading}
           />
         </div>
-      </div>
-
-      <div className="form-group">
-        <label className="form-label" htmlFor="register-confirm-password">
-          Confirm Password
-        </label>
-        <div className="input-container">
-          <svg className="input-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-          </svg>
+        <div className="form-group">
+          <label className="form-label" htmlFor="register-confirm">Confirm Password</label>
           <input
-            id="register-confirm-password"
+            id="register-confirm"
             type="password"
             className="auth-input"
-            placeholder="Re-enter password"
+            placeholder="Re-enter"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            autoComplete="new-password"
             required
             disabled={loading}
           />
         </div>
       </div>
 
-      <button type="submit" className="btn-submit" disabled={loading}>
-        {loading ? (
-          <>
-            <svg className="spinner" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
-              <path d="M4 12a8 8 0 018-8" />
-            </svg>
-            <span>Creating account...</span>
-          </>
-        ) : (
-          <span>Create Account</span>
-        )}
+      <button
+        type="submit"
+        className="btn-submit"
+        disabled={loading}
+      >
+        {loading ? "Registering & Processing..." : `Register as ${role === "STUDENT" ? "Student" : "Teacher"}`}
       </button>
 
       <div className="auth-footer">
-        <span>Already have an account?</span>
+        <span>Already have an account? </span>
         <button
           type="button"
-          className="auth-footer-btn"
           onClick={onSwitchToLogin}
           disabled={loading}
+          className="auth-footer-btn"
         >
-          Sign in
+          Sign In
         </button>
       </div>
     </form>

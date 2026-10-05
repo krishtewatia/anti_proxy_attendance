@@ -1,0 +1,48 @@
+# ==============================================================================
+# Anti-Proxy Attendance System - Python Tooling & Security Configuration
+# ==============================================================================
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = [
+    ".git",
+    ".venv",
+    "node_modules",
+    "dist",
+    "docker",
+    "scratch",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+]
+ignore = [
+    "E501",  # line length (handled by formatter)
+    "E402",  # module level import not at top of file (common in scripts with sys.path insertion)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ------------------------------------------------------------------------------
+# Bandit SAST Configuration
+# ------------------------------------------------------------------------------
+[tool.bandit]
+exclude_dirs = [
+    "tests",
+    "**/tests/*",
+    ".venv",
+    "frontend",
+    "docker",
+    "scratch",
+]
+skips = [
+    "B101",  # assert_used (used safely in validation invariants and tests)
+    "B104",  # hardcoded_bind_all_interfaces (0.0.0.0 necessary for containerized services)
+]

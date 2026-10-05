@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -7,16 +7,21 @@ from pydantic import BaseModel, ConfigDict, Field
 class SessionCreate(BaseModel):
     """Schema used when creating an attendance session."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     course_name: str = Field(min_length=1, max_length=200)
-    classroom_id: str = Field(min_length=1, max_length=100)
+    classroom_id: str = Field(min_length=1, max_length=100, default="ROOM_101")
 
     start_time: datetime
     end_time: datetime
 
+    class_code: Optional[str] = None
+    subject: Optional[str] = None
+    branch: Optional[str] = None
+    section: Optional[str] = None
+
     required_presence_percentage: float = Field(
-        default=75.0,
+        default=100.0,
         ge=0.0,
         le=100.0,
     )
@@ -25,7 +30,7 @@ class SessionCreate(BaseModel):
 class SessionResponse(BaseModel):
     """Schema returned by the API for an attendance session."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     session_id: str
     course_name: str
@@ -34,7 +39,12 @@ class SessionResponse(BaseModel):
     start_time: datetime
     end_time: datetime
 
-    required_presence_percentage: float
+    class_code: Optional[str] = None
+    subject: Optional[str] = None
+    branch: Optional[str] = None
+    section: Optional[str] = None
 
-    status: Literal["SCHEDULED", "ACTIVE", "COMPLETED"]
+    required_presence_percentage: float = 100.0
+
+    status: str  # "SCHEDULED", "ACTIVE", "FINALIZED", "COMPLETED"
     created_by: str

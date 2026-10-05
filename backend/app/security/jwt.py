@@ -15,9 +15,7 @@ def create_access_token(
     role: str,
 ) -> str:
     now = datetime.now(timezone.utc)
-    expires_at = now + timedelta(
-        minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES
-    )
+    expires_at = now + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
 
     payload = {
         "sub": user_id,

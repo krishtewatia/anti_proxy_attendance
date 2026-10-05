@@ -1,0 +1,164 @@
+name: DevSecOps & Security Scanning
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run every Monday at 00:00 UTC
+    - cron: "0 0 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # ============================================================================
+  # 1. Gitleaks Secret Detection
+  # ============================================================================
+  gitleaks:
+    name: Secret Scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+
+  # ============================================================================
+  # 2. Semgrep Static Application Security Testing (SAST)
+  # ============================================================================
+  semgrep:
+    name: Code Scanning (Semgrep)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep Rules
+        run: |
+          semgrep scan --config auto \
+                       --error \
+                       --exclude 'tests/' \
+                       --exclude 'frontend/dist/' \
+                       --exclude 'node_modules/' \
+                       --sarif \
+                       --output semgrep.sarif
+
+      - name: Upload Semgrep SARIF Report
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+        continue-on-error: true
+
+  # ============================================================================
+  # 3. Python Security: Bandit SAST & pip-audit SCA
+  # ============================================================================
+  python-security:
+    name: Python Security (Bandit & pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Security Scanners
+        run: pip install bandit pip-audit
+
+      - name: Run Bandit (Backend AST Analysis)
+        run: |
+          bandit -r backend/app -c pyproject.toml || bandit -r backend/app -ll -ii
+
+      - name: Run Bandit (Vision Service AST Analysis)
+        run: |
+          bandit -r vision-service/pipeline vision-service/camera vision-service/events -ll -ii
+
+      - name: Run pip-audit (Backend Dependencies)
+        run: |
+          pip-audit -r backend/requirements.txt
+
+      - name: Run pip-audit (Vision Service Dependencies)
+        run: |
+          pip-audit -r vision-service/requirements.txt
+
+  # ============================================================================
+  # 4. Frontend Security: npm audit SCA
+  # ============================================================================
+  npm-audit:
+    name: Node Security (npm audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+
+  # ============================================================================
+  # 5. Container Image Vulnerability Scanning (Trivy)
+  # ============================================================================
+  container-scan:
+    name: Container Scanning (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+          tags: anti-proxy-backend:scan
+          load: true
+
+      - name: Scan Backend Image with Trivy
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: "anti-proxy-backend:scan"
+          format: "table"
+          exit-code: "0"
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH"
+
+      - name: Build Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: false
+          tags: anti-proxy-frontend:scan
+          load: true
+
+      - name: Scan Frontend Image with Trivy
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: "anti-proxy-frontend:scan"
+          format: "table"
+          exit-code: "0"
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH"

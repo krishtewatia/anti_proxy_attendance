@@ -19,6 +19,22 @@ __pycache__/
 .env.*.local
 *.env
 
+# SQLite and Outbox databases
+*.db
+*.db-wal
+*.db-shm
+vision-service/data/
+data/
+.outbox/
+
+# Biometric and evaluation datasets (Strictly Local)
+**/evaluation_dataset/
+*.npy
+*.npz
+data/evaluation/
+vision-service/evaluation/data/
+
+
 # IDE / Editor files
 .vscode/
 .idea/
