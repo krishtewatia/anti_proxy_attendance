@@ -116,11 +116,17 @@ async def get_session_attendance(
 
         summary_items.append(
             AttendanceSummaryItem(
-                attendance_id=f"att_{session_id}_{ident}",
+                attendance_id=rec.get("attendance_id") if (rec and rec.get("attendance_id")) else f"att_{session_id}_{ident}",
                 identity=ident,
                 student_id=stu_id,
                 student_name=stu_name,
                 status=current_status,
+                presence_duration_seconds=float(rec.get("presence_duration_seconds", 0.0)) if rec else 0.0,
+                presence_percentage=float(rec.get("presence_percentage", 0.0)) if rec else 0.0,
+                required_presence_percentage=float(rec.get("required_presence_percentage", 0.0)) if rec else 0.0,
+                manually_corrected=bool(rec.get("manually_corrected", False)) if rec else False,
+                requires_review=bool(rec.get("requires_review", False)) if rec else False,
+                anomalies=rec.get("anomalies", []) if rec else [],
             )
         )
 
@@ -265,7 +271,10 @@ async def export_session_attendance_csv(
 
 
 class AttendanceStatusCorrectionRequest(BaseModel):
-    status: str  # "PRESENT" or "ABSENT"
+    status: Optional[str] = None
+    new_status: Optional[str] = None
+    new_presence_seconds: Optional[float] = 0.0
+    reason: Optional[str] = None
 
 
 @router.patch(
@@ -279,17 +288,36 @@ async def update_student_attendance_status(
     current_user: Annotated[dict, Depends(require_teacher)],
 ) -> dict:
     """Allows teacher to manually toggle or correct attendance for students in their session."""
-    from app.database.attendance import update_attendance_status
+    from app.database.attendance import get_attendance_record, update_attendance_status
+    from app.services.attendance_correction import correct_attendance
 
     _ = await get_owned_session(session_id, current_user)
-    st = payload.status.upper().strip()
-    if st not in ("PRESENT", "ABSENT"):
+    target_st = (payload.new_status or payload.status or "").upper().strip()
+    if target_st not in ("PRESENT", "ABSENT"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Status must be either 'PRESENT' or 'ABSENT'",
         )
 
-    updated = await update_attendance_status(attendance_id, st)
+    # If this is a formal correction with new_status / reason, route through audit correction service
+    if payload.new_status is not None:
+        rec = await get_attendance_record(attendance_id)
+        if not rec:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Attendance record not found",
+            )
+        corr = await correct_attendance(
+            attendance_id=attendance_id,
+            new_status=target_st,
+            new_presence_seconds=payload.new_presence_seconds or 0.0,
+            reason=payload.reason or "Manual correction via ERP dashboard",
+            corrected_by=current_user["user_id"],
+        )
+        return corr.model_dump()
+
+    # Simple toggle flow
+    updated = await update_attendance_status(attendance_id, target_st)
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

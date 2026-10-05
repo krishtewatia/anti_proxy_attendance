@@ -50,6 +50,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     status: "IDLE",
   });
   const [cameraOnline, setCameraOnline] = useState<boolean>(true);
+  const [streamKey, setStreamKey] = useState<number>(Date.now());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const prevMarkedCountRef = useRef<number>(0);
@@ -194,7 +195,13 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
         const statusRes = await fetch(`${previewBaseUrl}/status`);
         if (statusRes.ok) {
           const st = await statusRes.json();
-          setCameraOnline(Boolean(st.camera_connected));
+          const isConnected = Boolean(st.camera_connected);
+          setCameraOnline((prev) => {
+            if (!prev && isConnected) {
+              setStreamKey(Date.now());
+            }
+            return isConnected;
+          });
 
           if (st.last_recognized) {
             setCallout({
@@ -233,6 +240,15 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     setLoading(true);
     try {
       await api.endSession(sessionId);
+      try {
+        await fetch(`${previewBaseUrl}/reset`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: null }),
+        });
+      } catch {
+        // Standby
+      }
       const attData = await api.getSessionAttendance(sessionId);
       setRecords(attData.records);
       setStep(3);
@@ -512,7 +528,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
             <div className="erp-camera-pane">
               <div className="erp-camera-viewport" style={{ position: "relative" }}>
                 <img
-                  src={previewMjpgUrl}
+                  key={streamKey}
+                  src={`${previewMjpgUrl}?t=${streamKey}`}
                   alt="Live Attendance Camera Viewport"
                   className="erp-camera-stream"
                   onError={() => setCameraOnline(false)}

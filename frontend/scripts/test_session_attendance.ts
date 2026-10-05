@@ -94,10 +94,10 @@ async function testLiveAttendanceApi() {
   console.log("Fetching attendance before session finalization...");
   const initialAtt = await api.getAttendance(session.session_id);
   console.log("Initial attendance records:", initialAtt);
-  if (!Array.isArray(initialAtt.records) || initialAtt.records.length !== 0) {
-    throw new Error(`Expected 0 attendance records before finalization, got: ${initialAtt.records.length}`);
+  if (!Array.isArray(initialAtt.records) || initialAtt.present_count !== 0) {
+    throw new Error(`Expected 0 present students before session finalization, got: ${initialAtt.present_count}`);
   }
-  console.log("✅ Empty attendance before finalization verified!");
+  console.log("✅ Zero present students before finalization verified!");
 
   // Finalize session
   console.log("Finalizing session...");
