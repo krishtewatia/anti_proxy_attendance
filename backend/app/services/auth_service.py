@@ -106,6 +106,6 @@ async def authenticate_user(
 
     return TokenResponse(
         access_token=access_token,
-        token_type="bearer",
+        token_type="bearer",  # nosec: B106
         user=user_response,
     )

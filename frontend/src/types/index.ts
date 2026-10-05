@@ -5,3 +5,7 @@ export * from './vision_event.ts';
 export * from './student.ts';
 export * from './auth.ts';
 export * from './audit.ts';
+export * from './live_session.ts';
+export * from './admin.ts';
+export * from './academic.ts';
+export * from './teacher.ts';

@@ -7,49 +7,25 @@ interface AuthLayoutProps {
 
 export const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
   return (
-    <div className="auth-wrapper">
-      <div className="auth-ambient-glow" aria-hidden="true" />
-
-      <main className="auth-content">
-        <header className="auth-brand">
-          <div className="auth-logo-badge" aria-hidden="true">
-            <svg
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
-              />
+    <div className="erp-auth-wrapper">
+      <main className="erp-auth-container">
+        <header className="erp-auth-header">
+          <div className="erp-auth-crest" aria-hidden="true">
+            <svg fill="currentColor" viewBox="0 0 24 24" width="32" height="32">
+              <path d="M12 2L1 7l11 5 9-4.09V17h2V7L12 2zm0 13.54L4.82 12 12 8.73 19.18 12 12 15.54zM5 13.18v4L12 21l7-3.82v-4L12 17.5 5 13.18z"/>
             </svg>
           </div>
-          <h1 className="auth-title">Anti-Proxy Attendance</h1>
-          <p className="auth-subtitle">
-            Intelligent Presence Verification & Attendance Integrity
-          </p>
+          <h1 className="erp-auth-title">COLLEGE ERP</h1>
+          <p className="erp-auth-subtitle">Academic Information & Attendance System</p>
+          <div className="erp-auth-institution">Apex Institute of Technology</div>
         </header>
 
-        <section className="auth-card" aria-label="Authentication">
+        <section className="erp-auth-card" aria-label="Portal Authentication">
           {children}
         </section>
 
-        <footer className="auth-system-badge">
-          <svg
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span>JWT + RBAC Protected Endpoint Protocol</span>
+        <footer className="erp-auth-footer-tag">
+          <span>Authorized Academic Access • Academic Year 2025–26</span>
         </footer>
       </main>
     </div>

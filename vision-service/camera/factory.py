@@ -7,6 +7,7 @@ from camera.base import VideoSource, VideoSourceType
 from camera.file_source import FileVideoSource
 from camera.phone_source import PhoneVideoSource
 from camera.rtsp_source import RTSPVideoSource
+from camera.webcam_source import WebcamVideoSource
 
 
 def create_video_source(
@@ -69,9 +70,19 @@ def create_video_source(
             **kwargs,
         )
 
+    elif normalized_type == VideoSourceType.WEBCAM.value:
+        dev_idx = kwargs.pop("device_index", 0)
+        if source_uri is not None and str(source_uri).isdigit():
+            dev_idx = int(source_uri)
+        return WebcamVideoSource(
+            device_index=dev_idx,
+            source_id=source_id or "LOCAL_WEBCAM",
+            target_fps=target_fps,
+            **kwargs,
+        )
+
     else:
         supported = [t.value for t in VideoSourceType]
         raise ValueError(
-            f"Unsupported video source type: '{source_type}'. "
-            f"Supported types: {supported}"
+            f"Unsupported video source type: '{source_type}'. Supported types: {supported}"
         )

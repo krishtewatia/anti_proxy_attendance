@@ -15,6 +15,7 @@ class VideoSourceType(str, Enum):
     RTSP = "RTSP"
     PHONE = "PHONE"
     WEBRTC = "WEBRTC"
+    WEBCAM = "WEBCAM"
 
 
 @dataclass(frozen=True)
@@ -65,11 +66,19 @@ class VideoSource(ABC):
         self.target_fps = target_fps
         self._is_opened: bool = False
         self._emitted_frame_count: int = 0
+        self._status: str = "DISCONNECTED"
 
     @property
     def is_opened(self) -> bool:
         """Whether the video source is currently open and ready to emit frames."""
         return self._is_opened
+
+    @property
+    def status(self) -> str:
+        """Connection status: 'CONNECTED', 'DEGRADED', or 'DISCONNECTED'."""
+        if not self._is_opened:
+            return "DISCONNECTED"
+        return self._status
 
     @property
     def emitted_frame_count(self) -> int:

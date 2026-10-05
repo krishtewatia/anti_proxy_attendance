@@ -1,0 +1,51 @@
+# Dependabot Configuration for Automated Dependency Updates
+version: 2
+updates:
+  # Python Backend Dependencies
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Python Vision Service Dependencies
+  - package-ecosystem: "pip"
+    directory: "/vision-service"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # React Frontend Dependencies
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # Backend Docker Container Base Images
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # Frontend Docker Container Base Images
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # Vision Service Docker Container Base Images
+  - package-ecosystem: "docker"
+    directory: "/vision-service"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # GitHub Actions Workflow Updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

@@ -17,6 +17,14 @@ AuditAction = Literal[
     "ATTENDANCE_CORRECTED",
     "STUDENT_PROFILE_CREATED",
     "STUDENT_PROFILE_UPDATED",
+    "FACE_ENROLLED",
+    "FACE_REENROLLED",
+    "FACE_DELETED",
+    "SERVICE_AUTH_FAILED",
+    "SERVICE_AUTH_SUCCESS",
+    "CAMERA_CREATED",
+    "CAMERA_UPDATED",
+    "CAMERA_DELETED",
 ]
 
 AuditResourceType = Literal[
@@ -25,6 +33,9 @@ AuditResourceType = Literal[
     "SESSION_ROSTER",
     "ATTENDANCE",
     "STUDENT_PROFILE",
+    "BIOMETRIC_PROFILE",
+    "SECURITY",
+    "CAMERA",
     "SYSTEM",
 ]
 

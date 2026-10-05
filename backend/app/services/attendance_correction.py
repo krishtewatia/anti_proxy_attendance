@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class AttendanceNotFoundError(ValueError):
     """Raised when the specified attendance record does not exist."""
+
     pass
 
 

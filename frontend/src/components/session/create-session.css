@@ -317,3 +317,270 @@
   cursor: not-allowed;
   transform: none;
 }
+
+/* Wide Modal Variant */
+.modal-card-wide {
+  max-width: 640px;
+  max-height: 90vh;
+}
+
+.modal-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted, #94a3b8);
+  margin-top: 2px;
+}
+
+/* ⚡ Instant Start Quick Action Banner */
+.instant-start-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.75rem;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
+  border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.instant-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.instant-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #a855f7;
+  letter-spacing: 0.05em;
+}
+
+.instant-banner-text strong {
+  font-size: 0.85rem;
+  color: #f8fafc;
+}
+
+.instant-banner-text span {
+  font-size: 0.75rem;
+  color: #cbd5e1;
+}
+
+.btn-instant-start {
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  color: white;
+  border: none;
+  padding: 0.6rem 1.15rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.35);
+  transition: all 0.15s ease;
+}
+
+.btn-instant-start:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(168, 85, 247, 0.5);
+}
+
+/* Video Source Selector Options */
+.video-source-selector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.video-source-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+  transition: all 0.15s ease;
+}
+
+.video-source-option input {
+  position: absolute;
+  opacity: 0;
+}
+
+.video-source-option.selected {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 1px #6366f1;
+}
+
+.option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.option-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-main, #f8fafc);
+}
+
+.option-sub {
+  font-size: 0.7rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+/* Student Directory Selection Header & Search */
+.student-selection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.selection-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+}
+
+.btn-text-action {
+  background: none;
+  border: none;
+  color: #818cf8;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 600;
+}
+
+.btn-text-action:hover {
+  text-decoration: underline;
+}
+
+.divider {
+  color: #475569;
+}
+
+.student-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.student-search-box .search-icon {
+  position: absolute;
+  left: 0.75rem;
+  width: 16px;
+  height: 16px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.student-search-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  padding: 0.55rem 2rem 0.55rem 2.25rem;
+  color: #f8fafc;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.student-search-input:focus {
+  border-color: #6366f1;
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 0.6rem;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 0.8rem;
+}
+
+/* Student Chips Container */
+.student-chips-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.5rem;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 0.4rem;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+}
+
+.student-chip-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.12s ease;
+}
+
+.student-chip-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.student-chip-card.selected {
+  background: rgba(99, 102, 241, 0.16);
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.student-chip-card input[type="checkbox"] {
+  accent-color: #6366f1;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.chip-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chip-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-id {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  font-family: monospace;
+}
+
+.chip-bio-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #4ade80;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.chips-loading,
+.chips-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 1.5rem;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}

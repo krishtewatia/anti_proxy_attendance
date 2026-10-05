@@ -1,0 +1,23 @@
+{
+  "1_cameras": {
+    "cameras_count": 1,
+    "cpu_percent": 493.1,
+    "aggregate_fps": 9.77,
+    "per_camera_fps": [
+      12.95
+    ],
+    "frames_processed": 49,
+    "duration_seconds": 5.02
+  },
+  "2_cameras": {
+    "cameras_count": 2,
+    "cpu_percent": 601.4,
+    "aggregate_fps": 20.55,
+    "per_camera_fps": [
+      14.47,
+      13.0
+    ],
+    "frames_processed": 103,
+    "duration_seconds": 5.01
+  }
+}

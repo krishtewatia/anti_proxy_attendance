@@ -4,12 +4,24 @@ from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app.core.config import settings
 
+import asyncio
+
 _client: Optional[AsyncIOMotorClient] = None
 
 
 def get_client() -> AsyncIOMotorClient:
-    """Get or create singleton MongoDB client."""
+    """Get or create singleton MongoDB client with event-loop awareness."""
     global _client
+    if _client is not None:
+        try:
+            current_loop = asyncio.get_running_loop()
+            client_loop = getattr(_client, "io_loop", None)
+            if client_loop is not None and (client_loop.is_closed() or client_loop != current_loop):
+                _client.close()
+                _client = None
+        except RuntimeError:
+            pass
+
     if _client is None:
         if (
             settings.MONGODB_URL.startswith("mongomock://")
@@ -22,7 +34,6 @@ def get_client() -> AsyncIOMotorClient:
         else:
             _client = AsyncIOMotorClient(settings.MONGODB_URL, serverSelectionTimeoutMS=1000)
     return _client
-
 
 
 def close_client():
@@ -73,4 +84,10 @@ async def init_indexes(db: AsyncIOMotorDatabase):
     await db["audit_events"].create_index(
         [("resource_type", 1), ("resource_id", 1), ("timestamp", 1)],
         name="idx_audit_resource_history",
+    )
+    # Enforce unique camera_id on cameras collection
+    await db["cameras"].create_index(
+        [("camera_id", 1)],
+        unique=True,
+        name="uq_cameras_camera_id",
     )

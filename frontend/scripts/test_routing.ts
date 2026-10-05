@@ -28,14 +28,14 @@ async function runRoutingTests() {
 
   // 1. Role to Dashboard Mappings
   console.log("\n[1/5] Testing role -> dashboard mappings...");
-  if (getDashboardPath("TEACHER") !== "/dashboard/teacher") {
-    throw new Error(`Expected /dashboard/teacher, got ${getDashboardPath("TEACHER")}`);
+  if (getDashboardPath("TEACHER") !== "/teacher/dashboard") {
+    throw new Error(`Expected /teacher/dashboard, got ${getDashboardPath("TEACHER")}`);
   }
-  if (getDashboardPath("STUDENT") !== "/dashboard/student") {
-    throw new Error(`Expected /dashboard/student, got ${getDashboardPath("STUDENT")}`);
+  if (getDashboardPath("STUDENT") !== "/student/dashboard") {
+    throw new Error(`Expected /student/dashboard, got ${getDashboardPath("STUDENT")}`);
   }
-  if (getDashboardPath("ADMIN") !== "/dashboard/admin") {
-    throw new Error(`Expected /dashboard/admin, got ${getDashboardPath("ADMIN")}`);
+  if (getDashboardPath("ADMIN") !== "/admin/dashboard") {
+    throw new Error(`Expected /admin/dashboard, got ${getDashboardPath("ADMIN")}`);
   }
   if (getDashboardPath(null) !== "/") {
     throw new Error(`Expected / for null role, got ${getDashboardPath(null)}`);
@@ -61,19 +61,19 @@ async function runRoutingTests() {
     is_active: true,
   };
 
-  const teacherAccessTeacher = evaluateRouteAccess("/dashboard/teacher", ["TEACHER"], teacherUser, true);
+  const teacherAccessTeacher = evaluateRouteAccess("/teacher/dashboard", ["TEACHER"], teacherUser, true);
   if (!teacherAccessTeacher.allowed) {
-    throw new Error("Teacher was unexpectedly blocked from /dashboard/teacher");
+    throw new Error("Teacher was unexpectedly blocked from /teacher/dashboard");
   }
 
-  const teacherAccessStudent = evaluateRouteAccess("/dashboard/student", ["STUDENT"], teacherUser, true);
-  if (teacherAccessStudent.allowed || teacherAccessStudent.redirectPath !== "/dashboard/teacher") {
-    throw new Error("Teacher accessing /dashboard/student was not redirected to /dashboard/teacher");
+  const teacherAccessStudent = evaluateRouteAccess("/student/dashboard", ["STUDENT"], teacherUser, true);
+  if (teacherAccessStudent.allowed || teacherAccessStudent.redirectPath !== "/teacher/dashboard") {
+    throw new Error("Teacher accessing /student/dashboard was not redirected to /teacher/dashboard");
   }
 
-  const teacherAccessAdmin = evaluateRouteAccess("/dashboard/admin", ["ADMIN"], teacherUser, true);
-  if (teacherAccessAdmin.allowed || teacherAccessAdmin.redirectPath !== "/dashboard/teacher") {
-    throw new Error("Teacher accessing /dashboard/admin was not redirected to /dashboard/teacher");
+  const teacherAccessAdmin = evaluateRouteAccess("/admin/dashboard", ["ADMIN"], teacherUser, true);
+  if (teacherAccessAdmin.allowed || teacherAccessAdmin.redirectPath !== "/teacher/dashboard") {
+    throw new Error("Teacher accessing /admin/dashboard was not redirected to /teacher/dashboard");
   }
   console.log("✅ Teacher allowed on teacher dashboard, redirected from student/admin dashboards.");
 
@@ -86,19 +86,19 @@ async function runRoutingTests() {
     is_active: true,
   };
 
-  const studentAccessStudent = evaluateRouteAccess("/dashboard/student", ["STUDENT"], studentUser, true);
+  const studentAccessStudent = evaluateRouteAccess("/student/dashboard", ["STUDENT"], studentUser, true);
   if (!studentAccessStudent.allowed) {
-    throw new Error("Student was unexpectedly blocked from /dashboard/student");
+    throw new Error("Student was unexpectedly blocked from /student/dashboard");
   }
 
-  const studentAccessTeacher = evaluateRouteAccess("/dashboard/teacher", ["TEACHER"], studentUser, true);
-  if (studentAccessTeacher.allowed || studentAccessTeacher.redirectPath !== "/dashboard/student") {
-    throw new Error("Student accessing /dashboard/teacher was not redirected to /dashboard/student");
+  const studentAccessTeacher = evaluateRouteAccess("/teacher/dashboard", ["TEACHER"], studentUser, true);
+  if (studentAccessTeacher.allowed || studentAccessTeacher.redirectPath !== "/student/dashboard") {
+    throw new Error("Student accessing /teacher/dashboard was not redirected to /student/dashboard");
   }
 
-  const studentAccessAdmin = evaluateRouteAccess("/dashboard/admin", ["ADMIN"], studentUser, true);
-  if (studentAccessAdmin.allowed || studentAccessAdmin.redirectPath !== "/dashboard/student") {
-    throw new Error("Student accessing /dashboard/admin was not redirected to /dashboard/student");
+  const studentAccessAdmin = evaluateRouteAccess("/admin/dashboard", ["ADMIN"], studentUser, true);
+  if (studentAccessAdmin.allowed || studentAccessAdmin.redirectPath !== "/student/dashboard") {
+    throw new Error("Student accessing /admin/dashboard was not redirected to /student/dashboard");
   }
   console.log("✅ Student allowed on student dashboard, redirected from teacher/admin dashboards.");
 

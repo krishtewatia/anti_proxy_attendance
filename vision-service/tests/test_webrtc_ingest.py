@@ -181,7 +181,9 @@ class TestWebRTCLiveFrameIngest(unittest.IsolatedAsyncioTestCase):
         client_pc, _ = await self._create_phone_client()
         try:
             # Let frames stream into buffer without consuming them
-            await asyncio.sleep(1.5)
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline and self.source.dropped_frames == 0:
+                await asyncio.sleep(0.1)
 
             # Buffer size must never exceed 30
             self.assertLessEqual(self.source.buffer_size, 30)
@@ -274,6 +276,57 @@ class TestWebRTCLiveFrameIngest(unittest.IsolatedAsyncioTestCase):
         print("\n[Test 5 Output] Multi-source interchangeability confirmed:")
         print(f"  FILE   -> {res_file}")
         print(f"  WEBRTC -> {res_webrtc}")
+
+    # =========================================================================
+    # Acceptance Test 6 — WebRTC Access Token Security Protection
+    # =========================================================================
+    async def test_acceptance_6_webrtc_access_token_protection(self):
+        """Verifies access token authentication on WebRTC endpoints."""
+        token_port = 8092
+        token_source = PhoneVideoSource(source_id="PHONE_SECURED")
+        token_server = WebRTCSignalingServer(
+            video_source=token_source,
+            port=token_port,
+            access_token="secured-phone-token-99",
+        )
+        token_server.start_background()
+        await asyncio.sleep(0.1)
+
+        try:
+            async with ClientSession() as session:
+                base = f"http://127.0.0.1:{token_port}"
+
+                # 1. Unauthenticated requests rejected with HTTP 401
+                async with session.get(f"{base}/") as r1:
+                    self.assertEqual(r1.status, 401)
+                async with session.get(f"{base}/status") as r2:
+                    self.assertEqual(r2.status, 401)
+                async with session.post(f"{base}/offer", json={"sdp": "...", "type": "offer"}) as r3:
+                    self.assertEqual(r3.status, 401)
+
+                # 2. Invalid token rejected with HTTP 401
+                async with session.get(f"{base}/status?token=wrong-token") as r_bad:
+                    self.assertEqual(r_bad.status, 401)
+
+                # 3. Valid token in query param accepted
+                async with session.get(f"{base}/status?token=secured-phone-token-99") as r_ok1:
+                    self.assertEqual(r_ok1.status, 200)
+                    data1 = await r_ok1.json()
+                    self.assertEqual(data1["status"], "online")
+
+                # 4. Valid token in Authorization Bearer header accepted
+                headers = {"Authorization": "Bearer secured-phone-token-99"}
+                async with session.get(f"{base}/status", headers=headers) as r_ok2:
+                    self.assertEqual(r_ok2.status, 200)
+
+                # 5. Health check returns auth status
+                async with session.get(f"{base}/health") as r_health:
+                    self.assertEqual(r_health.status, 200)
+                    health_data = await r_health.json()
+                    self.assertTrue(health_data["auth_enabled"])
+        finally:
+            token_server.stop()
+            token_source.release()
 
 
 if __name__ == "__main__":

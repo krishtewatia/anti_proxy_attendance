@@ -209,7 +209,11 @@ async def test_cv_to_attendance_e2e_flow():
         ]
 
         for event_payload in cv_events:
-            ev_resp = await client.post("/api/v1/events", json=event_payload)
+            ev_resp = await client.post(
+                "/api/v1/events",
+                json=event_payload,
+                headers={"X-API-Key": "test-vision-service-key-2026"},
+            )
             assert ev_resp.status_code == 201
             assert ev_resp.json()["status"] == "accepted"
 

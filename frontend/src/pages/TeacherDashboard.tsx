@@ -9,6 +9,7 @@ interface TeacherDashboardProps {
   user: UserResponse;
   onLogout: () => void;
   onNavigate?: (path: string) => void;
+  activeNavId?: string;
 }
 
 function formatSessionDateTime(startIso: string, endIso: string): {
@@ -19,25 +20,22 @@ function formatSessionDateTime(startIso: string, endIso: string): {
     const startDate = new Date(startIso);
     const endDate = new Date(endIso);
 
-    const dateStr = startDate.toLocaleDateString("en-US", {
+    const dateStr = startDate.toLocaleDateString(undefined, {
       day: "numeric",
       month: "short",
       year: "numeric",
-      timeZone: "UTC",
     });
 
-    const startTimeStr = startDate.toLocaleTimeString("en-US", {
+    const startTimeStr = startDate.toLocaleTimeString(undefined, {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
-      timeZone: "UTC",
     });
 
-    const endTimeStr = endDate.toLocaleTimeString("en-US", {
+    const endTimeStr = endDate.toLocaleTimeString(undefined, {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
-      timeZone: "UTC",
     });
 
     return {
@@ -55,12 +53,75 @@ function formatSessionDateTime(startIso: string, endIso: string): {
 export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   user,
   onNavigate,
+  activeNavId: _activeNavId,
 }) => {
   const [sessions, setSessions] = useState<SessionResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isCreateSessionOpen, setIsCreateSessionOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [cameraUrlCopied, setCameraUrlCopied] = useState(false);
+  const [showAuditLogs, setShowAuditLogs] = useState(false);
+  const [instantStarting, setInstantStarting] = useState(false);
+
+  const handleInstantStart = async () => {
+    setInstantStarting(true);
+    setErrorMessage(null);
+    try {
+      const now = new Date();
+      const in2h = new Date(now.getTime() + 120 * 60 * 1000);
+      const instantPayload = {
+        course_name: `Live Lecture Session (${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`,
+        classroom_id: "ROOM_101",
+        start_time: now.toISOString(),
+        end_time: in2h.toISOString(),
+        required_presence_percentage: 75.0,
+      };
+
+      const created = await api.createSession(instantPayload);
+
+      // Auto-enroll all directory students
+      try {
+        const directory = await api.getStudentsDirectory();
+        if (directory.length > 0) {
+          await api.updateSessionRoster(created.session_id, directory.map((s) => s.identity));
+        }
+      } catch {
+        // fallback
+      }
+
+      setSuccessMessage("Session started instantly in Room 101!");
+      const targetUrl = `/dashboard/teacher/sessions/${created.session_id}`;
+      if (onNavigate) {
+        onNavigate(targetUrl);
+      } else if (typeof window !== "undefined") {
+        window.history.pushState({}, "", targetUrl);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setErrorMessage(`Failed to start instant session: ${msg}`);
+    } finally {
+      setInstantStarting(false);
+    }
+  };
+
+  const cameraUrl =
+    typeof window !== "undefined"
+      ? `http://${window.location.hostname}:8088`
+      : "http://localhost:8088";
+
+  const handleCopyCameraUrl = async () => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(cameraUrl);
+        setCameraUrlCopied(true);
+        setTimeout(() => setCameraUrlCopied(false), 2500);
+      }
+    } catch {
+      // fallback
+    }
+  };
 
   const fetchSessions = async () => {
     setLoading(true);
@@ -76,6 +137,44 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuickEndSession = async (e: React.MouseEvent, s: SessionResponse) => {
+    e.stopPropagation();
+    if (
+      !window.confirm(
+        `End session "${s.course_name}" and finalize attendance records now?`
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.finalizeSession(s.session_id);
+      setSuccessMessage(`Session "${s.course_name}" ended and attendance finalized.`);
+      fetchSessions();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setErrorMessage(`Failed to end session: ${msg}`);
+    }
+  };
+
+  const handleQuickDeleteSession = async (e: React.MouseEvent, s: SessionResponse) => {
+    e.stopPropagation();
+    if (
+      !window.confirm(
+        `Are you sure you want to permanently delete session "${s.course_name}" (${s.session_id})?`
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.deleteSession(s.session_id);
+      setSuccessMessage(`Session "${s.course_name}" deleted.`);
+      fetchSessions();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setErrorMessage(`Failed to delete session: ${msg}`);
     }
   };
 
@@ -177,6 +276,56 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         </div>
       </section>
 
+      {/* Mobile WebRTC Camera Node Banner */}
+      <section className="dashboard-camera-banner" aria-label="Mobile Camera WebRTC Link">
+        <div className="camera-banner-content">
+          <div className="camera-banner-icon" aria-hidden="true">
+            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+            </svg>
+          </div>
+          <div className="camera-banner-text">
+            <div className="camera-banner-title-line">
+              <h3 className="camera-banner-title">Connect Mobile Phone as Classroom Camera</h3>
+              <span className="camera-banner-pill">WebRTC Port 8088</span>
+            </div>
+            <p className="camera-banner-desc">
+              Transform any smartphone into a live entrance recognition camera. Open this link on your phone browser while connected to the same local Wi-Fi.
+            </p>
+            <div className="camera-banner-url-box">
+              <span className="camera-url-label">Direct Link:</span>
+              <code className="camera-url-val">{cameraUrl}</code>
+            </div>
+          </div>
+        </div>
+        <div className="camera-banner-actions">
+          <a
+            href={cameraUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-open-camera"
+            title="Open camera streamer in a new window"
+          >
+            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+            <span>Open Mobile Camera</span>
+          </a>
+          <button
+            type="button"
+            className="btn-copy-camera"
+            onClick={handleCopyCameraUrl}
+            title="Copy URL to clipboard"
+          >
+            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+            </svg>
+            <span>{cameraUrlCopied ? "Copied Link!" : "Copy Link"}</span>
+          </button>
+        </div>
+      </section>
+
       {/* Sessions Section */}
       <section className="sessions-section" aria-label="Session List">
         <div className="sessions-section-header">
@@ -187,6 +336,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             )}
           </div>
           <div className="sessions-actions">
+            <a
+              href={cameraUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-mobile-camera-header"
+              title="Open Mobile WebRTC Camera Streamer on port 8088"
+            >
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+              </svg>
+              <span>📱 Open Mobile Camera (8088)</span>
+            </a>
+            <button
+              type="button"
+              className="btn-quick-start-session"
+              onClick={handleInstantStart}
+              disabled={instantStarting}
+              title="Instantly launch session right now in ROOM_101 without manual typing"
+            >
+              <span>{instantStarting ? "Launching..." : "⚡ Quick Start Session"}</span>
+            </button>
             <button
               type="button"
               className="btn-create-session"
@@ -203,7 +373,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
-              <span>+ New Session</span>
+              <span>+ Custom Session</span>
             </button>
             <button
               type="button"
@@ -380,6 +550,36 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       {session.status}
                     </span>
                   </div>
+
+                  {/* Card Quick Action Bar */}
+                  <div className="session-card-quick-actions" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="btn-card-action btn-card-details"
+                      onClick={handleCardClick}
+                      title="Manage session and attendance records"
+                    >
+                      Manage →
+                    </button>
+                    {session.status !== "FINALIZED" && (
+                      <button
+                        type="button"
+                        className="btn-card-action btn-card-end"
+                        onClick={(e) => handleQuickEndSession(e, session)}
+                        title="End session and finalize attendance"
+                      >
+                        End Session
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-card-action btn-card-del"
+                      onClick={(e) => handleQuickDeleteSession(e, session)}
+                      title="Delete session"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </article>
               );
             })}
@@ -387,12 +587,38 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         )}
       </section>
 
-      {/* Teacher Global Audit Trail Section */}
+      {/* Teacher Global Audit Trail Section (Collapsible for Clean, Minimal UI) */}
       <section className="dashboard-audit-section" style={{ marginTop: "2rem" }}>
-        <AuditLogs
-          title="Recent Audit Activity"
-          subtitle="Chronological audit records across all sessions, roster updates, finalizations, and corrections."
-        />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+          <button
+            type="button"
+            className="btn-toggle-audit"
+            onClick={() => setShowAuditLogs(!showAuditLogs)}
+            style={{
+              background: "rgba(255, 255, 255, 0.04)",
+              border: "1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))",
+              color: "var(--text-muted, #94a3b8)",
+              padding: "0.5rem 1rem",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <span>{showAuditLogs ? "▼ Hide Audit & Activity Trail" : "▶ View Audit & Activity Trail"}</span>
+          </button>
+        </div>
+
+        {showAuditLogs && (
+          <AuditLogs
+            title="Recent Audit Activity"
+            subtitle="Chronological audit records across all sessions, roster updates, finalizations, and corrections."
+          />
+        )}
       </section>
 
       {/* Create Attendance Session Modal */}

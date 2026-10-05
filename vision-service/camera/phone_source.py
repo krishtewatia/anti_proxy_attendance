@@ -57,6 +57,7 @@ class PhoneVideoSource(VideoSource):
                 except queue.Empty:
                     break
             self._is_opened = True
+            self._status = "CONNECTED"
 
     def push_frame(
         self,
@@ -135,12 +136,14 @@ class PhoneVideoSource(VideoSource):
     async def read_async(self, timeout: Optional[float] = None) -> VideoFrame | None:
         """Asynchronously fetch next frame without blocking the asyncio loop."""
         import asyncio
+
         return await asyncio.to_thread(self.read, True, timeout)
 
     def release(self) -> None:
         """Stop accepting frames and flush the buffer."""
         with self._lock:
             self._is_opened = False
+            self._status = "DISCONNECTED"
             while not self._queue.empty():
                 try:
                     self._queue.get_nowait()

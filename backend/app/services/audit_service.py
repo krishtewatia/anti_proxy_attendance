@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from typing import Any
 import uuid
 
+from motor.motor_asyncio import AsyncIOMotorDatabase
+
 from app.database.audit import (
     create_audit_event as db_create_audit_event,
     get_audit_event as db_get_audit_event,
@@ -24,6 +26,7 @@ async def record_audit_event(
     metadata: dict[str, Any] | None = None,
     audit_id: str | None = None,
     timestamp: datetime | None = None,
+    db: AsyncIOMotorDatabase | None = None,
 ) -> AuditEvent:
     """
     Centralized service function to validate and record an immutable audit event.
@@ -45,7 +48,7 @@ async def record_audit_event(
         audit_id=generated_audit_id,
         actor_user_id=actor_user_id,
         actor_role=actor_role,  # type: ignore[arg-type]
-        action=action,          # type: ignore[arg-type]
+        action=action,  # type: ignore[arg-type]
         resource_type=resource_type,  # type: ignore[arg-type]
         resource_id=resource_id,
         timestamp=current_time,
@@ -53,7 +56,7 @@ async def record_audit_event(
     )
 
     # Persist in MongoDB
-    await db_create_audit_event(event.model_dump())
+    await db_create_audit_event(event.model_dump(), db=db)
 
     return event
 

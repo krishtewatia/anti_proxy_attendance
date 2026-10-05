@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 
 EventDirection = Literal["ENTRY", "EXIT"]
@@ -20,10 +20,15 @@ class PresenceInterval:
 class PresenceResult:
     intervals: list[PresenceInterval]
     total_presence_seconds: float
+    requires_review: bool = False
+    anomalies: list[str] = field(default_factory=list)
 
 
 def calculate_presence(
     events: list[dict],
+    session_start: Optional[datetime] = None,
+    session_end: Optional[datetime] = None,
+    cap_missing_exit: bool = False,
 ) -> PresenceResult:
     """
     Convert chronological ENTRY/EXIT events into presence intervals.
@@ -33,6 +38,7 @@ def calculate_presence(
         - timestamp
 
     Events are sorted chronologically before processing.
+    Detects anomalies (EXIT without ENTRY, MISSING_EXIT) and flags for review.
     """
 
     sorted_events = sorted(
@@ -42,6 +48,8 @@ def calculate_presence(
 
     intervals: list[PresenceInterval] = []
     open_entry: datetime | None = None
+    anomalies: list[str] = []
+    requires_review: bool = False
 
     for event in sorted_events:
         direction: EventDirection = event["direction"]
@@ -62,15 +70,32 @@ def calculate_presence(
                     )
 
                 open_entry = None
+            else:
+                if "EXIT_WITHOUT_ENTRY" not in anomalies:
+                    anomalies.append("EXIT_WITHOUT_ENTRY")
+                requires_review = True
 
-    total_presence_seconds = sum(
-        interval.duration_seconds
-        for interval in intervals
-    )
+    # Check for unclosed ENTRY at end of events
+    if open_entry is not None:
+        if "MISSING_EXIT" not in anomalies:
+            anomalies.append("MISSING_EXIT")
+        requires_review = True
+
+        if cap_missing_exit and session_end is not None and session_end > open_entry:
+            intervals.append(
+                PresenceInterval(
+                    entry_time=open_entry,
+                    exit_time=session_end,
+                )
+            )
+
+    total_presence_seconds = sum(interval.duration_seconds for interval in intervals)
 
     return PresenceResult(
         intervals=intervals,
         total_presence_seconds=total_presence_seconds,
+        requires_review=requires_review,
+        anomalies=anomalies,
     )
 
 
@@ -78,6 +103,7 @@ def calculate_session_presence(
     events: list[dict],
     session_start: datetime,
     session_end: datetime,
+    cap_missing_exit: bool = False,
 ) -> PresenceResult:
     """
     Calculate presence while clamping all intervals
@@ -87,7 +113,12 @@ def calculate_session_presence(
     if session_end <= session_start:
         raise ValueError("session_end must be after session_start")
 
-    result = calculate_presence(events)
+    result = calculate_presence(
+        events,
+        session_start=session_start,
+        session_end=session_end,
+        cap_missing_exit=cap_missing_exit,
+    )
 
     clamped_intervals: list[PresenceInterval] = []
 
@@ -103,14 +134,13 @@ def calculate_session_presence(
                 )
             )
 
-    total_presence_seconds = sum(
-        interval.duration_seconds
-        for interval in clamped_intervals
-    )
+    total_presence_seconds = sum(interval.duration_seconds for interval in clamped_intervals)
 
     return PresenceResult(
         intervals=clamped_intervals,
         total_presence_seconds=total_presence_seconds,
+        requires_review=result.requires_review,
+        anomalies=result.anomalies,
     )
 
 
@@ -121,17 +151,12 @@ def calculate_presence_percentage(
 ) -> float:
     """Calculate percentage of the session attended."""
 
-    session_duration_seconds = (
-        session_end - session_start
-    ).total_seconds()
+    session_duration_seconds = (session_end - session_start).total_seconds()
 
     if session_duration_seconds <= 0:
         raise ValueError("session_end must be after session_start")
 
-    percentage = (
-        total_presence_seconds
-        / session_duration_seconds
-    ) * 100
+    percentage = (total_presence_seconds / session_duration_seconds) * 100
 
     return min(max(percentage, 0.0), 100.0)
 
@@ -146,14 +171,10 @@ def determine_attendance_status(
     """Determine attendance status using the session requirement."""
 
     if not 0.0 <= presence_percentage <= 100.0:
-        raise ValueError(
-            "presence_percentage must be between 0 and 100"
-        )
+        raise ValueError("presence_percentage must be between 0 and 100")
 
     if not 0.0 <= required_presence_percentage <= 100.0:
-        raise ValueError(
-            "required_presence_percentage must be between 0 and 100"
-        )
+        raise ValueError("required_presence_percentage must be between 0 and 100")
 
     if presence_percentage >= required_presence_percentage:
         return "PRESENT"

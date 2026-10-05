@@ -68,9 +68,24 @@ def require_role(required_role: str):
     return role_dependency
 
 
+def require_roles(allowed_roles: set[str]):
+    async def roles_dependency(
+        current_user: Annotated[dict, Depends(get_current_user)],
+    ) -> dict:
+        if current_user.get("role") not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return current_user
+
+    return roles_dependency
+
+
 require_teacher = require_role("TEACHER")
 require_student = require_role("STUDENT")
 require_admin = require_role("ADMIN")
+require_teacher_or_admin = require_roles({"TEACHER", "ADMIN"})
 
 
 async def get_owned_session(
@@ -85,6 +100,9 @@ async def get_owned_session(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found",
         )
+
+    if current_user.get("role") == "ADMIN":
+        return session
 
     if session.get("created_by") != current_user.get("user_id"):
         raise HTTPException(

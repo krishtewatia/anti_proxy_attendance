@@ -1,221 +1,283 @@
-/* AppLayout - Shell for Protected Application */
-.app-shell {
+/* ==========================================================================
+   COLLEGE ERP - Layout Shell Styles
+   ========================================================================== */
+
+.erp-app-shell {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-primary);
-  color: var(--text-main);
+  background-color: var(--erp-bg);
+  color: var(--erp-text-main);
 }
 
-/* Top Header */
-.app-header {
+/* Institutional Header Bar */
+.erp-header {
   height: 64px;
-  background: rgba(15, 18, 26, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid var(--border-subtle);
+  background: var(--erp-surface);
+  border-bottom: 1px solid var(--erp-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 1.5rem;
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: 50;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
 }
 
-.header-brand {
+.erp-header-left {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 0.875rem;
 }
 
-.brand-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(139, 92, 246, 0.15) 100%);
-  border: 1px solid rgba(99, 102, 241, 0.4);
+.erp-crest {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--erp-radius-sm);
+  background-color: var(--erp-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #818cf8;
+  color: #ffffff;
+  box-shadow: var(--erp-shadow-xs);
 }
 
-.brand-icon svg {
-  width: 20px;
-  height: 20px;
+.erp-brand-text {
+  display: flex;
+  flex-direction: column;
 }
 
-.brand-name {
+.erp-brand-title {
   font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: -0.01em;
-  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--erp-navy);
+  line-height: 1.2;
 }
 
-.header-user {
+.erp-brand-subtitle {
+  font-size: 0.75rem;
+  color: var(--erp-text-muted);
+  font-weight: 500;
+}
+
+.erp-header-right {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
-.user-meta {
+.erp-term-badge {
+  display: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--erp-text-body);
+  background: var(--erp-surface-subtle);
+  border: 1px solid var(--erp-border);
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--erp-radius-full);
+}
+
+@media (min-width: 900px) {
+  .erp-term-badge {
+    display: block;
+  }
+}
+
+.erp-user-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.erp-user-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--erp-primary-light);
+  border: 1px solid var(--erp-primary-border);
+  color: var(--erp-primary);
+  font-weight: 700;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.erp-user-info {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
-.user-email {
+.erp-user-name {
   font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-main);
+  font-weight: 600;
+  color: var(--erp-text-main);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.user-badge {
+.erp-role-pill {
   font-size: 0.6875rem;
   font-weight: 700;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--erp-radius-full);
+  letter-spacing: 0.025em;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.15rem 0.5rem;
-  border-radius: 9999px;
-  margin-top: 2px;
 }
 
-.user-badge.role-teacher {
-  background: rgba(99, 102, 241, 0.18);
-  color: #a5b4fc;
-  border: 1px solid rgba(99, 102, 241, 0.35);
+.erp-role-pill.role-teacher {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
 }
 
-.user-badge.role-student {
-  background: rgba(6, 182, 212, 0.18);
-  color: #67e8f9;
-  border: 1px solid rgba(6, 182, 212, 0.35);
+.erp-role-pill.role-student {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
 }
 
-.user-badge.role-admin {
-  background: rgba(245, 158, 11, 0.18);
-  color: #fde68a;
-  border: 1px solid rgba(245, 158, 11, 0.35);
+.erp-role-pill.role-admin {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
 
-.btn-header-logout {
-  padding: 0.45rem 0.875rem;
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
+.erp-btn-logout {
+  padding: 0.45rem 0.8rem;
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  color: var(--erp-text-body);
   font-size: 0.8125rem;
-  font-weight: 500;
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  transition: all var(--transition-fast);
+  transition: all 0.15s ease;
 }
 
-.btn-header-logout:hover {
-  background: rgba(244, 63, 94, 0.12);
-  border-color: rgba(244, 63, 94, 0.3);
-  color: #fda4af;
+.erp-btn-logout:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
 }
 
-/* App Body: Sidebar + Main Content */
-.app-body {
+/* ERP Body Layout */
+.erp-body {
   display: flex;
   flex: 1;
   min-height: calc(100vh - 64px);
 }
 
-.app-sidebar {
-  width: 240px;
-  background: rgba(12, 15, 22, 0.6);
-  border-right: 1px solid var(--border-subtle);
-  padding: 1.5rem 1rem;
+/* ERP Sidebar */
+.erp-sidebar {
+  width: 250px;
+  background: var(--erp-surface);
+  border-right: 1px solid var(--erp-border);
+  padding: 1.5rem 0.875rem 1rem 0.875rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
-.sidebar-nav-list {
+.erp-sidebar-heading {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--erp-text-muted);
+  padding: 0 0.75rem 0.75rem 0.75rem;
+}
+
+.erp-nav-list {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
-.sidebar-nav-item {
+.erp-nav-btn {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.65rem 0.85rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--erp-radius-sm);
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  color: var(--erp-text-body);
+  text-align: left;
+  transition: all 0.15s ease;
   border: 1px solid transparent;
 }
 
-.sidebar-nav-item:hover {
-  color: var(--text-main);
-  background: rgba(255, 255, 255, 0.04);
+.erp-nav-btn:hover {
+  color: var(--erp-navy);
+  background: var(--erp-surface-subtle);
 }
 
-.sidebar-nav-item.active {
-  color: #ffffff;
-  background: rgba(99, 102, 241, 0.15);
-  border-color: rgba(99, 102, 241, 0.35);
+.erp-nav-btn.active {
+  color: var(--erp-primary);
+  background: var(--erp-primary-light);
+  border-color: var(--erp-primary-border);
+  font-weight: 600;
 }
 
-.sidebar-nav-item.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.nav-item-icon {
+.erp-nav-btn .nav-icon {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
 }
 
-.nav-item-badge {
-  margin-left: auto;
-  font-size: 0.65rem;
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-dim);
-}
-
-.sidebar-footer {
+.erp-sidebar-footer {
   padding-top: 1rem;
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--erp-border);
 }
 
-.sidebar-footer-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.6rem 0.85rem;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  transition: all var(--transition-fast);
+.erp-sidebar-institution {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--erp-text-body);
+  line-height: 1.3;
 }
 
-.sidebar-footer-btn:hover {
-  color: #fda4af;
-  background: rgba(244, 63, 94, 0.08);
+.erp-sidebar-sub {
+  font-size: 0.6875rem;
+  color: var(--erp-text-muted);
+  font-weight: 400;
+  margin-top: 2px;
 }
 
 /* Content Area */
-.app-content {
+.erp-content-pane {
   flex: 1;
   padding: 2rem;
   overflow-y: auto;
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .erp-body {
+    flex-direction: column;
+  }
+  .erp-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--erp-border);
+    padding: 0.75rem;
+  }
+  .erp-nav-list {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .erp-content-pane {
+    padding: 1rem;
+  }
 }

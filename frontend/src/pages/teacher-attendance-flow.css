@@ -1,0 +1,422 @@
+/* ==========================================================================
+   COLLEGE ERP - Teacher Attendance & Dashboard Styling
+   ========================================================================== */
+
+.erp-teacher-container {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.erp-page-header {
+  margin-bottom: 1.75rem;
+}
+
+.erp-page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--erp-navy);
+  margin-bottom: 0.25rem;
+}
+
+.erp-page-subtitle {
+  font-size: 0.875rem;
+  color: var(--erp-text-muted);
+}
+
+.erp-section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--erp-text-main);
+  margin-bottom: 0.875rem;
+}
+
+/* Active Session Card */
+.erp-active-session-card {
+  background: #ffffff;
+  border: 1px solid var(--erp-border);
+  border-left: 4px solid var(--erp-primary);
+  border-radius: var(--erp-radius-md);
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  box-shadow: var(--erp-shadow-xs);
+}
+
+.erp-session-course {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--erp-navy);
+  margin: 0.35rem 0 0.15rem 0;
+}
+
+.erp-session-stats {
+  font-size: 0.875rem;
+  color: var(--erp-text-muted);
+}
+
+.erp-empty-active-card {
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-md);
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.erp-active-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--erp-text-main);
+}
+
+.erp-active-desc {
+  font-size: 0.8125rem;
+  color: var(--erp-text-muted);
+  margin-top: 2px;
+}
+
+/* Assigned Classes Grid */
+.erp-classes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.erp-class-card {
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-md);
+  padding: 1.25rem;
+  box-shadow: var(--erp-shadow-xs);
+  display: flex;
+  flex-direction: column;
+}
+
+.erp-class-code {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--erp-navy);
+}
+
+.erp-class-dept {
+  font-size: 0.8125rem;
+  color: var(--erp-text-muted);
+  margin-top: 2px;
+}
+
+.erp-class-subjects {
+  font-size: 0.8125rem;
+  color: var(--erp-primary);
+  font-weight: 500;
+  margin-top: 0.5rem;
+}
+
+/* Empty Box */
+.erp-empty-box {
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-md);
+  padding: 2.5rem;
+  text-align: center;
+  color: var(--erp-text-muted);
+  font-size: 0.875rem;
+}
+
+/* ==========================================================================
+   SCREEN 1: START ATTENDANCE
+   ========================================================================== */
+
+.erp-start-attendance-card {
+  max-width: 520px;
+  margin: 1.5rem auto;
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-lg);
+  padding: 2rem;
+  box-shadow: var(--erp-shadow-card);
+}
+
+.erp-select-input {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--erp-radius-sm);
+  border: 1px solid var(--erp-border-strong);
+  background: #ffffff;
+  color: var(--erp-text-main);
+  font-size: 0.9375rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.erp-select-input:focus {
+  border-color: var(--erp-primary);
+  box-shadow: 0 0 0 3px var(--erp-primary-light);
+}
+
+/* ==========================================================================
+   SCREEN 2: LIVE ATTENDANCE (Section 7 Exact Layout)
+   ========================================================================== */
+
+.erp-live-attendance-page {
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-lg);
+  padding: 1.75rem;
+  box-shadow: var(--erp-shadow-card);
+}
+
+.erp-live-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--erp-border);
+}
+
+.erp-live-course {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--erp-navy);
+  margin-bottom: 0.15rem;
+}
+
+.erp-live-class-code {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--erp-primary);
+}
+
+.erp-live-stats-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--erp-radius-full);
+  background: var(--erp-surface-subtle);
+  border: 1px solid var(--erp-border);
+  font-size: 0.8125rem;
+  color: var(--erp-text-body);
+}
+
+.erp-camera-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.erp-camera-status-dot.online {
+  background-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+}
+
+.erp-camera-status-dot.offline {
+  background-color: #dc2626;
+}
+
+.erp-live-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 1.75rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .erp-live-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Camera Viewport */
+.erp-camera-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+.erp-camera-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #0f172a;
+  border-radius: var(--erp-radius-md);
+  overflow: hidden;
+  border: 1px solid var(--erp-border-strong);
+}
+
+.erp-camera-stream {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.erp-camera-footer {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--erp-text-muted);
+  text-align: center;
+}
+
+/* Subtle Present Notification Toast */
+.erp-subtle-present-callout {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  color: #86efac;
+  border: 1px solid rgba(134, 239, 172, 0.4);
+  border-radius: var(--erp-radius-sm);
+  padding: 0.55rem 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Students Present Pane */
+.erp-students-present-pane {
+  background: #ffffff;
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-md);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.erp-roster-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 1rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--erp-border);
+}
+
+.erp-roster-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--erp-navy);
+}
+
+.erp-roster-count {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--erp-primary);
+}
+
+.erp-students-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.erp-student-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--erp-radius-sm);
+  background: var(--erp-surface-subtle);
+  border: 1px solid var(--erp-border);
+  transition: all 0.15s ease;
+}
+
+.erp-student-row.row-present {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.erp-student-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.erp-student-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--erp-text-main);
+}
+
+.erp-student-roll {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--erp-text-muted);
+}
+
+.erp-live-action-bar {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--erp-border);
+}
+
+/* ==========================================================================
+   SCREEN 3: ATTENDANCE COMPLETE (Section 9 Exact Layout)
+   ========================================================================== */
+
+.erp-complete-page {
+  max-width: 720px;
+  margin: 1.5rem auto;
+}
+
+.erp-complete-card {
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-lg);
+  padding: 2.25rem;
+  box-shadow: var(--erp-shadow-card);
+}
+
+.erp-complete-header {
+  text-align: center;
+}
+
+.erp-complete-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--erp-present-bg);
+  border: 1px solid var(--erp-present-border);
+  color: var(--erp-present-text);
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.erp-complete-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--erp-navy);
+}
+
+.erp-complete-meta {
+  font-size: 1rem;
+  color: var(--erp-text-body);
+  margin-top: 0.25rem;
+}
+
+.erp-complete-stats {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--erp-primary);
+  margin-top: 0.5rem;
+}
+
+.erp-complete-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}

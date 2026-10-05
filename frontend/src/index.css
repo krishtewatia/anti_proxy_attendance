@@ -1,45 +1,76 @@
 :root {
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 
-  /* Color Palette - Premium Slate & Electric Indigo Theme */
-  --bg-primary: #0a0c10;
-  --bg-secondary: #0f121a;
-  --bg-card: rgba(18, 22, 34, 0.75);
-  --bg-card-hover: rgba(24, 29, 45, 0.85);
-  --bg-input: rgba(12, 15, 24, 0.8);
-  --bg-glass: rgba(255, 255, 255, 0.03);
+  /* Institutional ERP Color Palette - Crisp Slate & Academic Royal Blue */
+  --erp-bg: #f8fafc;
+  --erp-surface: #ffffff;
+  --erp-surface-subtle: #f1f5f9;
+  --erp-surface-hover: #f8fafc;
 
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(99, 102, 241, 0.6);
-  --border-glow: rgba(99, 102, 241, 0.3);
+  --erp-border: #e2e8f0;
+  --erp-border-strong: #cbd5e1;
+  --erp-border-focus: #3b82f6;
 
-  --primary: #6366f1;
-  --primary-hover: #4f46e5;
-  --primary-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
-  --primary-glow: rgba(99, 102, 241, 0.35);
+  /* Academic Brand Colors */
+  --erp-navy: #0f172a;
+  --erp-navy-light: #1e293b;
+  --erp-primary: #1d4ed8;
+  --erp-primary-hover: #1e40af;
+  --erp-primary-light: #eff6ff;
+  --erp-primary-border: #bfdbfe;
 
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
+  /* Typography / Text hierarchy */
+  --erp-text-main: #0f172a;
+  --erp-text-body: #334155;
+  --erp-text-muted: #64748b;
+  --erp-text-subtle: #94a3b8;
 
-  --accent-cyan: #06b6d4;
-  --accent-emerald: #10b981;
-  --accent-rose: #f43f5e;
-  --accent-amber: #f59e0b;
+  /* Semantic Attendance Colors */
+  --erp-present-bg: #dcfce7;
+  --erp-present-text: #15803d;
+  --erp-present-border: #86efac;
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --erp-absent-bg: #fee2e2;
+  --erp-absent-text: #b91c1c;
+  --erp-absent-border: #fca5a5;
 
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.25);
-  --shadow-card: 0 20px 40px -15px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --erp-warning-bg: #fef3c7;
+  --erp-warning-text: #b45309;
+  --erp-warning-border: #fcd34d;
 
-  --transition-fast: 0.15s ease;
-  --transition-normal: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  --erp-info-bg: #eff6ff;
+  --erp-info-text: #1d4ed8;
+  --erp-info-border: #bfdbfe;
+
+  /* Shapes & Shadows */
+  --erp-radius-xs: 4px;
+  --erp-radius-sm: 6px;
+  --erp-radius-md: 8px;
+  --erp-radius-lg: 12px;
+  --erp-radius-full: 9999px;
+
+  --erp-shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --erp-shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.07), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --erp-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --erp-shadow-card: 0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+
+  /* Legacy variable mappings for backward-compatibility */
+  --bg-primary: var(--erp-bg);
+  --bg-secondary: var(--erp-surface);
+  --bg-card: var(--erp-surface);
+  --bg-card-hover: var(--erp-surface-subtle);
+  --bg-input: var(--erp-surface);
+  --border-subtle: var(--erp-border);
+  --border-focus: var(--erp-primary);
+  --primary: var(--erp-primary);
+  --primary-hover: var(--erp-primary-hover);
+  --text-main: var(--erp-text-main);
+  --text-muted: var(--erp-text-muted);
+  --text-dim: var(--erp-text-subtle);
+  --radius-sm: var(--erp-radius-sm);
+  --radius-md: var(--erp-radius-md);
+  --radius-lg: var(--erp-radius-lg);
 }
 
 * {
@@ -50,17 +81,12 @@
 
 body {
   font-family: var(--font-sans);
-  background-color: var(--bg-primary);
-  color: var(--text-main);
+  background-color: var(--erp-bg);
+  color: var(--erp-text-main);
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-image:
-    radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.12) 0%, transparent 45%),
-    radial-gradient(circle at 85% 85%, rgba(139, 92, 246, 0.1) 0%, transparent 45%),
-    radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.05) 0%, transparent 60%);
-  background-attachment: fixed;
 }
 
 #root {
@@ -83,29 +109,157 @@ input, select, textarea {
 }
 
 a {
-  color: var(--primary);
+  color: var(--erp-primary);
   text-decoration: none;
-  transition: color var(--transition-fast);
+  transition: color 0.15s ease;
 }
 
 a:hover {
-  color: #818cf8;
+  color: var(--erp-primary-hover);
+}
+
+/* Institutional Table Standard */
+.erp-table-container {
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-md);
+  overflow: hidden;
+  box-shadow: var(--erp-shadow-xs);
+}
+
+.erp-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.erp-table th {
+  background: var(--erp-surface-subtle);
+  color: var(--erp-text-muted);
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--erp-border);
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.erp-table td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--erp-border);
+  color: var(--erp-text-body);
+}
+
+.erp-table tr:last-child td {
+  border-bottom: none;
+}
+
+.erp-table tr:hover td {
+  background-color: var(--erp-surface-hover);
+}
+
+/* Attendance Status Badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--erp-radius-xs);
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.status-badge.present {
+  background-color: var(--erp-present-bg);
+  color: var(--erp-present-text);
+  border: 1px solid var(--erp-present-border);
+}
+
+.status-badge.absent {
+  background-color: var(--erp-absent-bg);
+  color: var(--erp-absent-text);
+  border: 1px solid var(--erp-absent-border);
+}
+
+.status-badge.active {
+  background-color: var(--erp-info-bg);
+  color: var(--erp-info-text);
+  border: 1px solid var(--erp-info-border);
+}
+
+.status-badge.completed {
+  background-color: var(--erp-surface-subtle);
+  color: var(--erp-text-muted);
+  border: 1px solid var(--erp-border);
+}
+
+/* Button Standards */
+.erp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0.55rem 1rem;
+  border-radius: var(--erp-radius-sm);
+  transition: all 0.15s ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.erp-btn-primary {
+  background-color: var(--erp-primary);
+  color: #ffffff;
+  border-color: var(--erp-primary);
+}
+
+.erp-btn-primary:hover:not(:disabled) {
+  background-color: var(--erp-primary-hover);
+  border-color: var(--erp-primary-hover);
+}
+
+.erp-btn-secondary {
+  background-color: var(--erp-surface);
+  color: var(--erp-text-body);
+  border-color: var(--erp-border-strong);
+}
+
+.erp-btn-secondary:hover:not(:disabled) {
+  background-color: var(--erp-surface-subtle);
+  color: var(--erp-text-main);
+}
+
+.erp-btn-danger {
+  background-color: #dc2626;
+  color: #ffffff;
+}
+
+.erp-btn-danger:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.erp-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Card Standards */
+.erp-card {
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
+  border-radius: var(--erp-radius-md);
+  padding: 1.5rem;
+  box-shadow: var(--erp-shadow-card);
 }
 
 /* Animations */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-@keyframes pulseGlow {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
 }
 
 .spinner {

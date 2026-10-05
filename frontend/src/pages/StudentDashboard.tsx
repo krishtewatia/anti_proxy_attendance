@@ -1,435 +1,378 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../services";
-import type { StudentProfile, UserResponse } from "../types";
+import type {
+  StudentAttendanceDashboardResponse,
+  UserResponse,
+} from "../types";
 import "./student-dashboard.css";
 
 interface StudentDashboardProps {
   user: UserResponse;
   onLogout: () => void;
   onNavigate?: (path: string) => void;
+  activeNavId?: string;
+  onSelectNav?: (navId: string) => void;
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   user,
+  activeNavId = "dashboard",
+  onSelectNav,
 }) => {
-  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [data, setData] = useState<StudentAttendanceDashboardResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [binding, setBinding] = useState<boolean>(false);
-  const [identityInput, setIdentityInput] = useState<string>("");
-  const [validationError, setValidationError] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isConflictError, setIsConflictError] = useState<boolean>(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const fetchProfile = useCallback(async () => {
+  const fetchDashboard = useCallback(async () => {
     setLoading(true);
     setErrorMessage(null);
-    setIsConflictError(false);
 
     try {
-      const data = await api.getStudentProfile();
-      setProfile(data);
+      const resp = await api.getStudentDashboard();
+      setData(resp);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      // 404 indicates the student account has not yet bound a CV identity (unbound state)
-      if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
-        setProfile(null);
-      } else {
-        setErrorMessage(
-          msg || "Unable to check student identity status. Please refresh."
-        );
-      }
+      setErrorMessage(msg || "Unable to load student attendance data.");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
+    fetchDashboard();
+  }, [fetchDashboard]);
 
-  // Auto-dismiss success notification
-  useEffect(() => {
-    if (!successMessage) return;
-    const timer = setTimeout(() => {
-      setSuccessMessage(null);
-    }, 6000);
-    return () => clearTimeout(timer);
-  }, [successMessage]);
+  if (loading) {
+    return (
+      <div className="erp-loading-state">
+        <div className="spinner" style={{ width: "32px", height: "32px", border: "3px solid #e2e8f0", borderTopColor: "#1d4ed8", borderRadius: "50%" }} />
+        <p style={{ marginTop: "1rem", color: "var(--erp-text-muted)", fontSize: "0.875rem" }}>
+          Loading your academic records...
+        </p>
+      </div>
+    );
+  }
 
-  const handleIdentitySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const profile = data?.profile;
+  const overallPresent = data?.overall_present ?? 0;
+  const overallTotal = data?.overall_total ?? 0;
+  const overallPct = data?.overall_percentage ?? 0;
+  const subjects = data?.subjects ?? [];
+  const history = data?.history ?? [];
 
-    const trimmed = identityInput.trim();
-    if (!trimmed) {
-      setValidationError("Please enter a valid CV identity (e.g., person_01)");
-      return;
-    }
-
-    setValidationError(null);
-    setErrorMessage(null);
-    setIsConflictError(false);
-    setBinding(true);
-
-    try {
-      // Security: Sends only { identity }, user_id is derived on backend strictly from JWT
-      const boundProfile = await api.bindStudentProfile(trimmed);
-      setProfile(boundProfile);
-      setSuccessMessage(`Identity successfully linked to ${boundProfile.identity}.`);
-      setIdentityInput("");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (
-        msg.includes("409") ||
-        msg.toLowerCase().includes("already bound") ||
-        msg.toLowerCase().includes("already has a student profile") ||
-        msg.toLowerCase().includes("conflict")
-      ) {
-        setIsConflictError(true);
-        setErrorMessage(
-          msg ||
-            "Conflict: This CV identity may already be assigned to another student, or your account is already bound."
-        );
-      } else {
-        setErrorMessage(msg || "Failed to link identity. Please try again.");
-      }
-    } finally {
-      setBinding(false);
-    }
+  // Determine time of day greeting
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
   };
 
-  return (
-    <div className="student-dashboard">
-      {/* Header */}
-      <div className="student-dashboard-header">
-        <span className="student-portal-badge">Student Portal</span>
-        <h1 className="student-title">Student Dashboard</h1>
-        <p className="student-subtitle">
-          Personal presence timeline and session attendance logs for{" "}
-          <span className="student-email-highlight">{user.email}</span>
+  const studentFirstName = profile?.name ? profile.name.split(" ")[0] : user.email.split("@")[0];
+
+  // 1. DASHBOARD VIEW (Section 3)
+  const renderDashboardView = () => (
+    <div className="erp-student-dashboard">
+      {/* Greeting Header */}
+      <div className="erp-page-header">
+        <h1 className="erp-page-title">
+          {getGreeting()}, {studentFirstName}
+        </h1>
+        <p className="erp-page-subtitle">
+          {profile?.branch || "Data Science"} • Section {profile?.section || "B"} • Roll No: {profile?.roll_number || "—"}
         </p>
       </div>
 
-      {/* Success Notification */}
-      {successMessage && (
-        <div className="student-alert student-alert-success" role="alert">
-          <svg
-            className="student-alert-icon"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+      {/* Attendance Summary Banner (Overall Attendance + Present Classes) */}
+      <div className="erp-student-overview-card">
+        <div className="erp-overview-stat">
+          <span className="erp-stat-label">Overall Attendance</span>
+          <span className={`erp-stat-number ${overallPct >= 75 ? "text-present" : "text-shortage"}`}>
+            {overallPct}%
+          </span>
+          <div className="erp-progress-track">
+            <div
+              className={`erp-progress-bar ${overallPct >= 75 ? "bar-present" : "bar-shortage"}`}
+              style={{ width: `${Math.min(overallPct, 100)}%` }}
             />
-          </svg>
-          <div className="student-alert-content">
-            <div className="student-alert-title">Identity Linked</div>
-            <div>{successMessage}</div>
           </div>
-          <button
-            type="button"
-            className="student-alert-close"
-            onClick={() => setSuccessMessage(null)}
-            title="Dismiss notification"
-          >
-            ✕
-          </button>
+          <span className="erp-stat-subtext">
+            {overallPct >= 75 ? "Meets university 75% minimum criteria" : "Attendance shortage alert (< 75%)"}
+          </span>
         </div>
-      )}
 
-      {/* Error / Conflict Alert */}
-      {errorMessage && (
-        <div
-          className={`student-alert ${
-            isConflictError ? "student-alert-warning" : "student-alert-error"
-          }`}
-          role="alert"
-        >
-          <svg
-            className="student-alert-icon"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
-          >
-            {isConflictError ? (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-              />
-            ) : (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-              />
-            )}
-          </svg>
-          <div className="student-alert-content">
-            <div className="student-alert-title">
-              {isConflictError ? "Identity Conflict (409)" : "Error"}
-            </div>
-            <div>{errorMessage}</div>
-            {isConflictError && (
-              <div style={{ marginTop: "0.4rem", fontSize: "0.8125rem", opacity: 0.9 }}>
-                The identity you entered may already be claimed by another student in the system.
-                Please contact your course instructor to verify your assigned CV identity identifier.
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            className="student-alert-close"
-            onClick={() => {
-              setErrorMessage(null);
-              setIsConflictError(false);
-            }}
-            title="Dismiss error"
-          >
-            ✕
-          </button>
+        <div className="erp-overview-stat">
+          <span className="erp-stat-label">Present Classes</span>
+          <span className="erp-stat-number erp-stat-present-count">
+            {overallPresent} <span className="erp-stat-total">/ {overallTotal}</span>
+          </span>
+          <div style={{ height: "6px" }} />
+          <span className="erp-stat-subtext">Verified classroom lectures</span>
         </div>
-      )}
-
-      {/* Main Grid */}
-      <div className="student-grid">
-        {/* Identity Verification Card */}
-        <section className="student-card" aria-labelledby="identity-verification-heading">
-          <div className="student-card-header">
-            <div className="student-card-title-group">
-              <div className="student-card-icon" aria-hidden="true">
-                <svg
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.169.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.337 0z"
-                  />
-                </svg>
-              </div>
-              <h2 id="identity-verification-heading">Identity Verification</h2>
-            </div>
-
-            {/* Status Pill in Header */}
-            {!loading && (
-              <div
-                className={`identity-status-pill ${
-                  profile ? "status-linked" : "status-unlinked"
-                }`}
-              >
-                <span className="status-dot" aria-hidden="true" />
-                <span>
-                  {profile
-                    ? "✓ Identity linked"
-                    : "Your account is not linked to a CV identity"}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Loading State */}
-          {loading && (
-            <div className="identity-loading-container">
-              <div className="identity-spinner" aria-hidden="true" />
-              <span>Verifying student profile status...</span>
-            </div>
-          )}
-
-          {/* Bound State */}
-          {!loading && profile && (
-            <div className="identity-bound-view">
-              <div className="bound-highlight-box">
-                <div className="bound-field-group">
-                  <span className="bound-field-label">CV Identity</span>
-                  <div className="bound-identity-badge">
-                    <svg
-                      width="20"
-                      height="20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-                      />
-                    </svg>
-                    <span>{profile.identity}</span>
-                  </div>
-                </div>
-
-                <div className="bound-meta-row">
-                  <div className="bound-meta-item">
-                    <span className="bound-meta-label">Account User ID</span>
-                    <span className="bound-meta-value">{profile.user_id}</span>
-                  </div>
-                  <div className="bound-meta-item">
-                    <span className="bound-meta-label">Status</span>
-                    <span
-                      className="bound-meta-value"
-                      style={{ color: "#34d399", fontWeight: 600 }}
-                    >
-                      Active & Enrolled
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bound-notice-box">
-                <svg
-                  className="bound-notice-icon"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                <span>This identity will be used for attendance.</span>
-              </div>
-            </div>
-          )}
-
-          {/* Unbound State / Setup Form */}
-          {!loading && !profile && (
-            <div className="identity-unbound-view">
-              <p className="unbound-intro-text">
-                Your account is currently not linked to a computer-vision identity.
-                Enter the identity identifier assigned by your instructor to link your account
-                for automated classroom attendance.
-              </p>
-
-              <form className="identity-setup-form" onSubmit={handleIdentitySubmit}>
-                <div className="form-group">
-                  <label htmlFor="cv-identity-input" className="form-label">
-                    <span>CV Identity</span>
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>
-                      Required
-                    </span>
-                  </label>
-                  <div className="form-input-wrapper">
-                    <input
-                      id="cv-identity-input"
-                      type="text"
-                      className={`form-input ${
-                        validationError || isConflictError ? "has-error" : ""
-                      }`}
-                      placeholder="e.g. person_01"
-                      value={identityInput}
-                      onChange={(e) => {
-                        setIdentityInput(e.target.value);
-                        if (validationError) setValidationError(null);
-                        if (errorMessage) {
-                          setErrorMessage(null);
-                          setIsConflictError(false);
-                        }
-                      }}
-                      disabled={binding}
-                      autoComplete="off"
-                    />
-                  </div>
-                  {validationError && (
-                    <div className="form-field-error">{validationError}</div>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  className="btn-link-identity"
-                  disabled={binding || !identityInput.trim()}
-                >
-                  {binding ? (
-                    <>
-                      <div className="btn-spinner" aria-hidden="true" />
-                      <span>Linking Identity...</span>
-                    </>
-                  ) : (
-                    <span>Link Identity</span>
-                  )}
-                </button>
-              </form>
-
-              <div className="identity-advisory">
-                <svg
-                  className="identity-advisory-icon"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-                  />
-                </svg>
-                <span>
-                  ⚠ Make sure your teacher has assigned the correct identity to you.
-                </span>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Student Account Overview Card */}
-        <section className="student-card account-info-card" aria-labelledby="student-account-heading">
-          <div className="student-card-header">
-            <div className="student-card-title-group">
-              <div className="student-card-icon" style={{ background: "rgba(6, 182, 212, 0.15)", color: "#22d3ee", borderColor: "rgba(6, 182, 212, 0.3)" }}>
-                <svg
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </div>
-              <h2 id="student-account-heading">Student Account Details</h2>
-            </div>
-          </div>
-
-          <div className="account-info-grid">
-            <div className="account-info-item">
-              <span className="account-info-label">User ID</span>
-              <span className="account-info-value mono">{user.user_id}</span>
-            </div>
-            <div className="account-info-item">
-              <span className="account-info-label">Email Address</span>
-              <span className="account-info-value">{user.email}</span>
-            </div>
-            <div className="account-info-item">
-              <span className="account-info-label">Role</span>
-              <span className="account-info-value" style={{ color: "#38bdf8" }}>{user.role}</span>
-            </div>
-            <div className="account-info-item">
-              <span className="account-info-label">Account Status</span>
-              <span className="account-info-value" style={{ color: "#34d399" }}>
-                {user.is_active ? "Active" : "Inactive"}
-              </span>
-            </div>
-          </div>
-        </section>
       </div>
+
+      {/* My Subjects Clean Table (Section 3) */}
+      <div className="erp-section" style={{ marginTop: "1.75rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.85rem" }}>
+          <h2 className="erp-section-title" style={{ margin: 0 }}>My Subjects</h2>
+          <button
+            type="button"
+            className="erp-link-btn"
+            onClick={() => onSelectNav && onSelectNav("attendance")}
+          >
+            View Full Breakdown →
+          </button>
+        </div>
+
+        {subjects.length === 0 ? (
+          <div className="erp-empty-box">No finalized subject attendance sessions recorded yet.</div>
+        ) : (
+          <div className="erp-table-container">
+            <table className="erp-table">
+              <thead>
+                <tr>
+                  <th>Subject</th>
+                  <th>Attendance %</th>
+                  <th style={{ width: "35%" }}>Progress</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subjects.map((sub, idx) => {
+                  const isSafe = sub.percentage >= 75;
+                  return (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 600 }}>{sub.subject}</td>
+                      <td style={{ fontWeight: 700, color: isSafe ? "#15803d" : "#b91c1c" }}>
+                        {sub.percentage}%
+                      </td>
+                      <td>
+                        <div className="erp-mini-track">
+                          <div
+                            className={`erp-mini-bar ${isSafe ? "bar-present" : "bar-shortage"}`}
+                            style={{ width: `${Math.min(sub.percentage, 100)}%` }}
+                          />
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${isSafe ? "present" : "absent"}`}>
+                          {isSafe ? "Satisfied" : "Shortage"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // 2. MY ATTENDANCE VIEW (Detailed Subject Breakdown)
+  const renderAttendanceView = () => (
+    <div className="erp-student-attendance-view">
+      <div className="erp-page-header">
+        <h1 className="erp-page-title">My Attendance Breakdown</h1>
+        <p className="erp-page-subtitle">Academic Year 2025–26 • Subject-wise presence & shortage criteria</p>
+      </div>
+
+      <div className="erp-table-container">
+        <table className="erp-table">
+          <thead>
+            <tr>
+              <th>Subject</th>
+              <th>Classes Held</th>
+              <th>Classes Attended</th>
+              <th>Absent</th>
+              <th>Attendance Rate</th>
+              <th>Requirement</th>
+            </tr>
+          </thead>
+          <tbody>
+            {subjects.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ textAlign: "center", padding: "2rem", color: "var(--erp-text-muted)" }}>
+                  No subject attendance sessions recorded yet.
+                </td>
+              </tr>
+            ) : (
+              subjects.map((sub, idx) => {
+                const isSafe = sub.percentage >= 75;
+                const absentCount = Math.max(0, sub.total - sub.present);
+                return (
+                  <tr key={idx}>
+                    <td style={{ fontWeight: 600 }}>{sub.subject}</td>
+                    <td>{sub.total}</td>
+                    <td style={{ color: "#15803d", fontWeight: 600 }}>{sub.present}</td>
+                    <td style={{ color: "#b91c1c", fontWeight: 600 }}>{absentCount}</td>
+                    <td style={{ fontWeight: 700, color: isSafe ? "#15803d" : "#b91c1c" }}>
+                      {sub.percentage}%
+                    </td>
+                    <td>
+                      <span className={`status-badge ${isSafe ? "present" : "absent"}`}>
+                        {isSafe ? "Satisfied (≥75%)" : "Shortage (<75%)"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  // 3. ATTENDANCE HISTORY VIEW
+  const renderHistoryView = () => (
+    <div className="erp-student-history-view">
+      <div className="erp-page-header">
+        <h1 className="erp-page-title">Attendance History</h1>
+        <p className="erp-page-subtitle">Chronological record of class attendance sessions</p>
+      </div>
+
+      {history.length === 0 ? (
+        <div className="erp-empty-box">No past attendance session records available.</div>
+      ) : (
+        <div className="erp-table-container">
+          <table className="erp-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Subject / Course</th>
+                <th>Class</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((item, idx) => {
+                const isPresent = item.status === "PRESENT";
+                return (
+                  <tr key={idx}>
+                    <td style={{ color: "var(--erp-text-muted)" }}>{item.date_str}</td>
+                    <td style={{ fontWeight: 600 }}>{item.course_name || item.subject}</td>
+                    <td>{item.class_code}</td>
+                    <td>
+                      <span className={`status-badge ${isPresent ? "present" : "absent"}`}>
+                        {isPresent ? "✓ PRESENT" : "— ABSENT"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  // 4. STUDENT PROFILE VIEW (Section 4 Exact Layout)
+  const renderProfileView = () => (
+    <div className="erp-student-profile-view" style={{ maxWidth: "640px", margin: "0 auto" }}>
+      <div className="erp-page-header" style={{ textAlign: "center" }}>
+        <h1 className="erp-page-title">Student Profile</h1>
+        <p className="erp-page-subtitle">Academic Credentials & Student Identity</p>
+      </div>
+
+      <div className="erp-card" style={{ padding: "2.25rem" }}>
+        {/* Prominent Profile Photo */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "1.75rem" }}>
+          {profile?.photo_url ? (
+            <img
+              src={profile.photo_url}
+              alt={profile.name}
+              style={{
+                width: "96px",
+                height: "96px",
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "3px solid var(--erp-primary)",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: "96px",
+                height: "96px",
+                borderRadius: "50%",
+                background: "var(--erp-primary-light)",
+                border: "2px solid var(--erp-primary-border)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "2.5rem",
+                color: "var(--erp-primary)",
+                fontWeight: 700,
+              }}
+            >
+              {profile?.name ? profile.name.charAt(0) : "S"}
+            </div>
+          )}
+
+          <h2 style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--erp-navy)", marginTop: "0.85rem", marginBottom: "0.15rem" }}>
+            {profile?.name || user.email}
+          </h2>
+          <div style={{ fontSize: "0.875rem", color: "var(--erp-text-muted)" }}>
+            Student ID: <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--erp-text-main)" }}>{profile?.student_id || "DS202601"}</span>
+          </div>
+        </div>
+
+        {/* Organized Information into Logical Sections (Section 4) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", fontSize: "0.875rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "0.6rem 0", borderBottom: "1px solid var(--erp-border)" }}>
+            <span style={{ color: "var(--erp-text-muted)" }}>ERP / Roll Number:</span>
+            <strong style={{ fontFamily: "var(--font-mono)" }}>{profile?.roll_number || "—"}</strong>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "0.6rem 0", borderBottom: "1px solid var(--erp-border)" }}>
+            <span style={{ color: "var(--erp-text-muted)" }}>Branch:</span>
+            <strong>{profile?.branch || "Data Science"}</strong>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "0.6rem 0", borderBottom: "1px solid var(--erp-border)" }}>
+            <span style={{ color: "var(--erp-text-muted)" }}>Section:</span>
+            <strong>Section {profile?.section || "B"}</strong>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "0.6rem 0", borderBottom: "1px solid var(--erp-border)" }}>
+            <span style={{ color: "var(--erp-text-muted)" }}>Email Address:</span>
+            <strong>{profile?.email || user.email}</strong>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "0.6rem 0" }}>
+            <span style={{ color: "var(--erp-text-muted)" }}>Face Biometric Status:</span>
+            <span className="status-badge present">
+              {profile?.has_biometric ? "Enrolled ✓" : "Registered"}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="erp-student-container">
+      {errorMessage && (
+        <div className="alert-banner error" style={{ marginBottom: "1.5rem" }}>
+          <span>{errorMessage}</span>
+          <button
+            onClick={() => setErrorMessage(null)}
+            style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Render view based on active sidebar tab */}
+      {activeNavId === "dashboard" && renderDashboardView()}
+      {activeNavId === "attendance" && renderAttendanceView()}
+      {activeNavId === "history" && renderHistoryView()}
+      {activeNavId === "profile" && renderProfileView()}
     </div>
   );
 };

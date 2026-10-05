@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../services";
-import type { SessionCreate, SessionResponse } from "../../types";
+import type { SessionCreate, SessionResponse, StudentDirectoryItem } from "../../types";
 import "./create-session.css";
 import {
   type SessionFormData,
@@ -16,26 +16,99 @@ export interface CreateSessionModalProps {
   onSessionCreated: (session: SessionResponse) => void;
 }
 
+const formatLocalDateTimeInput = (date: Date): string => {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const mins = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${mins}`;
+};
+
 export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
   isOpen,
   onClose,
   onSessionCreated,
 }) => {
   const [courseName, setCourseName] = useState("");
-  const [classroomId, setClassroomId] = useState("");
+  const [classroomId, setClassroomId] = useState("ROOM_101");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [requiredPresence, setRequiredPresence] = useState<number>(75);
+
+  // Student directory & search
+  const [studentDirectory, setStudentDirectory] = useState<StudentDirectoryItem[]>([]);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [studentSearch, setStudentSearch] = useState("");
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+
+  // Video Source Configuration
+  const [videoSource, setVideoSource] = useState<"WEBCAM" | "PHONE" | "SIMULATOR">("WEBCAM");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
 
-  // Reset form or errors when modal opens
+  // Reset & load defaults when modal opens
   useEffect(() => {
     if (isOpen) {
       setApiError(null);
       setValidationErrors({});
+      const now = new Date();
+      const in90m = new Date(now.getTime() + 90 * 60 * 1000);
+      setStartTime(formatLocalDateTimeInput(now));
+      setEndTime(formatLocalDateTimeInput(in90m));
+      setClassroomId("ROOM_101");
+
+      // Fetch student candidates from database
+      setDirectoryLoading(true);
+      api
+        .getStudentsDirectory()
+        .then((items) => {
+          setStudentDirectory(items);
+          // By default, pre-select all available students so roster is ready
+          const allIds = new Set(items.map((s) => s.identity));
+          setSelectedStudents(allIds);
+        })
+        .catch(() => {
+          // Fallback demo students
+          const fallback = [
+            {
+              identity: "student_alice",
+              name: "Alice Smith",
+              email: "alice@demo.edu",
+              student_id: "STU_ALICE",
+              has_biometric: true,
+            },
+            {
+              identity: "student_bob",
+              name: "Bob Jones",
+              email: "bob@demo.edu",
+              student_id: "STU_BOB",
+              has_biometric: true,
+            },
+            {
+              identity: "student_charlie",
+              name: "Charlie Davis",
+              email: "charlie@demo.edu",
+              student_id: "STU_CHARLIE",
+              has_biometric: true,
+            },
+            {
+              identity: "person_01",
+              name: "Demo Candidate 1",
+              email: "person_01@campus.edu",
+              student_id: "person_01",
+              has_biometric: true,
+            },
+          ];
+          setStudentDirectory(fallback);
+          setSelectedStudents(new Set(fallback.map((s) => s.identity)));
+        })
+        .finally(() => {
+          setDirectoryLoading(false);
+        });
     }
   }, [isOpen]);
 
@@ -56,6 +129,63 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
   if (!isOpen) {
     return null;
   }
+
+  const toggleStudent = (ident: string) => {
+    setSelectedStudents((prev) => {
+      const next = new Set(prev);
+      if (next.has(ident)) {
+        next.delete(ident);
+      } else {
+        next.add(ident);
+      }
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    const next = new Set(selectedStudents);
+    filteredStudents.forEach((s) => next.add(s.identity));
+    setSelectedStudents(next);
+  };
+
+  const deselectAllFiltered = () => {
+    const next = new Set(selectedStudents);
+    filteredStudents.forEach((s) => next.delete(s.identity));
+    setSelectedStudents(next);
+  };
+
+  // ⚡ Instant Start Action
+  const handleInstantStart = async () => {
+    setIsSubmitting(true);
+    setApiError(null);
+    try {
+      const now = new Date();
+      const in2h = new Date(now.getTime() + 120 * 60 * 1000);
+      const instantPayload: SessionCreate = {
+        course_name: courseName.trim() || `Classroom Session (${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`,
+        classroom_id: (classroomId || "ROOM_101").trim(),
+        start_time: now.toISOString(),
+        end_time: in2h.toISOString(),
+        required_presence_percentage: 75.0,
+      };
+
+      const createdSession = await api.createSession(instantPayload);
+
+      // Automatically register selected roster students into session
+      const identitiesToEnroll = Array.from(selectedStudents);
+      if (identitiesToEnroll.length > 0) {
+        await api.updateSessionRoster(createdSession.session_id, identitiesToEnroll);
+      }
+
+      onSessionCreated(createdSession);
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setApiError(msg || "Failed to instantly start session.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,11 +217,15 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
 
       const createdSession = await api.createSession(payload);
 
+      // Automatically register selected students into session roster
+      const identitiesToEnroll = Array.from(selectedStudents);
+      if (identitiesToEnroll.length > 0) {
+        await api.updateSessionRoster(createdSession.session_id, identitiesToEnroll);
+      }
+
       // Reset form fields on success
       setCourseName("");
-      setClassroomId("");
-      setStartTime("");
-      setEndTime("");
+      setClassroomId("ROOM_101");
       setRequiredPresence(75);
 
       onSessionCreated(createdSession);
@@ -112,6 +246,17 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
     }
   };
 
+  const filteredStudents = studentDirectory.filter((s) => {
+    const q = studentSearch.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      s.name.toLowerCase().includes(q) ||
+      s.identity.toLowerCase().includes(q) ||
+      s.email.toLowerCase().includes(q) ||
+      (s.student_id && s.student_id.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div
       className="modal-backdrop"
@@ -120,7 +265,7 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
       aria-modal="true"
       aria-labelledby="create-session-title"
     >
-      <div className="modal-card">
+      <div className="modal-card modal-card-wide">
         {/* Header */}
         <div className="modal-header">
           <div className="modal-title-wrapper">
@@ -133,9 +278,14 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
                 />
               </svg>
             </div>
-            <h2 id="create-session-title" className="modal-title">
-              Create Attendance Session
-            </h2>
+            <div>
+              <h2 id="create-session-title" className="modal-title">
+                Create Attendance Session
+              </h2>
+              <p className="modal-subtitle">
+                Configure optical camera, select enrolled students, or launch instantly.
+              </p>
+            </div>
           </div>
           <button
             type="button"
@@ -148,6 +298,23 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
             <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
+          </button>
+        </div>
+
+        {/* ⚡ Instant Start Quick Action Banner */}
+        <div className="instant-start-banner">
+          <div className="instant-banner-text">
+            <span className="instant-badge">⚡ INSTANT LAUNCH</span>
+            <strong>Start Session Immediately (No Manual Timestamps Needed)</strong>
+            <span>Launches session now in Room 101 with selected students; end anytime with 1 click.</span>
+          </div>
+          <button
+            type="button"
+            className="btn-instant-start"
+            onClick={handleInstantStart}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "Starting..." : "⚡ Start Now"}
           </button>
         </div>
 
@@ -168,57 +335,189 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
               </div>
             )}
 
-            {/* Course Name */}
-            <div className="modal-field">
-              <label htmlFor="course-name-input" className="modal-label">
-                <span>
-                  Course Name <span className="required-indicator">*</span>
-                </span>
-              </label>
-              <input
-                id="course-name-input"
-                type="text"
-                className={`modal-input ${validationErrors.courseName ? "has-error" : ""}`}
-                placeholder="e.g. Data Science"
-                value={courseName}
-                onChange={(e) => {
-                  setCourseName(e.target.value);
-                  if (validationErrors.courseName) {
-                    setValidationErrors((prev) => ({ ...prev, courseName: undefined }));
-                  }
-                }}
-                disabled={isSubmitting}
-                autoFocus
-              />
-              {validationErrors.courseName && (
-                <span className="field-error-text">{validationErrors.courseName}</span>
-              )}
+            {/* Course Name & Classroom */}
+            <div className="form-row-2col">
+              <div className="modal-field">
+                <label htmlFor="course-name-input" className="modal-label">
+                  <span>
+                    Course Name <span className="required-indicator">*</span>
+                  </span>
+                </label>
+                <input
+                  id="course-name-input"
+                  type="text"
+                  className={`modal-input ${validationErrors.courseName ? "has-error" : ""}`}
+                  placeholder="e.g. Data Science & AI"
+                  value={courseName}
+                  onChange={(e) => {
+                    setCourseName(e.target.value);
+                    if (validationErrors.courseName) {
+                      setValidationErrors((prev) => ({ ...prev, courseName: undefined }));
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  autoFocus
+                />
+                {validationErrors.courseName && (
+                  <span className="field-error-text">{validationErrors.courseName}</span>
+                )}
+              </div>
+
+              <div className="modal-field">
+                <label htmlFor="classroom-input" className="modal-label">
+                  <span>
+                    Classroom <span className="required-indicator">*</span>
+                  </span>
+                </label>
+                <input
+                  id="classroom-input"
+                  type="text"
+                  className={`modal-input ${validationErrors.classroomId ? "has-error" : ""}`}
+                  placeholder="e.g. ROOM_101"
+                  value={classroomId}
+                  onChange={(e) => {
+                    setClassroomId(e.target.value);
+                    if (validationErrors.classroomId) {
+                      setValidationErrors((prev) => ({ ...prev, classroomId: undefined }));
+                    }
+                  }}
+                  disabled={isSubmitting}
+                />
+                {validationErrors.classroomId && (
+                  <span className="field-error-text">{validationErrors.classroomId}</span>
+                )}
+              </div>
             </div>
 
-            {/* Classroom */}
+            {/* Video Source Selection */}
             <div className="modal-field">
-              <label htmlFor="classroom-input" className="modal-label">
-                <span>
-                  Classroom <span className="required-indicator">*</span>
-                </span>
+              <label className="modal-label">
+                <span>Configure Video Source Before Start</span>
+                <span className="presence-helper">Continuous camera node for facial recognition</span>
               </label>
-              <input
-                id="classroom-input"
-                type="text"
-                className={`modal-input ${validationErrors.classroomId ? "has-error" : ""}`}
-                placeholder="e.g. Room 204"
-                value={classroomId}
-                onChange={(e) => {
-                  setClassroomId(e.target.value);
-                  if (validationErrors.classroomId) {
-                    setValidationErrors((prev) => ({ ...prev, classroomId: undefined }));
-                  }
-                }}
-                disabled={isSubmitting}
-              />
-              {validationErrors.classroomId && (
-                <span className="field-error-text">{validationErrors.classroomId}</span>
-              )}
+              <div className="video-source-selector">
+                <label className={`video-source-option ${videoSource === "WEBCAM" ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="videoSource"
+                    value="WEBCAM"
+                    checked={videoSource === "WEBCAM"}
+                    onChange={() => setVideoSource("WEBCAM")}
+                  />
+                  <div className="option-content">
+                    <span className="option-title">💻 Laptop Webcam</span>
+                    <span className="option-sub">Direct in-browser camera</span>
+                  </div>
+                </label>
+
+                <label className={`video-source-option ${videoSource === "PHONE" ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="videoSource"
+                    value="PHONE"
+                    checked={videoSource === "PHONE"}
+                    onChange={() => setVideoSource("PHONE")}
+                  />
+                  <div className="option-content">
+                    <span className="option-title">📱 Mobile Phone (8088)</span>
+                    <span className="option-sub">Stream from phone on LAN</span>
+                  </div>
+                </label>
+
+                <label className={`video-source-option ${videoSource === "SIMULATOR" ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="videoSource"
+                    value="SIMULATOR"
+                    checked={videoSource === "SIMULATOR"}
+                    onChange={() => setVideoSource("SIMULATOR")}
+                  />
+                  <div className="option-content">
+                    <span className="option-title">🎬 Optical Simulator</span>
+                    <span className="option-sub">1-click test transit events</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Student Search & Suggestions (Roster Selection) */}
+            <div className="modal-field">
+              <div className="student-selection-header">
+                <label className="modal-label" style={{ marginBottom: 0 }}>
+                  <span>Select Students From Database ({selectedStudents.size} selected)</span>
+                </label>
+                <div className="selection-quick-actions">
+                  <button type="button" className="btn-text-action" onClick={selectAllFiltered}>
+                    Select All
+                  </button>
+                  <span className="divider">•</span>
+                  <button type="button" className="btn-text-action" onClick={deselectAllFiltered}>
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {/* Student Search Bar */}
+              <div className="student-search-box">
+                <svg className="search-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                <input
+                  type="text"
+                  className="student-search-input"
+                  placeholder="Search students by name, email, or identity..."
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                />
+                {studentSearch && (
+                  <button
+                    type="button"
+                    className="clear-search-btn"
+                    onClick={() => setStudentSearch("")}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Student Candidate List */}
+              <div className="student-chips-container">
+                {directoryLoading ? (
+                  <div className="chips-loading">Loading students from database...</div>
+                ) : filteredStudents.length === 0 ? (
+                  <div className="chips-empty">No students found matching "{studentSearch}"</div>
+                ) : (
+                  filteredStudents.map((s) => {
+                    const isSelected = selectedStudents.has(s.identity);
+                    return (
+                      <div
+                        key={s.identity}
+                        className={`student-chip-card ${isSelected ? "selected" : ""}`}
+                        onClick={() => toggleStudent(s.identity)}
+                        role="checkbox"
+                        aria-checked={isSelected}
+                        tabIndex={0}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {}} /* handled by parent div */
+                          aria-hidden="true"
+                        />
+                        <div className="chip-info">
+                          <span className="chip-name">{s.name}</span>
+                          <span className="chip-id">{s.identity}</span>
+                        </div>
+                        {s.has_biometric && (
+                          <span className="chip-bio-badge" title="Biometric profile enrolled">
+                            🟢 Bio
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             {/* Start Time & End Time */}
@@ -337,10 +636,10 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
                       d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
                     />
                   </svg>
-                  <span>Creating...</span>
+                  <span>Creating & Enrolling...</span>
                 </>
               ) : (
-                <span>Create Session</span>
+                <span>Schedule & Enroll ({selectedStudents.size})</span>
               )}
             </button>
           </div>

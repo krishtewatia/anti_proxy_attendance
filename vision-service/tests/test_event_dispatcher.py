@@ -242,5 +242,31 @@ class TestEventDispatcher(unittest.TestCase):
         self.assertIn("Backend rejected event with HTTP 422", str(ctx.exception))
 
 
+    # ==========================================================================
+    # API Key Authentication Header Tests
+    # ==========================================================================
+
+    def test_dispatcher_attaches_explicit_api_key_header(self):
+        """EventDispatcher attaches X-API-Key header to session when explicit key provided."""
+        session = requests.Session()
+        dispatcher = EventDispatcher(
+            backend_url="http://127.0.0.1:8000",
+            api_key="my-camera-api-key-999",
+            session=session,
+        )
+        self.assertEqual(session.headers.get("X-API-Key"), "my-camera-api-key-999")
+
+    @patch.dict("os.environ", {"VISION_SERVICE_API_KEY": "env-vision-key-777"})
+    def test_dispatcher_resolves_api_key_from_environment(self):
+        """EventDispatcher reads VISION_SERVICE_API_KEY from environment if not passed explicitly."""
+        session = requests.Session()
+        dispatcher = EventDispatcher(
+            backend_url="http://127.0.0.1:8000",
+            session=session,
+        )
+        self.assertEqual(session.headers.get("X-API-Key"), "env-vision-key-777")
+        self.assertEqual(dispatcher.api_key, "env-vision-key-777")
+
+
 if __name__ == "__main__":
     unittest.main()

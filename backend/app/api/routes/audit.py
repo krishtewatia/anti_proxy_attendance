@@ -6,7 +6,7 @@ from app.api.dependencies.auth import get_current_user
 from app.database.attendance import get_attendance_record
 from app.database.sessions import get_session, get_sessions_by_owner
 from app.database.users import get_user_by_email, get_user_by_id
-from app.schemas.audit import AuditEventResponse, AuditResourceType
+from app.schemas.audit import AuditEventResponse
 from app.services.audit_service import get_audit_events
 
 router = APIRouter(
@@ -118,7 +118,9 @@ async def list_audit_events(
                     att_record = await get_attendance_record(resource_id)
                     if att_record:
                         session = await get_session(att_record.get("session_id"))
-                        if session is None or session.get("created_by") != current_user.get("user_id"):
+                        if session is None or session.get("created_by") != current_user.get(
+                            "user_id"
+                        ):
                             raise HTTPException(
                                 status_code=status.HTTP_403_FORBIDDEN,
                                 detail="Forbidden: You do not own the session for this attendance record",

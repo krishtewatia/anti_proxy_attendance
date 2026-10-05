@@ -1,9 +1,9 @@
 import type { UserRole } from "../types";
 
 export const ROLE_DASHBOARD_MAP: Record<UserRole, string> = {
-  TEACHER: "/dashboard/teacher",
-  STUDENT: "/dashboard/student",
-  ADMIN: "/dashboard/admin",
+  TEACHER: "/teacher/dashboard",
+  STUDENT: "/student/dashboard",
+  ADMIN: "/admin/dashboard",
 };
 
 /**

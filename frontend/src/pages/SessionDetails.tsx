@@ -1,30 +1,28 @@
 import React, { useEffect, useState } from "react";
 import { AuditLogs } from "../components/audit";
-import { SessionAttendance, SessionRoster } from "../components/session";
+import { AlwaysOnVideoFeed, SessionAttendance } from "../components/session";
 import { api } from "../services";
 import type { SessionResponse, UserResponse } from "../types";
 import "./session-details.css";
 
 interface SessionDetailsProps {
   sessionId: string;
-  user: UserResponse;
+  user?: UserResponse;
   onNavigate: (path: string) => void;
 }
 
 function formatSessionDateTime(isoStr: string): string {
   try {
     const d = new Date(isoStr);
-    const dateStr = d.toLocaleDateString("en-US", {
+    const dateStr = d.toLocaleDateString(undefined, {
       day: "numeric",
       month: "short",
       year: "numeric",
-      timeZone: "UTC",
     });
-    const timeStr = d.toLocaleTimeString("en-US", {
+    const timeStr = d.toLocaleTimeString(undefined, {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
-      timeZone: "UTC",
     });
     return `${dateStr} • ${timeStr}`;
   } catch {
@@ -34,6 +32,7 @@ function formatSessionDateTime(isoStr: string): string {
 
 export const SessionDetails: React.FC<SessionDetailsProps> = ({
   sessionId,
+  user,
   onNavigate,
 }) => {
   const [session, setSession] = useState<SessionResponse | null>(null);
@@ -41,6 +40,68 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
   const [errorType, setErrorType] = useState<"NOT_FOUND" | "FORBIDDEN" | "GENERAL" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [banner, setBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [attendanceRefreshKey, setAttendanceRefreshKey] = useState(0);
+  const [rosterIdentities, setRosterIdentities] = useState<string[]>([]);
+
+  const isUserAdmin = user?.role === "ADMIN";
+
+  const handleEndSession = async () => {
+    if (
+      !window.confirm(
+        "End session and finalize attendance records now? This locks the session against live camera events and calculates final attendance."
+      )
+    ) {
+      return;
+    }
+    setActionLoading(true);
+    setBanner(null);
+    try {
+      if (isUserAdmin) {
+        await api.adminFinalizeSession(sessionId);
+      } else {
+        await api.finalizeSession(sessionId);
+      }
+      setSession((prev) => (prev ? { ...prev, status: "FINALIZED" } : prev));
+      setAttendanceRefreshKey((k) => k + 1);
+      setBanner({
+        type: "success",
+        text: "Session ended and attendance finalized! You can now manually adjust attendance records below.",
+      });
+      fetchSession();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setBanner({ type: "error", text: `Failed to end session: ${msg}` });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteSession = async () => {
+    if (!session) return;
+    if (
+      !window.confirm(
+        `Are you sure you want to permanently delete session "${session.course_name}" (${session.session_id})? This will delete all attendance records.`
+      )
+    ) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      if (isUserAdmin) {
+        await api.adminDeleteSession(sessionId);
+        onNavigate("/dashboard/admin");
+      } else {
+        await api.deleteSession(sessionId);
+        onNavigate("/dashboard/teacher");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setBanner({ type: "error", text: `Failed to delete session: ${msg}` });
+      setActionLoading(false);
+    }
+  };
 
   const fetchSession = async () => {
     setLoading(true);
@@ -50,6 +111,12 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
     try {
       const data = await api.getSession(sessionId);
       setSession(data);
+      try {
+        const rosterData = await api.getSessionRoster(sessionId);
+        setRosterIdentities(rosterData?.identities || []);
+      } catch {
+        // roster might not be set yet
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(msg);
@@ -207,12 +274,12 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
       <button
         type="button"
         className="session-back-btn"
-        onClick={() => onNavigate("/dashboard/teacher")}
+        onClick={() => onNavigate(isUserAdmin ? "/dashboard/admin" : "/dashboard/teacher")}
       >
         <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
         </svg>
-        <span>Back to Sessions</span>
+        <span>Back to {isUserAdmin ? "Admin Dashboard" : "Sessions"}</span>
       </button>
 
       {/* Header */}
@@ -223,15 +290,71 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
         </p>
       </header>
 
+      {/* Notification Banner */}
+      {banner && (
+        <div className={`session-banner session-banner-${banner.type}`} role="status">
+          <div className="session-banner-content">
+            <span className="session-banner-icon" aria-hidden="true">
+              {banner.type === "success" ? "✓" : "!"}
+            </span>
+            <span>{banner.text}</span>
+          </div>
+          <button
+            type="button"
+            className="session-banner-close"
+            onClick={() => setBanner(null)}
+            aria-label="Dismiss banner"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Main Info Card */}
       <article className="session-info-card">
-        {/* Top: Course Name & Status */}
+        {/* Top: Course Name & Status + Actions */}
         <div className="session-info-top">
-          <h2 className="session-course-title">{session.course_name}</h2>
-          <span className={`status-badge status-${session.status.toLowerCase()}`}>
-            <span className="status-dot" aria-hidden="true" />
-            {session.status}
-          </span>
+          <div className="session-info-top-left">
+            <h2 className="session-course-title">{session.course_name}</h2>
+            <span className={`status-badge status-${session.status.toLowerCase()}`}>
+              <span className="status-dot" aria-hidden="true" />
+              {session.status}
+            </span>
+          </div>
+
+          <div className="session-header-actions">
+            {session.status !== "FINALIZED" ? (
+              <button
+                type="button"
+                className="btn-end-session"
+                onClick={handleEndSession}
+                disabled={actionLoading}
+                title="End session and finalize attendance records"
+              >
+                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
+                </svg>
+                <span>{actionLoading ? "Finalizing..." : "End Session & Finalize"}</span>
+              </button>
+            ) : (
+              <span className="session-finalized-tag">
+                ✓ Attendance Finalized
+              </span>
+            )}
+
+            <button
+              type="button"
+              className="btn-delete-session"
+              onClick={handleDeleteSession}
+              disabled={actionLoading}
+              title="Permanently delete this session and its attendance"
+            >
+              <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+              <span>Delete Session</span>
+            </button>
+          </div>
         </div>
 
         {/* Details Grid */}
@@ -295,20 +418,27 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
         </div>
       </article>
 
-      {/* Student Roster Management */}
-      <SessionRoster sessionId={session.session_id} />
+      {/* Always-On Optical Video Feed (Laptop Webcam / Mobile Phone / Simulator) */}
+      <AlwaysOnVideoFeed
+        sessionId={session.session_id}
+        classroomId={session.classroom_id}
+        rosterIdentities={rosterIdentities}
+        onEventDispatched={() => setAttendanceRefreshKey((k) => k + 1)}
+      />
 
-      {/* Attendance Verification & Records */}
+      {/* Real-time Attendance Ledger & Verification */}
       <SessionAttendance
+        key={attendanceRefreshKey}
         sessionId={session.session_id}
         requiredPercentage={session.required_presence_percentage}
+        onFinalize={handleEndSession}
       />
 
       {/* Session Audit Trail & Compliance Ledger */}
       <AuditLogs
         sessionId={session.session_id}
         title="Session Audit Trail"
-        subtitle="Immutable, append-only history of session creation, roster changes, finalizations, and corrections."
+        subtitle="Immutable, append-only history of session creation, finalizations, and manual corrections."
       />
     </div>
   );

@@ -19,6 +19,7 @@ import sys
 import time
 import unittest
 
+import pytest
 from aiohttp import ClientSession
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.mediastreams import VideoStreamTrack
@@ -108,6 +109,8 @@ class MultiPersonPhoneWebRTCTrack(VideoStreamTrack):
         return frame
 
 
+@pytest.mark.slow
+@pytest.mark.needs_models
 class TestWebRTCCVPipelineBenchmark(unittest.IsolatedAsyncioTestCase):
     """Executes Step 2D.3: Live WebRTC Phone Ingestion -> Existing CV Pipeline Benchmark."""
 

@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 import cv2
-import numpy as np
 
 from camera.base import VideoFrame, VideoSource, VideoSourceType
 

@@ -12,13 +12,28 @@ from app.api.routes.session_finalization import (
 )
 from app.api.routes.audit import router as audit_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.enrollment import router as enrollment_router
 from app.api.routes.sessions import router as sessions_router
 from app.api.routes.students import router as students_router
+from app.api.routes.cameras import router as cameras_router
+from app.api.routes.admin import router as admin_router
+from app.api.routes.academic import router as academic_router
+from app.api.routes.teachers import router as teachers_router
 from app.database import close_client, get_database, init_indexes
+from app.database.academic import seed_academic_data_if_empty
+
+
+from app.core.config import settings
+from app.core.logging_security import setup_security_logging
+from app.security.config import JWT_SECRET_KEY, validate_jwt_secret_strength
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup Security Validations
+    validate_jwt_secret_strength(JWT_SECRET_KEY)
+    setup_security_logging()
+
     # Startup: ensure database indexes are initialized
     db = get_database()
     try:
@@ -31,13 +46,18 @@ async def lifespan(app: FastAPI):
         mongodb._client = AsyncMongoMockClient()
         db = mongodb.get_database()
         await init_indexes(db)
+    try:
+        await seed_academic_data_if_empty()
+    except Exception:
+        pass
     yield
     # Shutdown: close active client connection
     close_client()
 
 
-
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 app = FastAPI(
     title="Anti-Proxy Attendance System Backend",
@@ -46,13 +66,34 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+cors_origins = settings.CORS_ALLOWED_ORIGINS
+allow_creds = True
+if "*" in cors_origins:
+    allow_creds = False  # W3C CORS forbids credentials when wildcard '*' is used
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$",
+    allow_credentials=allow_creds,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def enforce_payload_size_limit(request: Request, call_next):
+    if request.method == "POST" and request.url.path.rstrip("/").endswith("/events"):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > settings.EVENTS_MAX_PAYLOAD_BYTES:
+            return JSONResponse(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                content={
+                    "detail": f"Payload size exceeds maximum allowed limit of {settings.EVENTS_MAX_PAYLOAD_BYTES} bytes"
+                },
+            )
+    return await call_next(request)
+
 
 # Register API v1 routes
 app.include_router(events_router, prefix="/api/v1")
@@ -64,6 +105,12 @@ app.include_router(sessions_router)
 app.include_router(students_router)
 app.include_router(audit_router)
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(enrollment_router)
+if not settings.DEMO_MODE:
+    app.include_router(cameras_router)
+app.include_router(admin_router)
+app.include_router(academic_router)
+app.include_router(teachers_router)
 
 
 @app.get("/")
@@ -72,6 +119,7 @@ def read_root():
 
 
 @app.get("/health")
+@app.get("/api/v1/health")
 def health_check():
     return {
         "status": "healthy",
