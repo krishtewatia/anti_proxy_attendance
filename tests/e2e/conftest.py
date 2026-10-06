@@ -110,7 +110,7 @@ def mongo_db(mongo_client: MongoClient):
 
 def load_benchmark_embeddings() -> dict[str, list[float]]:
     """Load authentic 512-d InsightFace embeddings from survey_explorer_1."""
-    embed_file = PROJECT_ROOT / ".agents" / "teamwork" / "survey_explorer_1" / "benchmark_embeddings.json"
+    embed_file = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "benchmark_embeddings.json"
     if embed_file.exists():
         with open(embed_file, "r", encoding="utf-8") as f:
             return json.load(f)

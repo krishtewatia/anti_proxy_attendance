@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 from datetime import datetime, timezone
 import logging
 import os
@@ -17,6 +18,7 @@ import av
 import numpy as np
 
 from camera.phone_source import PhoneVideoSource
+from camera.recognition_signing import sign_recognition
 
 logger = logging.getLogger(__name__)
 
@@ -714,45 +716,38 @@ class WebRTCReceiver:
         self._connection_state = "CLOSED"
 
 
-def make_cors_headers(origin: Optional[str] = None) -> dict[str, str]:
-    """Generate CORS headers permitting development origins including http://localhost:3000."""
-    allow_origin = "*"
-    if origin:
-        if "localhost:3000" in origin or "127.0.0.1:3000" in origin:
-            allow_origin = origin
-        elif "localhost" in origin or "127.0.0.1" in origin:
-            allow_origin = origin
-        else:
-            allow_origin = origin
+GALLERY_REFRESH_SECONDS = 30.0
 
-    return {
-        "Access-Control-Allow-Origin": allow_origin,
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Id, X-Access-Token, Accept, Origin, Cache-Control, X-Requested-With",
-        "Access-Control-Allow-Credentials": "true",
-        "Access-Control-Max-Age": "86400",
-    }
+
+def make_cors_headers(origin: Optional[str] = None) -> dict[str, str]:
+    """No CORS headers: the service is called only by the backend, never by a browser."""
+    return {}
 
 
 @web.middleware
-async def global_cors_middleware(request: web.Request, handler):
-    origin = request.headers.get("Origin")
-    cors_headers = make_cors_headers(origin)
+async def service_auth_middleware(request: web.Request, handler):
+    """Require the shared service key on every route except the liveness probe.
 
-    if request.method == "OPTIONS":
-        return web.Response(status=200, headers=cors_headers)
+    Fail closed: if no key is configured, nothing but /health is served.
+    """
+    if request.path != "/health":
+        expected = os.getenv("VISION_SERVICE_API_KEY", "").strip()
+        presented = request.headers.get("X-API-Key", "").strip()
+        if (
+            not expected
+            or not presented
+            or not hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8"))
+        ):
+            logger.warning("Rejected unauthenticated request to %s", request.path)
+            return web.json_response({"error": "unauthorized"}, status=401)
 
     try:
-        response = await handler(request)
-    except web.HTTPException as ex:
-        ex.headers.update(cors_headers)
+        return await handler(request)
+    except web.HTTPException:
         raise
-    except Exception as ex:
-        logger.exception("Error processing request %s: %s", request.path, ex)
-        return web.json_response({"error": str(ex)}, status=500, headers=cors_headers)
-
-    response.headers.update(cors_headers)
-    return response
+    except Exception:
+        logger.exception("Error processing request %s", request.path)
+        return web.json_response({"error": "internal error"}, status=500)
 
 
 class WebRTCSignalingServer:
@@ -811,13 +806,14 @@ class WebRTCSignalingServer:
         }
         self._init_gallery()
 
+        self._last_gallery_sync: float = 0.0
+
+        # Internal API only. The phone WebRTC routes (/, /offer, /transit) and the
+        # preview routes are no longer registered; the browser never talks to this
+        # service, and every route below except /health requires the service key.
         self.app = web.Application(
-            middlewares=[global_cors_middleware], client_max_size=32 * 1024 * 1024
+            middlewares=[service_auth_middleware], client_max_size=32 * 1024 * 1024
         )
-        self.app.router.add_route("OPTIONS", "/{path:.*}", self._handle_cors_options)
-        self.app.router.add_get("/", self._handle_index)
-        self.app.router.add_post("/offer", self._handle_offer)
-        self.app.router.add_post("/transit", self._handle_transit)
         self.app.router.add_post("/process-frame", self._handle_process_frame)
         self.app.router.add_post("/reset", self._handle_reset)
         self.app.router.add_post("/extract-embedding", self._handle_extract_embedding)
@@ -826,9 +822,6 @@ class WebRTCSignalingServer:
         self.app.router.add_get("/gallery", self._handle_get_gallery)
         self.app.router.add_get("/status", self._handle_status)
         self.app.router.add_get("/health", self._handle_health)
-        self.app.router.add_get("/funnel", self._handle_funnel)
-        self.app.router.add_get("/preview.mjpg", self._handle_preview_mjpg)
-        self.app.router.add_get("/preview.jpg", self._handle_preview_jpg)
 
         self._runner: Optional[web.AppRunner] = None
         self._site: Optional[web.TCPSite] = None
@@ -837,32 +830,8 @@ class WebRTCSignalingServer:
         self._stop_event = threading.Event()
 
     def _is_authorized(self, request: web.Request) -> bool:
-        """Verify request authorization against configured access token."""
-        origin = request.headers.get("Origin", "")
-        if "localhost:3000" in origin or "127.0.0.1:3000" in origin:
-            return True
-
-        if not self.access_token:
-            return True
-
-        # 1. Query parameter ?token=...
-        query_token = request.query.get("token")
-        if query_token and secrets.compare_digest(query_token, self.access_token):
-            return True
-
-        # 2. Authorization: Bearer <token>
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            bearer_token = auth_header[7:].strip()
-            if secrets.compare_digest(bearer_token, self.access_token):
-                return True
-
-        # 3. X-Access-Token header
-        x_token = request.headers.get("X-Access-Token")
-        if x_token and secrets.compare_digest(x_token, self.access_token):
-            return True
-
-        return False
+        """Requests reaching a handler already passed service_auth_middleware."""
+        return True
 
     async def _handle_index(self, request: web.Request) -> web.Response:
         if not self._is_authorized(request):
@@ -964,7 +933,6 @@ class WebRTCSignalingServer:
         self.last_recognized_student = None
         return web.json_response(
             {"status": "reset", "active_session_id": new_sess_id, "present_count": 0},
-            headers={"Access-Control-Allow-Origin": "*"},
         )
 
     def _get_enrolled_gallery_path(self) -> Path:
@@ -979,63 +947,21 @@ class WebRTCSignalingServer:
         return Path(__file__).resolve().parent / "enrolled_gallery.json"
 
     def _save_enrolled_gallery_file(self) -> None:
-        try:
-            import json
-
-            save_path = self._get_enrolled_gallery_path()
-            data = {}
-            for ident, vec in self.gallery.items():
-                data[ident] = {
-                    "name": self.student_names.get(ident, ident),
-                    "student_id": self.student_ids.get(ident, ident),
-                    "embedding": vec.tolist() if isinstance(vec, np.ndarray) else list(vec),
-                }
-            save_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            logger.info("Saved %d enrolled identities to %s", len(data), save_path)
-        except Exception as exc:
-            logger.warning("Failed saving enrolled gallery file: %s", exc)
+        """Embeddings are never written to disk; the backend is the only source."""
+        return None
 
     def _load_enrolled_gallery_file(self) -> None:
-        try:
-            import json
-
-            save_path = self._get_enrolled_gallery_path()
-            if save_path.exists():
-                data = json.loads(save_path.read_text(encoding="utf-8"))
-                for ident, info in data.items():
-                    emb = info.get("embedding")
-                    if emb:
-                        vec = np.array(emb, dtype=np.float32)
-                        norm = np.linalg.norm(vec)
-                        if norm > 1e-6:
-                            vec = vec / norm
-                        self.gallery[ident] = vec
-                        self.student_names[ident] = info.get("name", ident)
-                        self.student_ids[ident] = info.get("student_id", ident)
-                logger.info("Loaded %d persisted identities from %s", len(data), save_path)
-        except Exception as exc:
-            logger.warning("Failed loading enrolled gallery file: %s", exc)
+        """Embeddings are never read from disk; the backend is the only source."""
+        return None
 
     def _init_gallery(self) -> None:
-        """Start with an empty gallery; embeddings come from the backend at runtime.
+        """The gallery starts empty.
 
-        No embeddings file is picked up implicitly from the image or the working
-        directory. A precomputed gallery is loaded only when GALLERY_NPZ_PATH is
-        set explicitly (local development). The enrolled-gallery cache holds only
-        what an earlier backend sync or enrollment wrote to the data volume.
+        Embeddings are loaded only from the backend over its authenticated
+        internal route (see _sync_from_backend), never from a file in the image,
+        the working directory, or a data volume.
         """
-        explicit_npz = os.getenv("GALLERY_NPZ_PATH", "").strip()
-        if explicit_npz:
-            try:
-                from pipeline.live_cv_pipeline import load_gallery_from_npz
-
-                g = load_gallery_from_npz(Path(explicit_npz))
-                self.gallery.update(g)
-                logger.info("Loaded %d identities from GALLERY_NPZ_PATH=%s", len(g), explicit_npz)
-            except Exception as exc:
-                logger.warning("Failed loading gallery from GALLERY_NPZ_PATH: %s", exc)
-
-        self._load_enrolled_gallery_file()
+        return None
 
     def _get_app(self) -> Any:
         if self.pipeline_ref and getattr(self.pipeline_ref, "app", None):
@@ -1062,8 +988,14 @@ class WebRTCSignalingServer:
 
         url = f"{backend_url.rstrip('/')}/api/v1/attendance/vision-gallery"
         try:
+            service_key = os.getenv("VISION_SERVICE_API_KEY", "").strip()
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=4.0)) as resp:
+                async with session.get(
+                    url,
+                    headers={"X-API-Key": service_key},
+                    timeout=aiohttp.ClientTimeout(total=4.0),
+                ) as resp:
+                    self._last_gallery_sync = time.time()
                     if resp.status == 200:
                         data = await resp.json()
                         gallery_list = data.get("gallery", [])
@@ -1094,8 +1026,20 @@ class WebRTCSignalingServer:
                         )
                         return True
         except Exception as exc:
+            self._last_gallery_sync = time.time()
             logger.warning("Could not sync gallery from backend (%s): %s", url, exc)
         return False
+
+    def _backend_url(self) -> str:
+        if self.event_dispatcher is not None and hasattr(self.event_dispatcher, "backend_url"):
+            return self.event_dispatcher.backend_url
+        return os.getenv("BACKEND_URL", "http://backend:8000")
+
+    async def _refresh_gallery_if_stale(self) -> None:
+        """Re-sync from the backend when the gallery is empty or older than the refresh window."""
+        age = time.time() - self._last_gallery_sync
+        if age >= GALLERY_REFRESH_SECONDS or (not self.gallery and age >= 2.0):
+            await self._sync_from_backend(self._backend_url())
 
     async def _handle_extract_embedding(self, request: web.Request) -> web.Response:
         import base64
@@ -1370,7 +1314,9 @@ class WebRTCSignalingServer:
         frame_h, frame_w = img_bgr.shape[:2]
 
         app = self._get_app()
+        await self._refresh_gallery_if_stale()
         gallery = self._get_gallery()
+        signing_key = os.getenv("RECOGNITION_SIGNING_KEY", "").strip()
 
         if app is None:
             return web.json_response(
@@ -1407,12 +1353,6 @@ class WebRTCSignalingServer:
         pipe = self.pipeline_ref
         sim_thresh = getattr(pipe, "similarity_threshold", 0.50) if pipe else 0.50
         min_marg = getattr(pipe, "min_margin", 0.15) if pipe else 0.15
-
-        backend_url = "http://127.0.0.1:8000"
-        if self.event_dispatcher is not None and hasattr(self.event_dispatcher, "backend_url"):
-            backend_url = self.event_dispatcher.backend_url
-        elif os.getenv("BACKEND_URL"):
-            backend_url = os.getenv("BACKEND_URL")
 
         faces_output = []
 
@@ -1453,27 +1393,18 @@ class WebRTCSignalingServer:
             if is_confirmed and best_ident:
                 student_name = self.student_names.get(best_ident, best_ident)
                 student_id = self.student_ids.get(best_ident, best_ident)
-                sess_marked = (
-                    self.session_marked_identities.setdefault(target_sess, set())
-                    if target_sess
-                    else self.marked_identities
-                )
-                already_marked = best_ident in sess_marked
                 self.last_recognized_student = student_name
 
-                if not already_marked and target_sess:
-                    try:
-                        import requests
-
-                        requests.post(
-                            f"{backend_url.rstrip('/')}/api/v1/attendance/mark",
-                            json={"identity": best_ident, "session_id": target_sess},
-                            timeout=2.0,
-                        )
-                    except Exception as mark_exc:
-                        logger.warning("Failed marking attendance for %s: %s", best_ident, mark_exc)
-                    sess_marked.add(best_ident)
-                    self.marked_identities.add(best_ident)
+                # This service never marks attendance. It returns a signed result
+                # bound to the session; the backend verifies it and decides.
+                recognition = None
+                if target_sess and signing_key:
+                    recognition = sign_recognition(
+                        session_id=target_sess,
+                        identity=best_ident,
+                        confidence=best_score,
+                        key=signing_key,
+                    )
 
                 conf_pct = round(best_score * 100, 1)
                 faces_output.append(
@@ -1486,7 +1417,8 @@ class WebRTCSignalingServer:
                         "confidence_percent": conf_pct,
                         "det_score": round(det_score, 3),
                         "status": "recognized",
-                        "already_marked": already_marked,
+                        "already_marked": False,
+                        "recognition": recognition,
                     }
                 )
 
@@ -1545,7 +1477,7 @@ class WebRTCSignalingServer:
                     "similarity": top_face["similarity"],
                     "margin": round(margin, 4),
                     "already_marked": top_face["already_marked"],
-                    "status_message": f"{top_face['name']} marked present",
+                    "status_message": f"{top_face['name']} recognized",
                     "box": top_face["bbox"],
                     "frame_width": frame_w,
                     "frame_height": frame_h,
@@ -1631,7 +1563,6 @@ class WebRTCSignalingServer:
                 "service": "webrtc-ingest",
                 "auth_enabled": bool(self.access_token),
             },
-            headers={"Access-Control-Allow-Origin": "*"},
         )
 
     def update_preview_frame(self, frame_jpeg: bytes, cv_result: Optional[Any] = None) -> None:
@@ -1736,7 +1667,6 @@ class WebRTCSignalingServer:
         )
         return web.json_response(
             funnel_data,
-            headers={"Access-Control-Allow-Origin": "*"},
         )
 
     def start_background(self) -> None:

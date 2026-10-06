@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import time
 
@@ -14,12 +15,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 
 # Video source directory
-VIDEO_DIR = PROJECT_ROOT / "vision-service" / "tests" / "video_test"
+VIDEO_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test"
 if not VIDEO_DIR.exists():
-    VIDEO_DIR = SCRIPT_DIR / "video_test"
+    VIDEO_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test"
 
 # Enrolled benchmark gallery directory (matches still-image benchmark)
-ENROLLMENT_DIR = PROJECT_ROOT / "vision-service" / "tests" / "recognition_benchmark"
+ENROLLMENT_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "recognition_benchmark"
 if not ENROLLMENT_DIR.exists():
     ENROLLMENT_DIR = SCRIPT_DIR / "face_images"
 

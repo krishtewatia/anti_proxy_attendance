@@ -11,6 +11,7 @@ Validates concurrent multi-subject perception on live WebRTC phone frames:
 8. Real-time latency, throughput FPS, and buffer telemetry.
 """
 
+import os
 import asyncio
 from datetime import datetime, timezone
 import math
@@ -18,6 +19,7 @@ from pathlib import Path
 import sys
 import time
 import unittest
+from typing import Any
 
 import pytest
 from aiohttp import ClientSession
@@ -116,7 +118,7 @@ class TestWebRTCCVPipelineBenchmark(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.gallery_dir = SERVICE_ROOT / "tests" / "recognition_benchmark"
+        cls.gallery_dir = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "recognition_benchmark"
         cls.app = FaceAnalysis(
             name="buffalo_l",
             providers=["CPUExecutionProvider"],
@@ -558,3 +560,9 @@ class TestWebRTCCVPipelineBenchmark(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# The phone WebRTC flow is dropped: /offer and the other WebRTC routes are no
+# longer registered on the vision service (it is an internal, key-protected API
+# now). These tests exercise that removed flow and are skipped until the WebRTC
+# code itself is deleted in the follow-up cleanup.
+pytestmark = pytest.mark.skip(reason="phone WebRTC flow removed; routes no longer registered")

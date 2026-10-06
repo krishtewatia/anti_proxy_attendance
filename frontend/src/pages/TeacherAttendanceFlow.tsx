@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api, getApiBaseUrl } from "../services";
 import type {
   AttendanceSummaryItem,
@@ -64,14 +64,6 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const isProcessingRef = useRef<boolean>(false);
   const prevMarkedCountRef = useRef<number>(0);
-
-  const previewBaseUrl = useMemo(() => {
-    if (typeof window !== "undefined") {
-      const host = window.location.hostname || "localhost";
-      return `http://${host}:8088`;
-    }
-    return "http://localhost:8088";
-  }, []);
 
   // Enumerate available video inputs (Laptop built-in, USB webcams)
   const enumerateCameras = async () => {
@@ -226,17 +218,6 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
       // 2. Start Session
       await api.startSession(session.session_id);
-
-      // 3. Reset Vision Counter and notify active session
-      try {
-        await fetch(`${previewBaseUrl}/reset`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: session.session_id }),
-        });
-      } catch {
-        // Preview server might be starting up
-      }
 
       // 4. Fetch roster
       const attData = await api.getSessionAttendance(session.session_id);
@@ -437,22 +418,21 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
             formData.append("frame", blob, "frame.jpg");
             if (sessionId) formData.append("session_id", sessionId);
 
+            // Frames go to the backend with the teacher's token. The backend checks
+            // the session, calls the vision service itself and marks attendance;
+            // the browser never talks to the vision service or asserts an identity.
             let res: Response | null = null;
             try {
-              res = await fetch(`${previewBaseUrl}/process-frame`, {
+              const frameToken =
+                api.getToken() || localStorage.getItem("anti_proxy_access_token") || "";
+              const frameUrl = `${getApiBaseUrl()}/api/v1/attendance/${encodeURIComponent(sessionId || "")}/process-frame`;
+              res = await fetch(frameUrl, {
                 method: "POST",
+                headers: { Authorization: `Bearer ${frameToken}` },
                 body: formData,
               });
             } catch {
-              try {
-                const proxyUrl = `${getApiBaseUrl()}/api/v1/attendance/${sessionId}/process-frame`;
-                res = await fetch(proxyUrl, {
-                  method: "POST",
-                  body: formData,
-                });
-              } catch {
-                res = null;
-              }
+              res = null;
             }
 
             if (res && res.ok) {
@@ -543,7 +523,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       clearInterval(rosterInterval);
       clearOverlay();
     };
-  }, [step, sessionId, previewBaseUrl]);
+  }, [step, sessionId]);
 
   // ========================================================================
   // STEP 2 -> STEP 3: END ATTENDANCE
@@ -558,16 +538,6 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       // 2. Finalize backend session
       await api.endSession(sessionId);
 
-      // 3. Reset vision service
-      try {
-        await fetch(`${previewBaseUrl}/reset`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: null }),
-        });
-      } catch {
-        // Standby
-      }
       const attData = await api.getSessionAttendance(sessionId);
       setRecords(attData.records);
       setStep(3);

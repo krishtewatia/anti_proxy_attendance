@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import sys
 import time
@@ -21,7 +22,7 @@ from live_cv_backend_demo import (
     TARGET_FPS,
 )
 
-VIDEO_PATH = VISION_SERVICE_DIR / "tests" / "video_test" / "entry_exit_simultaneous.mp4"
+VIDEO_PATH = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test" / "entry_exit_simultaneous.mp4"
 
 
 def main():
