@@ -6,7 +6,7 @@ onnxruntime>=1.18.0
 insightface>=0.7.3
 pillow>=10.0.0
 scipy>=1.11.0
-scikit-image>=0.22.0
+scikit-image>=0.26.0
 tqdm>=4.66.0
 
 # Networking & Ingestion
