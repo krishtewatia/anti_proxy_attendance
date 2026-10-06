@@ -89,7 +89,9 @@ def main() -> None:
         help="Vision Service API key for backend event authentication",
     )
     parser.add_argument(
-        "--token", default=os.getenv("WEBRTC_ACCESS_TOKEN", None), help="Access token required for WebRTC phone stream authentication"
+        "--token",
+        default=os.getenv("WEBRTC_ACCESS_TOKEN", None),
+        help="Access token required for WebRTC phone stream authentication",
     )
     parser.add_argument(
         "--similarity-threshold",
@@ -205,12 +207,18 @@ def main() -> None:
             )
             app.prepare(ctx_id=0, det_size=(640, 640))
             if args.detector != "10g":
-                swap_scrfd_detector(
-                    app,
-                    detector_type=args.detector,
-                    intra_threads=args.intra_threads,
-                    inter_threads=args.inter_threads,
-                )
+                try:
+                    swap_scrfd_detector(
+                        app,
+                        detector_type=args.detector,
+                        intra_threads=args.intra_threads,
+                        inter_threads=args.inter_threads,
+                    )
+                except Exception as exc:
+                    print(f"[INFO] Using standard 10g detector: {exc}")
+                    configure_scrfd_threads(
+                        app, intra_threads=args.intra_threads, inter_threads=args.inter_threads
+                    )
             else:
                 configure_scrfd_threads(
                     app, intra_threads=args.intra_threads, inter_threads=args.inter_threads
@@ -244,7 +252,9 @@ def main() -> None:
             server.set_pipeline(pipeline)
             print("Live CV Pipeline loaded and ready!")
         except Exception as exc:
-            print(f"Notice: Live CV models not available ({exc}). Running in WebRTC ingestion bridge mode.")
+            print(
+                f"Notice: Live CV models not available ({exc}). Running in WebRTC ingestion bridge mode."
+            )
             pipeline = None
 
     last_report = time.monotonic()

@@ -108,13 +108,20 @@ async def register_student_account(
 
     # 5. Extract and store biometric embedding if photo provided
     has_biometric = False
+    photo_url = None
     if req.photo_base64:
         ok, msg = await extract_and_register_student_photo(
             identity=req.student_id,
             photo_base64=req.photo_base64,
             enrolled_by=enrolled_by,
+            student_name=req.name,
+            student_id=req.student_id,
         )
-        has_biometric = ok
+        if not ok:
+            logger.error("Biometric enrollment rejected for %s: %s", req.student_id, msg)
+            raise ValueError(msg)
+        has_biometric = True
+        photo_url = f"/api/v1/students/{req.student_id}/photo"
         logger.info("Biometric registration for %s: %s", req.student_id, msg)
 
     # 6. Upsert student profile
@@ -129,6 +136,7 @@ async def register_student_account(
         section=req.section,
         class_code=class_code,
         photo_base64=req.photo_base64,
+        photo_url=photo_url,
         has_biometric=has_biometric,
     )
 
@@ -142,7 +150,7 @@ async def register_student_account(
         branch=req.branch,
         section=req.section,
         class_code=class_code,
-        photo_url=None,
+        photo_url=photo_url,
         has_biometric=has_biometric,
         created_at=profile_doc.get("created_at"),
     )
@@ -154,9 +162,21 @@ async def get_student_profile_response(user_id: str) -> StudentProfileResponse |
     if not doc:
         return None
 
+    stu_id = doc.get("student_id") or doc.get("identity") or user_id
+    photo_url = doc.get("photo_url")
+    if not photo_url:
+        from app.core.config import UPLOADS_DIR
+
+        if (
+            (UPLOADS_DIR / f"{stu_id}.jpg").exists()
+            or doc.get("photo_base64")
+            or doc.get("has_biometric")
+        ):
+            photo_url = f"/api/v1/students/{stu_id}/photo"
+
     return StudentProfileResponse(
         user_id=doc["user_id"],
-        identity=doc.get("identity") or doc.get("student_id", user_id),
+        identity=doc.get("identity") or stu_id,
         name=doc.get("name", "Student"),
         email=doc.get("email", ""),
         student_id=doc.get("student_id", ""),
@@ -164,7 +184,7 @@ async def get_student_profile_response(user_id: str) -> StudentProfileResponse |
         branch=doc.get("branch", ""),
         section=doc.get("section", ""),
         class_code=doc.get("class_code", ""),
-        photo_url=None,
+        photo_url=photo_url,
         has_biometric=doc.get("has_biometric", False),
         created_at=doc.get("created_at"),
     )

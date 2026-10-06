@@ -1,13 +1,13 @@
 fastapi
 uvicorn[standard]
 motor
+pymongo
 pydantic
 PyJWT
 bcrypt
 python-dotenv
+httpx
 
 # Test dependencies
 pytest
-httpx
 mongomock-motor
-pymongo

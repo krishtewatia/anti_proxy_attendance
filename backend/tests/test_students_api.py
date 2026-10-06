@@ -18,36 +18,38 @@ async def setup_test_db():
     await db["student_profiles"].delete_many({})
 
     # Prepopulate a test student, teacher, and admin
-    await db["users"].insert_many([
-        {
-            "user_id": "student_user_1",
-            "email": "student1@test.edu",
-            "hashed_password": "hashed_password",
-            "role": "STUDENT",
-            "is_active": True,
-        },
-        {
-            "user_id": "student_user_2",
-            "email": "student2@test.edu",
-            "hashed_password": "hashed_password",
-            "role": "STUDENT",
-            "is_active": True,
-        },
-        {
-            "user_id": "teacher_user_1",
-            "email": "teacher1@test.edu",
-            "hashed_password": "hashed_password",
-            "role": "TEACHER",
-            "is_active": True,
-        },
-        {
-            "user_id": "admin_user_1",
-            "email": "admin1@test.edu",
-            "hashed_password": "hashed_password",
-            "role": "ADMIN",
-            "is_active": True,
-        },
-    ])
+    await db["users"].insert_many(
+        [
+            {
+                "user_id": "student_user_1",
+                "email": "student1@test.edu",
+                "hashed_password": "hashed_password",
+                "role": "STUDENT",
+                "is_active": True,
+            },
+            {
+                "user_id": "student_user_2",
+                "email": "student2@test.edu",
+                "hashed_password": "hashed_password",
+                "role": "STUDENT",
+                "is_active": True,
+            },
+            {
+                "user_id": "teacher_user_1",
+                "email": "teacher1@test.edu",
+                "hashed_password": "hashed_password",
+                "role": "TEACHER",
+                "is_active": True,
+            },
+            {
+                "user_id": "admin_user_1",
+                "email": "admin1@test.edu",
+                "hashed_password": "hashed_password",
+                "role": "ADMIN",
+                "is_active": True,
+            },
+        ]
+    )
 
     yield
 
@@ -98,7 +100,8 @@ async def test_student_bind_and_retrieve_profile(client):
     # 3. Retrieve via alias /api/v1/students/me
     me_response = client.get("/api/v1/students/me", headers=headers)
     assert me_response.status_code == status.HTTP_200_OK
-    assert me_response.json() == {"user_id": "student_user_1", "identity": "person_01"}
+    assert me_response.json()["user_id"] == "student_user_1"
+    assert me_response.json()["identity"] == "person_01"
 
 
 @pytest.mark.anyio

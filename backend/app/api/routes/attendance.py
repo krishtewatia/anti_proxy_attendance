@@ -2,9 +2,10 @@ import csv
 from datetime import datetime, timezone
 import io
 import logging
+import os
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 from app.api.dependencies.auth import get_owned_session, require_teacher
@@ -32,17 +33,33 @@ router = APIRouter(
 )
 
 
+DEFAULT_STUDENT_CATALOG: dict[str, dict[str, str]] = {
+    "student1": {"student_id": "DS202601", "name": "Rahul Sharma"},
+    "student2": {"student_id": "DS202602", "name": "Aman Kumar"},
+    "student3": {"student_id": "DS202603", "name": "Priya Singh"},
+    "student4": {"student_id": "DS202604", "name": "Krish Tewatia"},
+    "person_01": {"student_id": "DS202601", "name": "Rahul Sharma"},
+    "person_02": {"student_id": "DS202602", "name": "Aman Kumar"},
+    "person_03": {"student_id": "DS202603", "name": "Priya Singh"},
+    "person_04": {"student_id": "DS202604", "name": "Krish Tewatia"},
+}
+
+
 async def _resolve_student_info(db) -> dict[str, dict]:
-    """Return map of identity -> { student_id, name }."""
+    """Return map of identity -> { student_id, name } with catalog fallback."""
+    mapping = {k: dict(v) for k, v in DEFAULT_STUDENT_CATALOG.items()}
     cursor = db["student_profiles"].find({})
     docs = await cursor.to_list(length=None)
-    mapping = {}
     for doc in docs:
-        ident = doc.get("identity")
+        ident = doc.get("identity") or doc.get("biometric_identity")
         if ident:
+            stu_id = doc.get("student_id") or mapping.get(ident, {}).get("student_id", ident)
+            name = (
+                doc.get("name") or doc.get("full_name") or mapping.get(ident, {}).get("name", ident)
+            )
             mapping[ident] = {
-                "student_id": doc.get("student_id", ident),
-                "name": doc.get("name", ident),
+                "student_id": stu_id,
+                "name": name,
             }
     return mapping
 
@@ -67,6 +84,34 @@ async def get_active_session_info():
 
 
 @router.get(
+    "/vision-gallery",
+    summary="Fetch all enrolled biometric profiles and identities for vision service sync",
+)
+async def get_vision_gallery_endpoint():
+    """Returns all enrolled student biometric profiles with identities, names, and mean embeddings for vision matching."""
+    db = get_database()
+    student_map = await _resolve_student_info(db)
+    cursor = db["biometric_profiles"].find({})
+    bio_docs = await cursor.to_list(length=None)
+    items = []
+    for doc in bio_docs:
+        ident = doc.get("identity")
+        emb = doc.get("mean_embedding")
+        if not ident or not emb:
+            continue
+        s_info = student_map.get(ident, {})
+        items.append(
+            {
+                "identity": ident,
+                "student_id": s_info.get("student_id", ident),
+                "name": s_info.get("name", ident),
+                "embedding": emb,
+            }
+        )
+    return {"count": len(items), "gallery": items}
+
+
+@router.get(
     "/{session_id}",
     response_model=AttendanceSessionResponse,
 )
@@ -85,7 +130,14 @@ async def get_session_attendance(
 
     # 2. If roster has students not yet in attendance collection, initialize them as ABSENT
     roster_doc = await get_session_roster(session_id)
-    roster_identities = roster_doc.identities if roster_doc else list(student_map.keys())
+    roster_identities = (
+        list(roster_doc.identities) if (roster_doc and roster_doc.identities) else []
+    )
+    for rec_ident in records_by_ident.keys():
+        if rec_ident not in roster_identities:
+            roster_identities.append(rec_ident)
+    if not roster_identities:
+        roster_identities = list(student_map.keys())
 
     summary_items: list[AttendanceSummaryItem] = []
     present_count = 0
@@ -116,14 +168,20 @@ async def get_session_attendance(
 
         summary_items.append(
             AttendanceSummaryItem(
-                attendance_id=rec.get("attendance_id") if (rec and rec.get("attendance_id")) else f"att_{session_id}_{ident}",
+                attendance_id=rec.get("attendance_id")
+                if (rec and rec.get("attendance_id"))
+                else f"att_{session_id}_{ident}",
                 identity=ident,
                 student_id=stu_id,
                 student_name=stu_name,
                 status=current_status,
-                presence_duration_seconds=float(rec.get("presence_duration_seconds", 0.0)) if rec else 0.0,
+                presence_duration_seconds=float(rec.get("presence_duration_seconds", 0.0))
+                if rec
+                else 0.0,
                 presence_percentage=float(rec.get("presence_percentage", 0.0)) if rec else 0.0,
-                required_presence_percentage=float(rec.get("required_presence_percentage", 0.0)) if rec else 0.0,
+                required_presence_percentage=float(rec.get("required_presence_percentage", 0.0))
+                if rec
+                else 0.0,
                 manually_corrected=bool(rec.get("manually_corrected", False)) if rec else False,
                 requires_review=bool(rec.get("requires_review", False)) if rec else False,
                 anomalies=rec.get("anomalies", []) if rec else [],
@@ -209,6 +267,13 @@ async def mark_student_attendance(
     )
     await upsert_attendance(updated_record)
 
+    # Ensure student is included in the session's roster
+    await db["session_rosters"].update_one(
+        {"session_id": target_session_id},
+        {"$addToSet": {"identities": ident}},
+        upsert=True,
+    )
+
     logger.info(
         "Student marked PRESENT: %s (%s) for session %s",
         stu_name,
@@ -242,7 +307,14 @@ async def export_session_attendance_csv(
     records_by_ident = {r["identity"]: r for r in records}
 
     roster_doc = await get_session_roster(session_id)
-    roster_identities = roster_doc.identities if roster_doc else list(student_map.keys())
+    roster_identities = (
+        list(roster_doc.identities) if (roster_doc and roster_doc.identities) else []
+    )
+    for rec_ident in records_by_ident.keys():
+        if rec_ident not in roster_identities:
+            roster_identities.append(rec_ident)
+    if not roster_identities:
+        roster_identities = list(student_map.keys())
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -330,3 +402,47 @@ async def update_student_attendance_status(
         "status": updated["status"],
         "message": f"Attendance updated to {updated['status']}",
     }
+
+
+@router.post(
+    "/{session_id}/process-frame",
+    summary="Process browser-captured camera frame for live face recognition",
+)
+@router.post(
+    "/process-frame",
+    summary="Process browser-captured camera frame for live face recognition",
+)
+async def process_attendance_frame(
+    request: Request,
+    session_id: Optional[str] = None,
+):
+    """Forward browser camera frame to Vision Service for SCRFD + ArcFace inference."""
+    body = await request.body()
+    content_type = request.headers.get("content-type", "image/jpeg")
+
+    vision_url = os.getenv("VISION_SERVICE_URL", "http://127.0.0.1:8088")
+    if os.getenv("APP_ENV") == "production" and "127.0.0.1" in vision_url:
+        vision_url = "http://vision-service:8088"
+
+    headers = {"Content-Type": content_type}
+    if session_id:
+        headers["X-Session-Id"] = session_id
+
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.post(
+                f"{vision_url.rstrip('/')}/process-frame",
+                content=body,
+                headers=headers,
+                params={"session_id": session_id} if session_id else None,
+            )
+            return resp.json()
+    except Exception as exc:
+        logger.warning("Vision service process-frame forward failed: %s", exc)
+        return {
+            "status": "error",
+            "message": f"Vision service unreachable: {exc}",
+            "recognized": False,
+        }

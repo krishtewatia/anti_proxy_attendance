@@ -33,6 +33,12 @@ def normalize_class_code(branch: str, section: str) -> str:
         words = re.findall(r"[A-Za-z]+", branch_clean)
         prefix = "".join(w[0].upper() for w in words) if words else branch_clean.upper()
 
+    # If section already starts with prefix e.g. "DS-B"
+    if sec_clean.startswith(f"{prefix}-"):
+        return sec_clean
+    if "-" in sec_clean:
+        sec_clean = sec_clean.split("-")[-1]
+
     return f"{prefix}-{sec_clean}"
 
 
@@ -77,6 +83,7 @@ async def upsert_student_profile(
     section: str,
     class_code: str | None = None,
     photo_base64: str | None = None,
+    photo_url: str | None = None,
     has_biometric: bool = False,
 ) -> dict[str, Any]:
     """Create or update full student profile with academic grouping."""
@@ -101,6 +108,8 @@ async def upsert_student_profile(
     }
     if photo_base64:
         doc["photo_base64"] = photo_base64
+    if photo_url:
+        doc["photo_url"] = photo_url
 
     await coll.update_one(
         {"user_id": user_id},

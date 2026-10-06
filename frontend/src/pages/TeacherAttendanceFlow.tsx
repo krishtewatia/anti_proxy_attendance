@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../services";
+import { api, getApiBaseUrl } from "../services";
 import type {
   AttendanceSummaryItem,
   TeacherDashboardResponse,
@@ -49,10 +49,20 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     name: "Ready",
     status: "IDLE",
   });
-  const [cameraOnline, setCameraOnline] = useState<boolean>(true);
-  const [streamKey, setStreamKey] = useState<number>(Date.now());
+  const [cameraOnline, setCameraOnline] = useState<boolean>(false);
+  const [cameraStatus, setCameraStatus] = useState<
+    "FREE" | "REQUESTING_CAMERA" | "CAMERA_READY" | "ATTENDANCE_ACTIVE" | "STOPPING_CAMERA" | "PERMISSION_DENIED" | "UNAVAILABLE"
+  >("FREE");
+  const [cameraErrorMessage, setCameraErrorMessage] = useState<string | null>(null);
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isProcessingRef = useRef<boolean>(false);
   const prevMarkedCountRef = useRef<number>(0);
 
   const previewBaseUrl = useMemo(() => {
@@ -63,7 +73,108 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     return "http://localhost:8088";
   }, []);
 
-  const previewMjpgUrl = `${previewBaseUrl}/preview.mjpg`;
+  // Enumerate available video inputs (Laptop built-in, USB webcams)
+  const enumerateCameras = async () => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.mediaDevices?.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter((d) => d.kind === "videoinput");
+        setAvailableCameras(videoInputs);
+        if (videoInputs.length > 0 && !selectedCameraId) {
+          setSelectedCameraId(videoInputs[0].deviceId);
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
+  useEffect(() => {
+    enumerateCameras();
+    const handleDeviceChange = () => {
+      enumerateCameras();
+    };
+    navigator.mediaDevices?.addEventListener("devicechange", handleDeviceChange);
+    return () => {
+      navigator.mediaDevices?.removeEventListener("devicechange", handleDeviceChange);
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
+
+  // Start physical webcam stream via browser navigator.mediaDevices.getUserMedia()
+  const startCameraStream = async (): Promise<boolean> => {
+    setCameraStatus("REQUESTING_CAMERA");
+    setCameraErrorMessage(null);
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Browser does not support getUserMedia camera access.");
+      }
+
+      const constraints: MediaStreamConstraints = {
+        video: selectedCameraId
+          ? { deviceId: { exact: selectedCameraId }, width: { ideal: 640 }, height: { ideal: 480 } }
+          : { width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      mediaStreamRef.current = stream;
+      setCameraOnline(true);
+      setCameraStatus("CAMERA_READY");
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+
+      // Re-populate friendly camera device labels now that permission is active
+      enumerateCameras();
+      return true;
+    } catch (err: unknown) {
+      setCameraOnline(false);
+      const errorName = err instanceof Error ? err.name : "";
+      if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
+        setCameraErrorMessage("Please allow camera access in your browser settings.");
+        setCameraStatus("PERMISSION_DENIED");
+      } else {
+        setCameraErrorMessage("Please check that your webcam is connected.");
+        setCameraStatus("UNAVAILABLE");
+      }
+      return false;
+    }
+  };
+
+  // Clear recognition overlay canvas
+  const clearOverlay = () => {
+    const canvas = overlayCanvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  };
+
+  // Stop physical webcam stream and release hardware completely
+  const stopCameraStream = () => {
+    setCameraStatus("STOPPING_CAMERA");
+    clearOverlay();
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraOnline(false);
+    setCameraStatus("FREE");
+  };
 
   // Fetch teacher dashboard data
   const fetchTeacherData = async () => {
@@ -134,6 +245,9 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       setCallout({ name: "Scanning", status: "IDLE" });
       setStep(2);
       if (onSelectNav) onSelectNav("attendance");
+
+      // 5. Start browser webcam stream directly
+      await startCameraStream();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(msg || "Failed to start attendance session.");
@@ -156,6 +270,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       setCallout({ name: "Session Resumed", status: "IDLE" });
       setStep(2);
       if (onSelectNav) onSelectNav("attendance");
+
+      await startCameraStream();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(msg || "Failed to resume active session.");
@@ -184,36 +300,229 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     }
   };
 
+  // Attach MediaStream to <video> element once step 2 renders
+  useEffect(() => {
+    if (step === 2 && videoRef.current && mediaStreamRef.current) {
+      if (videoRef.current.srcObject !== mediaStreamRef.current) {
+        videoRef.current.srcObject = mediaStreamRef.current;
+      }
+      videoRef.current.play().catch(() => {});
+    }
+  }, [step, cameraOnline]);
+
+  // Draw face bounding boxes and recognition labels over live video
+  const drawRecognitionOverlay = (
+    faces: Array<{
+      bbox?: number[];
+      box?: number[];
+      name?: string | null;
+      identity?: string | null;
+      student_id?: string | null;
+      similarity?: number;
+      confidence_percent?: number;
+      status?: string;
+    }>,
+    sourceW = 640,
+    sourceH = 480
+  ) => {
+    const canvas = overlayCanvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const displayW = video.clientWidth || video.videoWidth || 640;
+    const displayH = video.clientHeight || video.videoHeight || 480;
+
+    if (canvas.width !== displayW || canvas.height !== displayH) {
+      canvas.width = displayW;
+      canvas.height = displayH;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!faces || faces.length === 0) return;
+
+    const scaleX = displayW / (sourceW || 640);
+    const scaleY = displayH / (sourceH || 480);
+
+    faces.forEach((face) => {
+      const rawBox = face.bbox || face.box;
+      if (!rawBox || rawBox.length < 4) return;
+
+      const [x1, y1, x2, y2] = rawBox;
+      const x = Math.max(0, x1 * scaleX);
+      const y = Math.max(0, y1 * scaleY);
+      const w = Math.min(displayW - x, (x2 - x1) * scaleX);
+      const h = Math.min(displayH - y, (y2 - y1) * scaleY);
+
+      const isRecognized = face.status === "recognized" && face.name && face.name !== "UNKNOWN";
+      const studentName = isRecognized ? face.name! : "UNKNOWN";
+      const pct = face.confidence_percent != null
+        ? `${face.confidence_percent.toFixed(1)}%`
+        : face.similarity != null
+        ? `${(face.similarity * 100).toFixed(1)}%`
+        : "";
+
+      const strokeColor = isRecognized ? "#10b981" : "#f59e0b";
+      const bgColor = isRecognized ? "rgba(16, 185, 129, 0.92)" : "rgba(245, 158, 11, 0.92)";
+
+      // Draw bounding box rectangle
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(x, y, w, h);
+
+      // Label text
+      const labelText = `${studentName} ${pct ? `(${pct})` : ""}`;
+      ctx.font = "bold 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      const textMetrics = ctx.measureText(labelText);
+      const badgeW = textMetrics.width + 16;
+      const badgeH = 24;
+      const badgeX = x;
+      const badgeY = Math.max(0, y - badgeH - 4);
+
+      // Badge background
+      ctx.fillStyle = bgColor;
+      if (typeof ctx.roundRect === "function") {
+        ctx.beginPath();
+        ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4);
+        ctx.fill();
+      } else {
+        ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
+      }
+
+      // Badge text
+      ctx.fillStyle = "#ffffff";
+      ctx.textBaseline = "middle";
+      ctx.fillText(labelText, badgeX + 8, badgeY + badgeH / 2);
+    });
+  };
+
   // ========================================================================
-  // STEP 2: LIVE POLLING FOR RECOGNIZED FACES
+  // STEP 2: LIVE FRAME INFERENCE (BROWSER -> AI) & ROSTER POLLING
   // ========================================================================
   useEffect(() => {
     if (step !== 2 || !sessionId) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const statusRes = await fetch(`${previewBaseUrl}/status`);
-        if (statusRes.ok) {
-          const st = await statusRes.json();
-          const isConnected = Boolean(st.camera_connected);
-          setCameraOnline((prev) => {
-            if (!prev && isConnected) {
-              setStreamKey(Date.now());
-            }
-            return isConnected;
-          });
+    // Periodic frame sampling from browser video element to Vision Service
+    const frameInterval = setInterval(() => {
+      if (isProcessingRef.current) return;
+      const video = videoRef.current;
+      if (!video || video.readyState < 2 || video.paused || video.ended) return;
 
-          if (st.last_recognized) {
-            setCallout({
-              name: st.last_recognized,
-              status: "PRESENT",
-            });
-          }
-        }
-      } catch {
-        setCameraOnline(false);
+      if (!canvasRef.current) {
+        canvasRef.current = document.createElement("canvas");
       }
+      const canvas = canvasRef.current;
+      const targetW = video.videoWidth || 640;
+      const targetH = video.videoHeight || 480;
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+      }
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, targetW, targetH);
 
+      isProcessingRef.current = true;
+      canvas.toBlob(
+        async (blob) => {
+          if (!blob) {
+            isProcessingRef.current = false;
+            return;
+          }
+          try {
+            const formData = new FormData();
+            formData.append("frame", blob, "frame.jpg");
+            if (sessionId) formData.append("session_id", sessionId);
+
+            let res: Response | null = null;
+            try {
+              res = await fetch(`${previewBaseUrl}/process-frame`, {
+                method: "POST",
+                body: formData,
+              });
+            } catch {
+              try {
+                const proxyUrl = `${getApiBaseUrl()}/api/v1/attendance/${sessionId}/process-frame`;
+                res = await fetch(proxyUrl, {
+                  method: "POST",
+                  body: formData,
+                });
+              } catch {
+                res = null;
+              }
+            }
+
+            if (res && res.ok) {
+              const data = await res.json();
+              if (data.faces && Array.isArray(data.faces) && data.faces.length > 0) {
+                drawRecognitionOverlay(data.faces, data.frame_width || targetW, data.frame_height || targetH);
+                const recognizedStudents = data.faces.filter(
+                  (f: any) => f.status === "recognized" && f.name && f.name !== "UNKNOWN"
+                );
+                if (recognizedStudents.length > 0) {
+                  const top = recognizedStudents[0];
+                  setCallout({
+                    name: top.name,
+                    status: "PRESENT",
+                  });
+                  const recognizedIdents = new Set(recognizedStudents.map((f: any) => f.identity));
+                  const recognizedIds = new Set(recognizedStudents.map((f: any) => f.student_id));
+                  setRecords((prev) =>
+                    prev.map((r) =>
+                      recognizedIdents.has(r.identity) || recognizedIds.has(r.student_id)
+                        ? { ...r, status: "PRESENT" }
+                        : r
+                    )
+                  );
+                }
+              } else if (data.box) {
+                drawRecognitionOverlay(
+                  [
+                    {
+                      box: data.box,
+                      name: data.recognized ? data.student_name : "UNKNOWN",
+                      similarity: data.similarity,
+                      status: data.recognized ? "recognized" : "unknown",
+                    },
+                  ],
+                  data.frame_width || targetW,
+                  data.frame_height || targetH
+                );
+                if (data.recognized && data.student_name) {
+                  setCallout({
+                    name: data.student_name,
+                    status: "PRESENT",
+                  });
+                  setRecords((prev) =>
+                    prev.map((r) =>
+                      r.identity === data.identity || r.student_id === data.student_id
+                        ? { ...r, status: "PRESENT" }
+                        : r
+                    )
+                  );
+                }
+              } else {
+                clearOverlay();
+              }
+            } else {
+              clearOverlay();
+            }
+          } catch {
+            // Ignore network jitter
+          } finally {
+            isProcessingRef.current = false;
+          }
+        },
+        "image/jpeg",
+        0.8
+      );
+    }, 250);
+
+    // Periodic roster sync from backend
+    const rosterInterval = setInterval(async () => {
       try {
         const attData = await api.getSessionAttendance(sessionId);
         setRecords(attData.records);
@@ -227,9 +536,13 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       } catch {
         // Ignore network jitter
       }
-    }, 1000);
+    }, 1500);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(frameInterval);
+      clearInterval(rosterInterval);
+      clearOverlay();
+    };
   }, [step, sessionId, previewBaseUrl]);
 
   // ========================================================================
@@ -239,7 +552,13 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     if (!sessionId) return;
     setLoading(true);
     try {
+      // 1. Release physical camera tracks immediately
+      stopCameraStream();
+
+      // 2. Finalize backend session
       await api.endSession(sessionId);
+
+      // 3. Reset vision service
       try {
         await fetch(`${previewBaseUrl}/reset`, {
           method: "POST",
@@ -259,6 +578,20 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Navigate to Dashboard after attendance completion
+  const handleGoToDashboard = () => {
+    stopCameraStream();
+    clearOverlay();
+    setStep(1);
+    setSessionId(null);
+    setRecords([]);
+    setErrorMessage(null);
+    if (onSelectNav) {
+      onSelectNav("dashboard");
+    }
+    fetchTeacherData();
   };
 
   // ========================================================================
@@ -308,9 +641,11 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   };
 
   const handleNewAttendance = () => {
+    stopCameraStream();
     setStep(1);
     setSessionId(null);
     setRecords([]);
+    setCallout({ name: "Ready", status: "IDLE" });
     fetchTeacherData();
   };
 
@@ -493,6 +828,32 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
               </select>
             </div>
 
+            <div className="form-group">
+              <label className="form-label" htmlFor="erp-camera-select">Camera</label>
+              {availableCameras.length > 0 ? (
+                <select
+                  id="erp-camera-select"
+                  className="erp-select-input"
+                  value={selectedCameraId}
+                  onChange={(e) => setSelectedCameraId(e.target.value)}
+                  disabled={hasActiveSession || loading}
+                >
+                  {availableCameras.map((cam, idx) => (
+                    <option key={cam.deviceId || idx} value={cam.deviceId}>
+                      {cam.label || (idx === 0 ? "Integrated Camera" : `USB Webcam ${idx}`)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="erp-select-input" style={{ color: "var(--text-muted)", cursor: "default" }}>
+                  Default PC / USB Webcam
+                </div>
+              )}
+              <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "0.35rem" }}>
+                Camera is not active. (Connects on Take Attendance)
+              </div>
+            </div>
+
             <div style={{ marginTop: "1.5rem" }}>
               <button
                 type="button"
@@ -518,7 +879,13 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
             </div>
             <div className="erp-live-stats-badge">
               <span className={`erp-camera-status-dot ${cameraOnline ? "online" : "offline"}`} />
-              <span style={{ fontWeight: 600 }}>{cameraOnline ? "Live Camera" : "Connecting Camera..."}</span>
+              <span style={{ fontWeight: 600 }}>
+                {cameraOnline
+                  ? "Live Camera"
+                  : cameraStatus === "REQUESTING_CAMERA"
+                  ? "Requesting camera..."
+                  : "Camera Unavailable"}
+              </span>
             </div>
           </div>
 
@@ -527,13 +894,18 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
             {/* Left: LIVE CAMERA */}
             <div className="erp-camera-pane">
               <div className="erp-camera-viewport" style={{ position: "relative" }}>
-                <img
-                  key={streamKey}
-                  src={`${previewMjpgUrl}?t=${streamKey}`}
-                  alt="Live Attendance Camera Viewport"
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
                   className="erp-camera-stream"
-                  onError={() => setCameraOnline(false)}
-                  onLoad={() => setCameraOnline(true)}
+                  style={{ display: cameraOnline ? "block" : "none" }}
+                />
+                <canvas
+                  ref={overlayCanvasRef}
+                  className="recognition-overlay"
+                  style={{ display: cameraOnline ? "block" : "none" }}
                 />
 
                 {!cameraOnline && (
@@ -541,7 +913,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                     style={{
                       position: "absolute",
                       inset: 0,
-                      backgroundColor: "rgba(15, 23, 42, 0.92)",
+                      backgroundColor: "rgba(15, 23, 42, 0.94)",
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "center",
@@ -553,10 +925,16 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                     }}
                   >
                     <div style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "0.5rem" }}>
-                      Camera unavailable
+                      {cameraStatus === "REQUESTING_CAMERA"
+                        ? "Requesting camera..."
+                        : cameraStatus === "PERMISSION_DENIED"
+                        ? "Camera unavailable"
+                        : "Camera unavailable."}
                     </div>
-                    <div style={{ fontSize: "0.875rem", color: "#94a3b8", maxWidth: "280px", lineHeight: 1.4 }}>
-                      Please make sure the webcam is connected and try again.
+                    <div style={{ fontSize: "0.875rem", color: "#94a3b8", maxWidth: "280px", lineHeight: 1.4, whiteSpace: "pre-line" }}>
+                      {cameraStatus === "REQUESTING_CAMERA"
+                        ? "Connecting to physical webcam device..."
+                        : cameraErrorMessage || (cameraStatus === "PERMISSION_DENIED" ? "Please allow camera access in your browser settings." : "Please check that your webcam is connected.")}
                     </div>
                   </div>
                 )}
@@ -677,14 +1055,22 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
             </div>
 
             {/* Actions */}
-            <div className="erp-complete-actions">
+            <div className="erp-complete-actions" style={{ display: "flex", gap: "1rem" }}>
               <button
                 type="button"
-                className="erp-btn erp-btn-primary"
+                className="erp-btn erp-btn-secondary"
                 onClick={handleDownloadCsv}
                 style={{ flex: 1, padding: "0.75rem" }}
               >
-                📥 Download CSV
+                📥 Download Attendance CSV
+              </button>
+              <button
+                type="button"
+                className="erp-btn erp-btn-primary"
+                onClick={handleGoToDashboard}
+                style={{ flex: 1, padding: "0.75rem" }}
+              >
+                Go to Dashboard
               </button>
               <button
                 type="button"

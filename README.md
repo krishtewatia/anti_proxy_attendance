@@ -1,243 +1,485 @@
-# AI Face Recognition Attendance System — Single Local Webcam & ERP Integration
+# AI-Based Face Recognition Attendance System
 
-[![CI Pipeline](https://github.com/krishtewatia/anti_proxy_attendance/actions/workflows/ci.yml/badge.svg)](https://github.com/krishtewatia/anti_proxy_attendance/actions/workflows/ci.yml)
-[![Pre-Commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](.pre-commit-config.yaml)
+[![Docker Stack](https://img.shields.io/badge/docker-compose-blue?logo=docker&logoColor=white)](docker-compose.yml)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![InsightFace](https://img.shields.io/badge/InsightFace-SCRFD%20%2B%20ArcFace-FF6F00)](https://github.com/deepinsight/insightface)
+[![MongoDB](https://img.shields.io/badge/MongoDB-7.0-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com)
 
-A production-grade, privacy-conscious classroom attendance system using edge computer vision (**InsightFace SCRFD + ArcFace**), a high-performance **FastAPI/MongoDB** backend, and a modern **React ERP** portal.
+A modern, privacy-conscious classroom attendance ERP powered by client-side browser webcam acquisition, containerized deep learning inference (**InsightFace SCRFD + ArcFace**), a high-performance **FastAPI** backend, and an interactive **React** portal.
 
 ---
 
-## 1. System Overview
+## Table of Contents
 
-The system is designed for **one-time classroom attendance marking** using a single physical camera connected directly to the instructor's laptop:
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [System Architecture](#system-architecture)
+- [AI Recognition Pipeline](#ai-recognition-pipeline)
+- [Browser Camera Architecture](#browser-camera-architecture)
+- [Real-Time Recognition UI](#real-time-recognition-ui)
+- [Application Workflow & User Roles](#application-workflow--user-roles)
+- [Student Enrollment & Biometric Pipeline](#student-enrollment--biometric-pipeline)
+- [Attendance Workflow & Invariants](#attendance-workflow--invariants)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [Database & Data Models](#database--data-models)
+- [Running the Project Locally](#running-the-project-locally)
+- [API / Service Overview](#api--service-overview)
+- [Automated Testing & Verification](#automated-testing--verification)
+- [Security & Reliability](#security--reliability)
+- [Known Limitations](#known-limitations)
+- [Future Improvements](#future-improvements)
+
+---
+
+## Overview
+
+Traditional computer vision attendance systems often rely on server-side video capture (such as `cv2.VideoCapture`), which introduces severe friction in containerized environments (Docker device passthrough, host permission locks, and hardware virtualization limits).
+
+This project implements a **browser-owned physical camera architecture**:
+1. The instructor's web browser captures frames from the physical laptop webcam or USB camera via standard HTML5 `navigator.mediaDevices.getUserMedia()`.
+2. Captured JPEG frames are sent via HTTP directly to the containerized **Vision Inference Service**.
+3. **SCRFD** detects faces and **ArcFace** extracts 512-dimensional normalized biometric embeddings.
+4. Cosine similarity matching evaluates the face against the dynamic student gallery.
+5. Confirmed identities are posted to the **FastAPI attendance backend**, recording attendance in **MongoDB** idempotently.
+6. The browser renders real-time bounding boxes, student names, and match confidence percentages over the live camera canvas.
+
+---
+
+## Key Features
+
+- **Browser-Owned Webcam**: Zero native Python camera processes required on the host. The browser directly owns and accesses the physical camera via standard Web APIs.
+- **Genuine 512-D ArcFace Biometrics**: Real normalized facial embeddings extracted via InsightFace ONNX models. Zero pseudo-hash or fallback dummy embeddings.
+- **Dynamic Vision Gallery**: Newly registered students are dynamically synced to the vision service in real time without requiring a container restart.
+- **Real-Time Visual Overlay**: Canvas-rendered face bounding boxes, recognized student names, match percentage badges, and `UNKNOWN` rejection labels.
+- **One-Time Idempotent Attendance**: Recognized students are marked `PRESENT` once per session. Subsequent sightings return `already_present` without duplicate records.
+- **Roster-Aware Attendance**: Automatically binds academic class rosters (`DS-B`, `CS-A`). Unscanned students remain `ABSENT` upon session finalization.
+- **Profile Photo Persistence**: Uploaded student photos are persisted to backend storage, exposed via a dedicated HTTP image endpoint, and displayed on student and admin profiles.
+- **Full Role-Based ERP**: Multi-role platform with dedicated workflows for **Students**, **Teachers**, and **Admins**.
+- **CSV Attendance Export**: Instantly download finalized attendance reports with one click.
+- **Containerized Stack**: Standard Docker Compose architecture containing MongoDB, FastAPI backend, Nginx-served React frontend, and the Vision Inference service.
+
+---
+
+## System Architecture
 
 ```text
-Laptop Built-in Webcam / USB Phone Webcam / External USB Camera
-                             ↓
-                 Windows DirectShow / MSMF
-                             ↓
-              OpenCV cv2.VideoCapture(index)
-                             ↓
-        InsightFace SCRFD Face Detection (Buffalo_L)
-                             ↓
-            ArcFace 512-d Feature Extractor
-                             ↓
-          Multi-Frame Plurality Confirmation
-                             ↓
-             FastAPI POST /attendance/mark
-                             ↓
-                  MongoDB Persistence
-                             ↓
-              Teacher ERP Live Dashboard
+ Physical Webcam (Laptop / USB)
+              │
+              ▼
+   Chrome / Modern Browser
+   ├── navigator.mediaDevices.getUserMedia()
+   ├── HTML5 <video> Element
+   └── <canvas> Frame Extractor
+              │
+              ├── POST /process-frame (JPEG Frame)
+              ▼
+   Vision Service (:8088)
+   ├── SCRFD 0.5G Face Detector
+   ├── ArcFace MobileFaceNet / ResNet 512-d Extractor
+   ├── Dynamic Biometric Gallery Cosine Matcher
+   └── Ambiguity & Margin Guard (sim >= 0.50, margin >= 0.15)
+              │
+              ├── POST /api/v1/attendance/mark
+              ▼
+   FastAPI Attendance Backend (:8000)
+   ├── JWT Auth & Role-Based Access Control
+   ├── Session Roster Validation
+   ├── Idempotent Attendance Engine
+   └── Static / Upload Image Serving
+              │
+              ▼
+   MongoDB Database (:27017)
+   ├── student_profiles & users
+   ├── biometric_profiles (mean 512-d vectors)
+   ├── sessions & session_rosters
+   └── attendance_records
+              │
+              ▼
+   Teacher ERP Dashboard (:3000)
+   └── Real-time Attendance List, Overlays & CSV Export
 ```
-
-### Core Attendance Rule:
-> **Face Detected → Student Recognized → Marked PRESENT Once per Session**
-- **One-Time Attendance**: Each student is marked PRESENT only once per session.
-- **Duplicate Prevention**: Subsequent appearances return `already_present` without duplicate records.
-- **Unknown Face Rejection**: Unknown or unconfirmed faces are never marked present.
-- **Session Auto-Discovery**: The native vision runner automatically detects the teacher's active session.
 
 ---
 
-## 2. Architecture & Execution Model
+## AI Recognition Pipeline
 
-To ensure reliable hardware access to Windows webcams without virtualization friction, the recommended architecture is:
+The computer vision architecture strictly decouples **detection**, **recognition**, and **attendance business logic**:
 
 ```text
-Windows Host
-│
-├── Physical Webcam (Built-in / USB Phone / External)
-│
-├── Vision Service (Native Windows Python Process)
-│     ├── OpenCV VideoCapture() via DirectShow / MSMF
-│     ├── SCRFD + ArcFace Deep Learning Pipeline
-│     └── MJPEG Stream Server (http://localhost:8088/preview.mjpg)
-│
-├── Docker Containers
-│     ├── MongoDB 7.0 (Port 27017)
-│     ├── FastAPI Backend (Port 8000)
-│     └── React Frontend SPA (Port 3000)
-│
-└── Web Browser (Instructor ERP UI)
+Raw Frame ──► [Face Detection: SCRFD] ──► Bounding Boxes & Landmarks
+                       │
+                       ▼
+             [Face Alignment & Cropping] ──► 112x112 Aligned Face
+                       │
+                       ▼
+             [Feature Extraction: ArcFace] ──► 512-d L2-Normalized Vector
+                       │
+                       ▼
+             [Gallery Cosine Similarity] ──► Best Match + Runner-Up Score
+                       │
+                       ▼
+             [Margin & Threshold Gate] ──► Confirmed Identity or UNKNOWN
+                       │
+                       ▼
+             [Attendance State Machine] ──► One-Time PRESENT in Active Session
 ```
+
+### Clarifying Detection vs. Recognition vs. Attendance
+
+| Stage | Responsibility | Mechanism |
+| :--- | :--- | :--- |
+| **Face Detection** | Locates *where* human faces exist in the camera frame. | **SCRFD (Sample and Computation Redistribution for Face Detection)**: Produces bounding boxes `[x1, y1, x2, y2]` and facial landmarks. Does not identify who the person is. |
+| **Face Recognition** | Determines *who* the detected face belongs to. | **ArcFace (Additive Angular Margin Loss)**: Computes a 512-dimensional normalized embedding vector. Calculates cosine similarity $S = \vec{v}_{\text{face}} \cdot \vec{v}_{\text{gallery}}$. Evaluates threshold ($S \ge 0.50$) and runner-up margin ($S_1 - S_2 \ge 0.15$). |
+| **Attendance Marking** | Records verifiable academic presence. | **FastAPI Attendance Service**: Validates that the recognized identity is part of the active session's class roster, confirms presence, marks status as `PRESENT` idempotently, and prevents duplicate marks. |
 
 ---
 
-## 3. Quickstart & Startup Lifecycle
+## Browser Camera Architecture
 
-### Recommended: One-Click Startup Script
-The project includes automated startup and shutdown scripts for Windows:
+### Why the Browser Owns the Physical Webcam
 
-```powershell
-# Start everything (Docker MongoDB, Backend, Frontend + Standby Vision Agent):
-powershell -ExecutionPolicy Bypass -File scripts/start_dev.ps1
-```
-*What this script does:*
-1. Starts Docker containers (`anti-proxy-mongodb`, `anti-proxy-backend`, `anti-proxy-frontend`).
-2. Waits for FastAPI backend to pass `/health`.
-3. Preloads the native Windows Vision Agent (`run_local_webcam.py`) in **Standby Mode** on port 8088.
-4. **The physical camera remains completely CLOSED and released** until the teacher starts an attendance session in the ERP portal.
+In previous iterations, native Python processes used OpenCV `cv2.VideoCapture(0)` to read directly from DirectShow or V4L2. However, in containerized or server-client setups, this causes major architectural flaws:
+1. **Container Isolation**: Docker containers cannot directly bind to local host webcams without complex, OS-specific device mapping (`/dev/video0`) which fails on Windows Docker Desktop.
+2. **Device Locking**: Exclusive OS webcam locks prevent multiple processes from viewing the stream.
+3. **No Client Hardware Access**: A web application running in a user's browser cannot command a remote server to "grab" the client's local USB camera.
 
-To cleanly stop the system and release all camera and container handles:
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/stop_dev.ps1 [-StopDocker]
-```
+### How It Works Now
+- The browser requests webcam permission via standard `navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } })`.
+- Supported devices include integrated laptop cameras, external USB webcams, and mobile devices connected as webcams.
+- A hidden HTML5 `<canvas>` extracts video frames at ~2–3 FPS as compressed JPEG blobs and posts them to `http://localhost:8088/process-frame`.
+- When the teacher ends attendance, `stream.getTracks().forEach(track => track.stop())` is called immediately, cleanly releasing the camera hardware indicator in Windows.
 
 ---
 
-### Manual Startup Method
+## Real-Time Recognition UI
 
-#### Step 1: Start Docker Services
-```powershell
-docker compose up -d mongodb backend frontend
-```
-Verify health:
-- **Frontend ERP Portal**: [http://localhost:3000](http://localhost:3000)
-- **Backend API**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Backend Health**: [http://localhost:8000/health](http://localhost:8000/health)
-
-#### Step 2: Camera Discovery & Hardware Diagnostics
-```powershell
-# Discover available camera devices:
-.\vision-service\.venv\Scripts\python.exe vision-service/list_cameras.py
-
-# Run standalone camera test on index 0:
-.\vision-service\.venv\Scripts\python.exe vision-service/test_camera.py --camera-index 0
-```
-
-#### Step 3: Run the Native Vision Agent
-Launch the vision agent natively on Windows:
-```powershell
-# Auto-probes available camera (defaults to Standby until session starts):
-.\vision-service\.venv\Scripts\python.exe vision-service/run_local_webcam.py
-```
-- **Live Annotated MJPEG Stream**: [http://localhost:8088/preview.mjpg](http://localhost:8088/preview.mjpg)
-- **Telemetry & Status**: [http://localhost:8088/status](http://localhost:8088/status)
-- **Control / Reset**: `POST http://localhost:8088/reset`
-
----
-
-## 4. Automatic Camera Lifecycle
-
-The system enforces a clean hardware ownership lifecycle:
+During an active session, the camera feed renders live visual feedback directly on top of the `<video>` element using an overlay `<canvas>`:
 
 ```text
-Teacher logs into ERP
-        ↓
-Teacher selects Class + Subject
-        ↓
-Teacher clicks "Take Attendance"
-        ↓
-Backend marks session ACTIVE
-        ↓
-Vision Agent detects active session within 500ms
-        ↓
-Vision Agent OPENS physical webcam (DirectShow)
-        ↓
-Live MJPEG feed starts streaming to Teacher ERP
-        ↓
-Students stand before webcam → Recognized → Marked PRESENT
-        ↓
-Teacher clicks "End Attendance & Finalize"
-        ↓
-Backend marks session FINALIZED
-        ↓
-Vision Agent detects no active session
-        ↓
-Vision Agent RELEASES physical webcam cleanly
-        ↓
-Camera immediately available to other Windows applications
++-----------------------------------------------------------+
+|                                                           |
+|       +-------------------+                               |
+|       |  [0.92]           |                               |
+|       |  Rahul Sharma     | <--- Green Box (Recognized)   |
+|       |  92.3%            |                               |
+|       +-------------------+                               |
+|                                     +---------------+     |
+|                                     |  [0.18]       |     |
+|                                     |  UNKNOWN      |     |
+|                                     |  18.2%        |     |
+|                                     +---------------+     |
+|                                       ^                   |
+|                                       |-- Red Box         |
+|                                                           |
++-----------------------------------------------------------+
 ```
 
----
-
-## 5. Phone as USB Webcam Support
-
-To use an Android or iOS smartphone as the attendance camera:
-1. Connect phone to the laptop via **USB cable**.
-2. Run standard USB webcam software on phone & PC (e.g., **DroidCam**, **Iriun Webcam**, or **Camo**).
-3. The phone camera is exposed to Windows as a standard DirectShow video device.
-4. Run `python vision-service/list_cameras.py` to identify its device index (e.g. index `1`).
-5. Launch the vision runner targeting that index:
-   ```powershell
-   python vision-service/run_local_webcam.py --camera-index 1
-   ```
+- **Recognized Students**: Drawn with green bounding boxes displaying the student name and confidence percentage (e.g., `Rahul Sharma (92.3%)`).
+- **Unknown Faces**: Drawn with red bounding boxes displaying `UNKNOWN` when similarity falls below the threshold ($< 0.50$) or margin is insufficient ($< 0.15$).
+- **Multi-Face Tracking**: Multiple students in frame are detected, bounded, and labeled simultaneously.
 
 ---
 
-## 5. End-to-End Classroom Walkthrough
+## Application Workflow & User Roles
 
-1. **Teacher Login**:
-   - Open [http://localhost:3000](http://localhost:3000)
-   - Email: `teacher@demo.edu` | Password: `TeacherDevPass123!`
-2. **Start Attendance Session (Screen 1)**:
-   - Select Class (`DS-B`) and Subject (`Machine Learning`)
-   - Click **Take Attendance**
-   - Session status becomes `ACTIVE`; auto-roster of students is loaded as `ABSENT`.
-3. **Live Attendance Scanning (Screen 2)**:
-   - Viewport connects to `http://localhost:8088/preview.mjpg`.
-   - The vision runner automatically syncs with the active session.
-   - Enrolled students step in front of the camera:
-     - ArcFace recognizes identity $\to$ Backend marks student **`PRESENT`**.
-     - Student row updates live in the teacher's roster.
-     - Repeat sightings are recognized without duplicate entries.
-4. **Finalize Attendance (Screen 3)**:
-   - Click **End Attendance & Finalize**.
-   - Attendance session is finalized; remaining unscanned students remain `ABSENT`.
-   - Teacher can review attendance percentage and click **Export CSV** to download `Machine_Learning_attendance_<id>.csv`.
+The system supports three distinct user roles governed by JWT authentication and RBAC:
+
+```mermaid
+graph TD
+    A[User Enters ERP] --> B{Select Role}
+    B -->|Student| C[Student Dashboard]
+    B -->|Teacher| D[Teacher Attendance Flow]
+    B -->|Admin| E[Admin Management Panel]
+
+    C --> C1[View Academic Profile & Photo]
+    C --> C2[View Overall & Subject Attendance %]
+    C --> C3[Inspect Session History Logs]
+
+    D --> D1[Select Assigned Class & Subject]
+    D1 --> D2[Start Attendance Session]
+    D2 --> D3[Browser Requests Webcam Stream]
+    D3 --> D4[Live AI Face Recognition & Overlays]
+    D4 --> D5[End Attendance & Finalize]
+    D5 --> D6[Download Final CSV Report]
+
+    E --> E1[Manage Students & Biometrics]
+    E --> E2[Manage Teachers & Class Assignments]
+    E --> E3[Manage Classes & Subjects Curriculum]
+```
+
+### 1. Student Role
+- **Self-Service Registration**: Upload personal photograph, student ID, roll number, department, and section.
+- **Student Profile**: View official academic profile photo, department credentials, and biometric status.
+- **Attendance Analytics**: View aggregate attendance percentage, subject-wise attendance breakdown, and complete attendance history.
+
+### 2. Teacher Role
+- **Assigned Classes**: Teachers can only start sessions for classes explicitly assigned to them by administrators.
+- **One-Click Attendance**: Initiate an attendance session with automatic student roster population (`ABSENT` by default).
+- **Live Recognition Feed**: Monitor recognized students in real time with audio-visual confirmation.
+- **Session Finalization & Export**: Finalize attendance records and download clean CSV reports (`<Course>_attendance_<session_id>.csv`).
+
+### 3. Administrator Role
+- **Student Directory**: View all registered students with profile photo thumbnails and biometric status.
+- **Teacher Assignment**: Assign specific branches and sections (`DS-B`, `CS-A`) and subjects to faculty members.
+- **Curriculum Management**: Create academic departments, classes, and subjects.
 
 ---
 
-## 6. Pre-configured Credentials
+## Student Enrollment & Biometric Pipeline
 
-| Role | Email | Password | Assigned Classes |
+```text
+1. Student registers on Web UI (Name, ID, Section, Photo)
+                    │
+                    ▼
+2. Backend receives multipart/JSON request
+                    │
+                    ▼
+3. Photo bytes persisted to disk: backend/uploads/student_profiles/{id}.jpg
+                    │
+                    ▼
+4. POST /extract-embedding to Vision Service (timeout: 25s)
+                    │
+         ┌──────────┴──────────┐
+         ▼                     ▼
+   Face Detected         No Face Detected
+         │                     │
+         ▼                     ▼
+   ArcFace ONNX          Registration Fails (HTTP 400)
+   512-d Normalized      "No face detected in photo.
+   Embedding Vector       Please upload clear photo."
+         │
+         ▼
+5. Upsert biometric_profiles in MongoDB
+                    │
+                    ▼
+6. POST /enroll-student to Vision Service
+                    │
+                    ▼
+7. Identity added to self.gallery in RAM and cached to disk
+                    │
+                    ▼
+8. Instantly recognizable in live attendance without restart
+```
+
+> [!IMPORTANT]
+> **No Dummy Fallback Guarantee**: The legacy pseudo-hash (SHA-512) fallback vector mechanism has been completely excised. If a clear frontal face cannot be extracted, registration aborts with an informative error message.
+
+---
+
+## Attendance Workflow & Invariants
+
+### State Machine Invariants
+1. **One-Time Marking**: When a student is recognized, a single record with status `PRESENT` is created. Subsequent detections of the same student during that session return status `already_present` without duplicate events.
+2. **Session-Scoped Roster**: Only students enrolled in the class being taught (or dynamically recognized) are processed.
+3. **Unknown Rejection**: Faces classified as `UNKNOWN` or with similarity $< 0.50$ are rejected by the backend and never marked present.
+4. **Finalization Completeness**: When the session ends, students who were never recognized remain marked as `ABSENT`.
+
+---
+
+## Technology Stack
+
+| Layer | Component | Version / Library | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Admin** | `admin@system.local` | `AdminDevPass123!` | System Administrator |
-| **Teacher** | `teacher@demo.edu` | `TeacherDevPass123!` | DS-B, CS-A |
-| **Student** | `rahul@demo.edu` | `StudentDevPass123!` | DS-B (Rahul Sharma, DS202601) |
-| **Student** | `aman@demo.edu` | `StudentDevPass123!` | DS-B (Aman Kumar, DS202602) |
-| **Student** | `priya@demo.edu` | `StudentDevPass123!` | DS-B (Priya Singh, DS202603) |
-| **Student** | `krish@demo.edu` | `StudentDevPass123!` | DS-B (Krish Tewatia, DS202604) |
+| **Frontend** | React SPA | React 19, TypeScript, Vite 8 | User interface, authentication state, ERP dashboards |
+| **Webcam Engine** | HTML5 Media API | `getUserMedia()`, HTML5 Canvas | Browser hardware capture and JPEG frame serialization |
+| **Backend API** | FastAPI | Python 3.12, Uvicorn, Motor | Async REST API, JWT auth, business logic |
+| **Database** | MongoDB | MongoDB 7.0 | Persistent document storage for users, profiles, and attendance |
+| **Face Detection** | InsightFace SCRFD | SCRFD-0.5G ONNX | Lightweight, high-accuracy edge face detection |
+| **Face Recognition**| ArcFace | MobileFaceNet / ResNet ONNX | 512-dimensional discriminative facial feature extraction |
+| **Vision Server** | aiohttp / OpenCV | Python 3.11, aiohttp, OpenCV Headless | Frame processing, embedding matching, gallery caching |
+| **Web Server** | Nginx | Nginx Unprivileged 1.27 Alpine | Reverse proxy for frontend assets and backend API routing |
+| **Containerization**| Docker Compose | Multi-container compose | Local orchestration with isolated internal bridge networks |
 
 ---
 
-## 7. Verification & Automated Test Suites
+## Project Structure
 
-### Run Backend Tests:
-```powershell
-cd backend
-.\.venv\Scripts\python.exe -m pytest -q tests/test_phase2_multi_role_e2e.py tests/test_one_time_demo_e2e.py
+```text
+anti_proxy_project/
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── dependencies/       # JWT auth guards & role verifiers
+│   │   │   └── routes/             # REST endpoints (auth, sessions, attendance, students)
+│   │   ├── core/                   # Configuration, security logging, environment
+│   │   ├── database/               # Motor MongoDB repositories & indexes
+│   │   ├── schemas/                # Pydantic data schemas & response models
+│   │   ├── security/               # Password hashing (bcrypt) & JWT issuance
+│   │   ├── services/               # Biometrics, student registration, attendance logic
+│   │   └── main.py                 # FastAPI application factory & static mounts
+│   ├── tests/                      # Pytest unit and integration test suites
+│   ├── uploads/student_profiles/   # Persistent storage for student profile photographs
+│   ├── Dockerfile                  # Production FastAPI container specification
+│   └── requirements.txt            # Python dependencies for backend service
+├── frontend/
+│   ├── src/
+│   │   ├── api/                    # Axios / Fetch client wrappers
+│   │   ├── components/             # Reusable UI components (LiveAttendanceFeed, modals)
+│   │   ├── pages/                  # TeacherAttendanceFlow, StudentDashboard, AdminDashboard
+│   │   ├── services/               # API service layer with authentication interceptors
+│   │   └── types/                  # TypeScript interface definitions
+│   ├── nginx.conf                  # Nginx SPA and reverse proxy configuration
+│   ├── Dockerfile                  # Multi-stage Vite build and unprivileged Nginx runtime
+│   └── package.json                # Frontend dependencies & test scripts
+├── vision-service/
+│   ├── camera/
+│   │   └── webrtc_receiver.py      # HTTP frame ingestion, SCRFD/ArcFace pipeline, gallery
+│   ├── detection/                  # SCRFD ONNX model wrappers
+│   ├── recognition/                # ArcFace embedding extraction & similarity matching
+│   ├── tests/                      # Vision unit tests & benchmark face datasets
+│   ├── Dockerfile                  # Python container with InsightFace & ONNX Runtime
+│   └── requirements.txt            # Vision service dependencies
+├── docker-compose.yml              # Local orchestration stack specification
+├── .env.example                    # Template environment variables
+└── README.md                       # Project documentation
 ```
-*(All pass with 100% success).*
 
-### Run Vision Service Tests:
-```powershell
-cd vision-service
-.\.venv\Scripts\python.exe -m pytest -q
+---
+
+## Database & Data Models
+
+The system uses MongoDB with the following collections:
+
+- `users`: Credentials, hashed passwords (`bcrypt`), and assigned role (`STUDENT`, `TEACHER`, `ADMIN`).
+- `student_profiles`: Academic credentials (`student_id`, `roll_number`, `branch`, `section`, `class_code`, `photo_url`, `has_biometric`).
+- `teacher_profiles`: Faculty information and allowed classes (`assigned_classes`, `assigned_subjects`).
+- `academic_classes` & `academic_subjects`: Department curriculum structure (`DS-B`, `CS-A`).
+- `biometric_profiles`: Extracted ArcFace 512-dimensional mean embedding vector (`mean_embedding`), quality scores, and enrolled timestamp.
+- `sessions`: Scheduled and active attendance sessions (`course_name`, `class_code`, `status`, `start_time`, `end_time`).
+- `session_rosters`: List of student identities belonging to an attendance session.
+- `attendance_records`: Per-student attendance records for a session (`status`: `PRESENT` or `ABSENT`, `marked_at`).
+- `audit_logs`: Immutable audit trails for manual status corrections.
+
+---
+
+## Running the Project Locally
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (with Docker Compose v2)
+- Node.js 20+ (optional, for local frontend development)
+- Python 3.11+ (optional, for local script execution)
+
+### 1. Clone & Configure Environment
+```bash
+git clone https://github.com/krishtewatia/anti_proxy_attendance.git
+cd anti_proxy_attendance
+cp .env.example .env
 ```
-*(131 passed).*
 
-### Run Frontend Build & Tests:
-```powershell
+### 2. Launch Stack with Docker Compose
+```bash
+docker compose up -d
+```
+
+Verify service status:
+```bash
+docker compose ps
+```
+All four containers should report `healthy` or `Up`:
+- `anti-proxy-mongodb` (`localhost:27017`)
+- `anti-proxy-backend` (`localhost:8000`)
+- `anti-proxy-frontend` (`localhost:3000`)
+- `anti-proxy-vision-service` (`localhost:8088`)
+
+### 3. Open Web Portal
+- **Frontend Portal**: [http://localhost:3000](http://localhost:3000)
+- **FastAPI OpenAPI Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Vision Service Status**: [http://localhost:8088/status](http://localhost:8088/status)
+
+### Pre-Configured Demo Accounts
+
+| Role | Email | Password | Assigned Scope |
+| :--- | :--- | :--- | :--- |
+| **Admin** | `admin@system.local` | `AdminDevPass123!` | System Administration & Directory |
+| **Teacher** | `teacher@demo.edu` | `TeacherDevPass123!` | Classes: `DS-B`, `DS-C` |
+| **Student** | `rahul@demo.edu` | `StudentDevPass123!` | Class: `DS-B` (ID: `DS202601`) |
+| **Student** | `aman@demo.edu` | `StudentDevPass123!` | Class: `DS-B` (ID: `DS202602`) |
+| **Student** | `priya@demo.edu` | `StudentDevPass123!` | Class: `DS-B` (ID: `DS202603`) |
+| **Student** | `krish@demo.edu` | `StudentDevPass123!` | Class: `DS-B` (ID: `DS202604`) |
+
+---
+
+## API / Service Overview
+
+### Backend Core Routes (`:8000`)
+
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/auth/register` | Public | Register general user account |
+| `POST` | `/api/v1/auth/login` | Public | Authenticate and obtain JWT access token |
+| `POST` | `/api/v1/students/register` | Public | Self-service student registration with photo & biometrics |
+| `GET` | `/api/v1/students/me` | Student | Get authenticated student's profile & attendance metrics |
+| `GET` | `/api/v1/students/{student_id}/photo` | Public / Proxy | Serve student profile photograph (JPEG) |
+| `POST` | `/api/v1/sessions` | Teacher | Create new active attendance session for class |
+| `GET` | `/api/v1/sessions/active` | Teacher | Query current active session for teacher |
+| `GET` | `/api/v1/attendance/{session_id}` | Teacher | Retrieve full student roster & live attendance statuses |
+| `POST` | `/api/v1/attendance/{session_id}/mark` | Public / Camera | Mark recognized student as `PRESENT` |
+| `GET` | `/api/v1/attendance/{session_id}/export` | Teacher | Download attendance roster as formatted CSV |
+| `POST` | `/api/v1/sessions/{session_id}/finalize` | Teacher | Finalize session and lock records |
+
+### Vision Service Routes (`:8088`)
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/status` | Service status, pipeline status, and memory metrics |
+| `GET` | `/gallery` | List of all enrolled identities currently in memory |
+| `POST` | `/process-frame` | Submit browser frame (JPEG); returns bounding boxes, similarity, and recognition status |
+| `POST` | `/extract-embedding` | Extract 512-d ArcFace vector from uploaded image |
+| `POST` | `/enroll-student` | Dynamically register identity and vector into live gallery |
+| `POST` | `/reload-gallery` | Synchronize live gallery directly from MongoDB via backend API |
+
+---
+
+## Automated Testing & Verification
+
+### Run Backend Unit & Integration Tests
+```bash
+docker exec anti-proxy-backend pytest -v
+```
+
+### Run Frontend Contract & E2E Tests
+```bash
 cd frontend
-npm run test
+npm ci
+npm test
 npm run build
 ```
-*(All 12 test suites pass, TypeScript build succeeds cleanly).*
 
-### Run Physical Hardware Integration Verification:
-```powershell
-python scripts/verify_physical_camera_integration.py
+### Run Vision Service Attendance Tests
+```bash
+docker exec anti-proxy-vision-service python -m unittest discover tests/
+```
+
+### Run Full-Stack End-to-End Verification
+```bash
+python scripts/verify_full_browser_webcam_e2e.py
 ```
 
 ---
 
-## 8. Troubleshooting
+## Security & Reliability
 
-| Issue | Resolution |
-| :--- | :--- |
-| **Camera opened: NO** | Ensure another application (Teams, Zoom, Camera app) is not holding exclusive access. Check Windows Settings > Privacy & Security > Camera. |
-| **Camera stream interrupted** | Verify USB cable connection or select correct index with `python vision-service/list_cameras.py`. |
-| **Camera unavailable overlay in UI** | Ensure native vision runner is active on port 8088 (`python vision-service/run_local_webcam.py`). |
-| **No active session found** | Attendance events are held until a teacher clicks "Take Attendance" in the ERP UI. |
+- **Secret Key Validation**: Startup checks enforce that `JWT_SECRET_KEY` meets high-entropy length requirements (minimum 32 characters).
+- **CORS Configuration**: Explicit origin whitelisting (`http://localhost:3000`) prevents cross-site request abuse while allowing browser webcam frame submission.
+- **Payload Limits**: Vision service and backend middleware reject oversized payloads to mitigate memory exhaustion.
+- **Ambiguity Guard**: Recognition enforces both a minimum similarity threshold ($S \ge 0.50$) and a runner-up margin ($S_1 - S_2 \ge 0.15$), preventing false positives when multiple students share similar facial features.
+- **Data Protection**: User profile photos and raw biometric vectors are stored locally on persistent Docker volumes and excluded from Git version control.
+
+---
+
+## Known Limitations
+
+- **Single Active Session per Teacher**: Teachers are restricted to one active attendance session at a time.
+- **2D Facial Recognition**: The standard ArcFace pipeline uses 2D RGB frames without depth-sensing hardware; extreme angles or severe lighting variations can reduce match confidence.
+- **Client Processing**: Browser frame extraction frequency depends on the client machine's processing power.
+
+---
+
+## Future Improvements
+
+- **Cloud Object Storage**: Transition from local volume mounts to S3/GCS object storage for student photographs.
+- **Passive Liveness Detection**: Integrate anti-spoofing models (e.g., MiniFASNet) to counter printed photo or video replay presentation attacks.
+- **Distributed Inference**: Scale vision processing across a worker queue (e.g., Celery / Redis) for university-wide simultaneous multi-classroom deployments.
+- **Automated CI/CD**: Implement automated build pipelines with GPU runner acceleration for ONNX inference benchmarking.
