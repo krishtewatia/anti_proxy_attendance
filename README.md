@@ -40,10 +40,10 @@ Traditional computer vision attendance systems often rely on server-side video c
 
 This project implements a **browser-owned physical camera architecture**:
 1. The instructor's web browser captures frames from the physical laptop webcam or USB camera via standard HTML5 `navigator.mediaDevices.getUserMedia()`.
-2. Captured JPEG frames are sent via HTTP directly to the containerized **Vision Inference Service**.
-3. **SCRFD** detects faces and **ArcFace** extracts 512-dimensional normalized biometric embeddings.
-4. Cosine similarity matching evaluates the face against the dynamic student gallery.
-5. Confirmed identities are posted to the **FastAPI attendance backend**, recording attendance in **MongoDB** idempotently.
+2. Captured JPEG frames are sent to the **FastAPI backend** with the teacher's login token. The backend checks that the teacher owns the session and that it is active.
+3. The backend forwards the frame to the internal **Vision Inference Service**, where **SCRFD** detects faces and **ArcFace** extracts 512-dimensional normalized biometric embeddings.
+4. Cosine similarity matching evaluates the face against the student gallery, which the vision service loads from the backend.
+5. The vision service returns a **signed recognition result**. The backend verifies it, checks the class roster, and records attendance in **MongoDB** idempotently. The browser never talks to the vision service and never asserts an identity.
 6. The browser renders real-time bounding boxes, student names, and match confidence percentages over the live camera canvas.
 
 ---
@@ -66,29 +66,33 @@ This project implements a **browser-owned physical camera architecture**:
 ## System Architecture
 
 ```text
- Physical Webcam (Laptop / USB)
+ Physical Webcam (Laptop / USB / phone as USB webcam)
               │
               ▼
-   Chrome / Modern Browser
+   Chrome / Modern Browser  ── Teacher ERP Dashboard (:3000)
    ├── navigator.mediaDevices.getUserMedia()
    ├── HTML5 <video> Element
    └── <canvas> Frame Extractor
               │
-              ├── POST /process-frame (JPEG Frame)
-              ▼
-   Vision Service (:8088)
-   ├── SCRFD 0.5G Face Detector
-   ├── ArcFace MobileFaceNet / ResNet 512-d Extractor
-   ├── Dynamic Biometric Gallery Cosine Matcher
-   └── Ambiguity & Margin Guard (sim >= 0.50, margin >= 0.15)
-              │
-              ├── POST /api/v1/attendance/mark
+              ├── POST /api/v1/attendance/{session_id}/process-frame
+              │   (JPEG frame + teacher JWT)
               ▼
    FastAPI Attendance Backend (:8000)
-   ├── JWT Auth & Role-Based Access Control
-   ├── Session Roster Validation
-   ├── Idempotent Attendance Engine
-   └── Static / Upload Image Serving
+   ├── JWT Auth, Session Ownership, Session Must Be ACTIVE
+   ├── Rate Limiting (per session and per teacher)
+   ├── Verifies Signed Recognition Results (HMAC, 30 s expiry, no replay)
+   ├── Session Roster Validation & Manual-Correction Lock
+   └── Idempotent Attendance Engine
+              │                         ▲
+              │ frame + service key     │ signed recognition result
+              ▼                         │
+   Vision Service (internal only, no published port)
+   ├── SCRFD 0.5G Face Detector
+   ├── ArcFace 512-d Extractor
+   ├── Gallery Loaded From the Backend (never from a file)
+   └── Ambiguity & Margin Guard (sim >= 0.50, margin >= 0.15)
+
+   FastAPI Attendance Backend
               │
               ▼
    MongoDB Database (:27017)
@@ -149,7 +153,7 @@ In previous iterations, native Python processes used OpenCV `cv2.VideoCapture(0)
 ### How It Works Now
 - The browser requests webcam permission via standard `navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } })`.
 - Supported devices include integrated laptop cameras, external USB webcams, and mobile devices connected as webcams.
-- A hidden HTML5 `<canvas>` extracts video frames at ~2–3 FPS as compressed JPEG blobs and posts them to `http://localhost:8088/process-frame`.
+- A hidden HTML5 `<canvas>` extracts video frames at ~2–3 FPS as compressed JPEG blobs and posts them to the backend route `/api/v1/attendance/{session_id}/process-frame` with the teacher's token.
 - When the teacher ends attendance, `stream.getTracks().forEach(track => track.stop())` is called immediately, cleanly releasing the camera hardware indicator in Windows.
 
 ---
@@ -258,7 +262,7 @@ graph TD
 6. POST /enroll-student to Vision Service
                     │
                     ▼
-7. Identity added to self.gallery in RAM and cached to disk
+7. Identity added to the in-memory gallery (never written to disk)
                     │
                     ▼
 8. Instantly recognizable in live attendance without restart
@@ -369,9 +373,15 @@ cd anti_proxy_attendance
 cp .env.example .env
 ```
 
+Open `.env` and replace every `replace_with_...` value with your own secret. The stack refuses to start until `RECOGNITION_SIGNING_KEY` is a real value. Generate each secret with:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
 ### 2. Launch Stack with Docker Compose
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 Verify service status:
@@ -379,20 +389,48 @@ Verify service status:
 docker compose ps
 ```
 All four containers should report `healthy` or `Up`:
-- `anti-proxy-mongodb` (`localhost:27017`)
+- `anti-proxy-mongodb` (`localhost:27017`, bound to this machine only)
 - `anti-proxy-backend` (`localhost:8000`)
 - `anti-proxy-frontend` (`localhost:3000`)
-- `anti-proxy-vision-service` (`localhost:8088`)
+- `anti-proxy-vision-service` (internal only: it has no published port and is called by the backend)
 
-### 3. Open Web Portal
-- **Frontend Portal**: [http://localhost:3000](http://localhost:3000)
-- **FastAPI OpenAPI Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Vision Service Status**: [http://localhost:8088/status](http://localhost:8088/status)
+### 3. Create the Admin and Teacher Accounts
+Admin accounts cannot be created from the web portal, so bootstrap them once with the seed script. It needs `pymongo` and `bcrypt` on the machine you run it from:
 
-### Pre-Configured Demo Accounts
+```bash
+pip install pymongo bcrypt
+```
 
-| Role | Email | Password | Assigned Scope |
+```bash
+python scripts/seed_clean_demo.py --no-demo-students --admin-password "<your admin password>" --teacher-password "<your teacher password>"
+```
+
+> [!WARNING]
+> The seed script **purges the application collections** in the target database before seeding. Run it on a fresh database, not on one whose data you want to keep.
+
+It creates:
+
+| Role | Email | Password | Scope |
 | :--- | :--- | :--- | :--- |
+| **Admin** | `admin@system.local` | the `--admin-password` you passed (default `AdminDevPass123!`) | System administration |
+| **Teacher** | `teacher@demo.edu` | the `--teacher-password` you passed (default `TeacherDevPass123!`) | Classes `DS-B`, `DS-C` |
+
+It also creates the starting academic catalog (classes such as `DS-B`, `CS-A` and their subjects). No students, sessions or attendance records are created. Change the default passwords before using the system with real people.
+
+### 4. Use It With Your Own Data
+The repository ships with **no face photos, no embeddings and no student records**. Everyone who uses the system enrolls their own.
+
+1. **Admin** signs in at [http://localhost:3000](http://localhost:3000), adds or edits classes and subjects, and assigns classes to teachers. More teachers can register themselves from the sign-up page.
+2. **Each student** registers from the sign-up page with their own details and a clear, front-facing photo. The photo is turned into a face embedding and stored in your database; registration is rejected if no face is found.
+3. **A teacher** opens the attendance flow, picks an assigned class and subject, selects a camera (a laptop webcam, a USB webcam, or a phone connected as a USB webcam), and starts the session. Recognized students on the class roster are marked present once.
+4. **The teacher** ends the session and downloads the CSV. A teacher can correct any record by hand; corrections are audited and are never overwritten by the camera.
+
+Student photos are stored under `backend/uploads/student_profiles/` and embeddings in MongoDB. Both stay on your machine and are excluded from git and from the Docker images.
+
+### 5. Other Endpoints
+- **FastAPI OpenAPI Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+--- | :--- | :--- | :--- |
 | **Admin** | `admin@system.local` | `AdminDevPass123!` | System Administration & Directory |
 | **Teacher** | `teacher@demo.edu` | `TeacherDevPass123!` | Classes: `DS-B`, `DS-C` |
 | **Student** | `rahul@demo.edu` | `StudentDevPass123!` | Class: `DS-B` (ID: `DS202601`) |
@@ -416,14 +454,26 @@ All four containers should report `healthy` or `Up`:
 | `POST` | `/api/v1/sessions` | Teacher | Create new active attendance session for class |
 | `GET` | `/api/v1/sessions/active` | Teacher | Query current active session for teacher |
 | `GET` | `/api/v1/attendance/{session_id}` | Teacher | Retrieve full student roster & live attendance statuses |
-| `POST` | `/api/v1/attendance/{session_id}/mark` | Public / Camera | Mark recognized student as `PRESENT` |
+| `POST` | `/api/v1/attendance/{session_id}/process-frame` | Teacher (session owner, session ACTIVE) | Recognize faces in one camera frame and mark verified, rostered students `PRESENT` |
+| `PATCH` | `/api/v1/attendance/{session_id}/records/{attendance_id}` | Teacher | Audited manual correction; locks the record against later recognitions |
 | `GET` | `/api/v1/attendance/{session_id}/export` | Teacher | Download attendance roster as formatted CSV |
 | `POST` | `/api/v1/sessions/{session_id}/finalize` | Teacher | Finalize session and lock records |
 
-### Vision Service Routes (`:8088`)
+### Vision Service Routes (internal only)
+
+The vision service has no published port. Only the backend calls it, over the internal Docker network, and every route except `/health` requires the shared service key (`X-API-Key`).
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
+| `GET` | `/health` | Liveness probe (no key required) |
+| `GET` | `/status` | Service status and pipeline metrics |
+| `GET` | `/gallery` | Identities currently in memory (no embeddings) |
+| `POST` | `/process-frame` | One frame in; boxes, similarity and a signed recognition result per confirmed face out |
+| `POST` | `/extract-embedding` | Extract a 512-d ArcFace vector from a registration photo |
+| `POST` | `/enroll-student` | Add a newly registered identity to the in-memory gallery |
+| `POST` | `/reload-gallery` | Reload the gallery from the backend |
+
+--- | :--- | :--- |
 | `GET` | `/status` | Service status, pipeline status, and memory metrics |
 | `GET` | `/gallery` | List of all enrolled identities currently in memory |
 | `POST` | `/process-frame` | Submit browser frame (JPEG); returns bounding boxes, similarity, and recognition status |
@@ -456,7 +506,7 @@ python scripts/seed_clean_demo.py
 docker exec anti-proxy-backend pytest -m integration -v
 ```
 
-The stack must be healthy first (`docker compose ps`), because the tests need MongoDB with the demo admin, teacher and students, and the vision service on port 8088 for face-embedding extraction.
+The stack must be healthy first (`docker compose ps`), because the tests need MongoDB with the demo admin, teacher and students (seed with a fixtures folder, see below), and a running vision service.
 
 ### Run Frontend Contract & E2E Tests
 ```bash
