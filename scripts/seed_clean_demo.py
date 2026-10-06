@@ -30,7 +30,10 @@ import bcrypt
 from pymongo import MongoClient
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_BENCHMARK_DIR = PROJECT_ROOT / "vision-service" / "tests" / "recognition_benchmark"
+DEFAULT_BENCHMARK_DIR = (
+    Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured")
+    / "recognition_benchmark"
+)
 
 # Target demo accounts and identities
 ADMIN_EMAIL = "admin@system.local"
@@ -199,8 +202,8 @@ def connect_mongo(
 def load_tier3_benchmark_json() -> tuple[dict[str, list[float]], str]:
     """Load authentic pre-extracted InsightFace ArcFace 512-d embeddings."""
     candidate_paths = [
-        PROJECT_ROOT / ".agents" / "teamwork" / "survey_explorer_1" / "benchmark_embeddings.json",
-        PROJECT_ROOT / "tests" / "benchmark_embeddings.json",
+        Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured")
+        / "benchmark_embeddings.json",
     ]
     id_map = {s.get("benchmark_folder", s["identity"]): s["identity"] for s in STUDENT_SPECS}
     for p in candidate_paths:
@@ -217,10 +220,9 @@ def load_tier3_benchmark_json() -> tuple[dict[str, list[float]], str]:
                 continue
 
     raise RuntimeError(
-        "Unable to load benchmark embeddings. The embeddings file is biometric data and is "
-        "not tracked in git; regenerate it locally with "
-        ".agents/teamwork/survey_explorer_1/extract_benchmark_embeddings.py "
-        "(requires the InsightFace models) before seeding."
+        "Unable to load benchmark embeddings. Biometric fixtures are not stored in git: set "
+        "VISION_FIXTURES_DIR to the local fixtures folder containing benchmark_embeddings.json "
+        "(see 'Biometric Test Fixtures' in the README)."
     )
 
 

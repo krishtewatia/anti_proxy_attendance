@@ -55,9 +55,9 @@ from pipeline.live_cv_pipeline import (
 from tracking.bytetrack import STrack
 
 # Test assets
-CLIP_ENTRY_EXIT = SERVICE_ROOT / "tests" / "video_test" / "entry_exit_simultaneous.mp4"
-CLIP_MULTI_PERSON = SERVICE_ROOT / "tests" / "video_test" / "multi_person_simultaneous.mp4"
-ENROLLMENT_DIR = SERVICE_ROOT / "tests" / "recognition_benchmark"
+CLIP_ENTRY_EXIT = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test" / "entry_exit_simultaneous.mp4"
+CLIP_MULTI_PERSON = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test" / "multi_person_simultaneous.mp4"
+ENROLLMENT_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "recognition_benchmark"
 SCRFD_MODEL_PATH = SERVICE_ROOT / "models" / "scrfd_500m_bnkps_shape640x640.onnx"
 
 CLIPS_AVAILABLE = CLIP_ENTRY_EXIT.exists() and ENROLLMENT_DIR.exists()

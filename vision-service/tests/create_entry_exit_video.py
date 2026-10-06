@@ -6,11 +6,12 @@ Composition:
 3. Reverse sequence (Frames N-1 down to 0): EXIT from SIDE_B to SIDE_A
 """
 
+import os
 from pathlib import Path
 import cv2
 import numpy as np
 
-VIDEO_DIR = Path(__file__).resolve().parent / "video_test"
+VIDEO_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test"
 INPUT_PATH = VIDEO_DIR / "multi_person_simultaneous.mp4"
 OUTPUT_PATH = VIDEO_DIR / "entry_exit_simultaneous.mp4"
 
