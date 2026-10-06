@@ -1,6 +1,8 @@
 # Dependabot Configuration for Automated Dependency Updates
 # cooldown: wait 7 days after a release before proposing it, so freshly
 # published (possibly compromised) versions are not pulled in immediately.
+# groups: minor and patch updates are combined into one PR per ecosystem;
+# major updates are left ungrouped, so each one arrives as its own PR.
 version: 2
 updates:
   # Python Backend Dependencies
@@ -11,6 +13,13 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    groups:
+      backend-pip-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Python Vision Service Dependencies
   - package-ecosystem: "pip"
@@ -20,6 +29,13 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    groups:
+      vision-pip-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # React Frontend Dependencies
   - package-ecosystem: "npm"
@@ -29,33 +45,33 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    groups:
+      frontend-npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
-  # Backend Docker Container Base Images
+  # Docker Base Images (backend, frontend and vision-service in one entry so
+  # their minor and patch updates share a single PR)
   - package-ecosystem: "docker"
-    directory: "/backend"
+    directories:
+      - "/backend"
+      - "/frontend"
+      - "/vision-service"
     schedule:
       interval: "weekly"
     cooldown:
       default-days: 7
     open-pull-requests-limit: 3
-
-  # Frontend Docker Container Base Images
-  - package-ecosystem: "docker"
-    directory: "/frontend"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 3
-
-  # Vision Service Docker Container Base Images
-  - package-ecosystem: "docker"
-    directory: "/vision-service"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 3
+    groups:
+      docker-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # GitHub Actions Workflow Updates
   - package-ecosystem: "github-actions"
@@ -65,3 +81,10 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    groups:
+      github-actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
