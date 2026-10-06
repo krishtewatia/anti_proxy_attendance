@@ -157,7 +157,11 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
                 inter_threads=2,
             )
             swap_scrfd_detector(cls.app, detector_type="0.5g", intra_threads=4, inter_threads=2)
-            cls.gallery = load_gallery(cls.app, ENROLLMENT_DIR)
+            # Build the gallery from the test fixtures under their own folder names
+            # (person_01..04). An empty identity_map switches off the default
+            # mapping to the demo accounts (student1..4), which these scenarios
+            # do not use, and nothing is read from a local gallery.npz.
+            cls.gallery = load_gallery(cls.app, ENROLLMENT_DIR, identity_map={})
         except Exception as exc:
             cls.tearDownClass()
             raise unittest.SkipTest(f"Failed to initialize real CV models or gallery: {exc}")
