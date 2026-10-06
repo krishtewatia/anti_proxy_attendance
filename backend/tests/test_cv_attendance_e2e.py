@@ -35,7 +35,7 @@ def setup_test_db():
 
 
 @pytest.mark.anyio
-async def test_cv_to_attendance_e2e_flow():
+async def test_cv_to_attendance_e2e_flow(register_test_camera):
     """Prove complete flow: CV events -> session resolution -> finalization -> attendance records."""
     db = mongodb.get_database()
 
@@ -45,6 +45,9 @@ async def test_cv_to_attendance_e2e_flow():
     await db[settings.EVENTS_COLLECTION].delete_many({})
     await db["attendance_records"].delete_many({})
     await db["users"].delete_many({})
+    await db["cameras"].delete_many({})
+
+    camera_headers = await register_test_camera("CAM_ROOM_101_DOOR", "ROOM_101")
 
     # 1. Provision Teacher user and auth header
     teacher_id = "teacher_cv_demo"
@@ -212,7 +215,7 @@ async def test_cv_to_attendance_e2e_flow():
             ev_resp = await client.post(
                 "/api/v1/events",
                 json=event_payload,
-                headers={"X-API-Key": "test-vision-service-key-2026"},
+                headers=camera_headers,
             )
             assert ev_resp.status_code == 201
             assert ev_resp.json()["status"] == "accepted"

@@ -131,6 +131,7 @@ async def admin_list_students(
             roll_number=s.get("roll_number", ""),
             branch=s.get("branch", ""),
             section=s.get("section", ""),
+            class_code=s.get("class_code") or "",
             photo_url=(
                 s.get("photo_url")
                 or (

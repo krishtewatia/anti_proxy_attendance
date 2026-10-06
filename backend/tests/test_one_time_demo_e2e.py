@@ -26,6 +26,10 @@ from app.database import mongodb
 from app.core.config import settings
 
 
+# Needs the seeded demo accounts and a running vision service (see README).
+pytestmark = pytest.mark.integration
+
+
 @pytest.mark.anyio
 async def test_one_time_attendance_demo_flow():
     transport = ASGITransport(app=app)

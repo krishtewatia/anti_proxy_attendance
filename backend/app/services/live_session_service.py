@@ -57,12 +57,16 @@ async def compute_session_live_snapshot(
     end_time = _to_utc(session["end_time"])
     required_percentage = float(session.get("required_presence_percentage", 75.0))
 
-    # Check Finalized Records upfront
-    recs = await get_attendance_by_session(session_id)
-    finalized_records: dict[str, dict] = {r["identity"]: r for r in recs} if recs else {}
+    # Attendance rows exist from the moment a session starts (ABSENT placeholders,
+    # live marks), so only a finalized session status makes them final.
+    is_finalized = status_field in {"COMPLETED", "FINALIZED"}
+    finalized_records: dict[str, dict] = {}
+    if is_finalized:
+        recs = await get_attendance_by_session(session_id)
+        finalized_records = {r["identity"]: r for r in recs} if recs else {}
 
     # 1. Determine Session State
-    if status_field == "COMPLETED" or len(finalized_records) > 0:
+    if is_finalized:
         session_state: SessionLiveState = "ENDED"
         status_field = "COMPLETED"
     elif now < start_time:

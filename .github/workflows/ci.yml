@@ -58,7 +58,7 @@ jobs:
           VISION_SERVICE_API_KEY: test_vision_api_key_ci_12345
           REQUIRE_CAMERA_AUTH: "true"
         run: |
-          pytest --cov=app --cov-report=term-missing --cov-report=xml
+          pytest -m "not integration and not slow and not needs_models" --cov=app --cov-report=term-missing --cov-report=xml
 
   # ============================================================================
   # 2. Vision Service Fast Tests (Model-Free Suite)

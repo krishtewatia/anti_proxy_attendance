@@ -8,6 +8,9 @@ from httpx import ASGITransport, AsyncClient
 from app.database import mongodb
 from app.main import app
 
+# Needs the seeded demo accounts and a running vision service (see README).
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.anyio
 async def test_phase2_academic_structure_and_seeding():

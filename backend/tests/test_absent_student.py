@@ -23,6 +23,7 @@ async def test_student_with_no_vision_events_is_marked_absent():
     events = [
         {
             "event_id": "evt_present_entry",
+            "session_id": "session_absent_test",
             "camera_id": "CAM_ROOM_101_DOOR",
             "track_id": 1,
             "identity": "person_01",
@@ -34,6 +35,7 @@ async def test_student_with_no_vision_events_is_marked_absent():
         },
         {
             "event_id": "evt_present_exit",
+            "session_id": "session_absent_test",
             "camera_id": "CAM_ROOM_101_DOOR",
             "track_id": 2,
             "identity": "person_01",

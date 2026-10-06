@@ -439,6 +439,24 @@ All four containers should report `healthy` or `Up`:
 docker exec anti-proxy-backend pytest -v
 ```
 
+### Run Backend Integration Tests (Demo Data + Vision Service)
+
+Tests marked `@pytest.mark.integration` (`test_one_time_demo_e2e.py`, `test_phase2_multi_role_e2e.py`) log in with the seeded demo accounts and call the vision service, so CI excludes them with `-m "not integration and not slow and not needs_models"`. To run them locally:
+
+```bash
+docker compose up -d
+```
+
+```bash
+python scripts/seed_clean_demo.py
+```
+
+```bash
+docker exec anti-proxy-backend pytest -m integration -v
+```
+
+The stack must be healthy first (`docker compose ps`), because the tests need MongoDB with the demo admin, teacher and students, and the vision service on port 8088 for face-embedding extraction.
+
 ### Run Frontend Contract & E2E Tests
 ```bash
 cd frontend
