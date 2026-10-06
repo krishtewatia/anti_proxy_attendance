@@ -27,6 +27,7 @@ import subprocess
 import sys
 import time
 from typing import Any, Optional
+import urllib.parse
 import urllib.request
 import urllib.error
 
@@ -36,6 +37,9 @@ DEFAULT_API_KEY = "test_vision_api_key_for_smoke_test_12345"
 
 class SmokeTestFailure(Exception):
     """Raised when any step of the smoke test fails."""
+
+
+LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 def log_step(step_num: int, title: str) -> None:
@@ -59,8 +63,16 @@ def http_request(
         body_bytes = json.dumps(data).encode("utf-8")
         req_headers["Content-Type"] = "application/json"
 
+    # This smoke test only ever targets the local Docker Compose stack.
+    parsed_url = urllib.parse.urlsplit(url)
+    if parsed_url.scheme not in ("http", "https") or parsed_url.hostname not in LOOPBACK_HOSTS:
+        raise ValueError(f"Smoke test only calls loopback http(s) URLs, got: {url}")
+
     req = urllib.request.Request(url, data=body_bytes, headers=req_headers, method=method)
     try:
+        # The URL is restricted to loopback hosts and http(s) just above, so it
+        # cannot be steered to file:// or to another machine.
+        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             status_code = resp.status
             content = resp.read().decode("utf-8")

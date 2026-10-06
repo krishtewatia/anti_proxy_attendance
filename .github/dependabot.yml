@@ -1,4 +1,6 @@
 # Dependabot Configuration for Automated Dependency Updates
+# cooldown: wait 7 days after a release before proposing it, so freshly
+# published (possibly compromised) versions are not pulled in immediately.
 version: 2
 updates:
   # Python Backend Dependencies
@@ -6,6 +8,8 @@ updates:
     directory: "/backend"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
 
   # Python Vision Service Dependencies
@@ -13,6 +17,8 @@ updates:
     directory: "/vision-service"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
 
   # React Frontend Dependencies
@@ -20,6 +26,8 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
 
   # Backend Docker Container Base Images
@@ -27,6 +35,8 @@ updates:
     directory: "/backend"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3
 
   # Frontend Docker Container Base Images
@@ -34,6 +44,8 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3
 
   # Vision Service Docker Container Base Images
@@ -41,6 +53,8 @@ updates:
     directory: "/vision-service"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3
 
   # GitHub Actions Workflow Updates
@@ -48,4 +62,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
