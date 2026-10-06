@@ -76,11 +76,11 @@ updates:
         update-types:
           - "version-update:semver-major"
       # Type definitions must match the Node runtime. The frontend is built
-      # with Node 22 (frontend/Dockerfile and CI), so newer majors are not
+      # with Node 24 LTS (frontend/Dockerfile and CI), so newer majors are not
       # wanted. Raise this when the build image's Node version is raised.
       - dependency-name: "@types/node"
         versions:
-          - ">=23"
+          - ">=25"
 
   # Docker Base Images (backend, frontend and vision-service in one entry so
   # their minor and patch updates share a single PR)
@@ -101,6 +101,13 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # The frontend build image stays on Node 24 LTS. Newer majors are only
+      # adopted deliberately, once they reach LTS (Node 26: 28 Oct 2026), and
+      # together with @types/node and the CI Node version.
+      - dependency-name: "node"
+        versions:
+          - ">=25"
 
   # GitHub Actions Workflow Updates
   - package-ecosystem: "github-actions"
