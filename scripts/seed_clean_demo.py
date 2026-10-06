@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
-"""Phase 2 Clean Seeding Script for Anti-Proxy College Attendance System.
+"""Bootstrap seeding script for the attendance system.
 
-Strictly enforces:
-  - 1 Root Admin: admin@system.local / AdminDevPass123!
-  - 1 Demo Teacher: teacher@demo.edu / TeacherDevPass123! (Dr. Sharma, assigned to DS-B, DS-C)
-  - 4 Demo Students: Rahul Sharma, Aman Kumar, Priya Singh, Krish Tewatia (all in DS-B)
-  - 4 Authentic ArcFace 512-d biometric embeddings (L2-norm = 1.0)
-  - Academic catalog: Branches, Sections, Classes, Subjects
-  - ZERO fake sessions, ZERO fake dates, ZERO fake attendance records
-  - PURGES all old surveillance artifacts (cameras, line-crossing events, audit trails)
+Always seeds:
+  - 1 admin account and 1 teacher account (passwords can be overridden)
+  - The academic catalog: branches, sections, classes, subjects
+  - No sessions and no attendance records
+
+Optionally seeds four demo students with face embeddings. That needs a local
+biometric fixtures folder (VISION_FIXTURES_DIR, see the README). Without it,
+or with --no-demo-students, no students are created: each student registers
+through the web portal with their own photo.
+
+WARNING: this script first PURGES the application collections in the target
+database. Do not run it against a database whose data you want to keep.
 
 Usage:
-  python scripts/seed_clean_demo.py
+  python scripts/seed_clean_demo.py --no-demo-students
+  python scripts/seed_clean_demo.py --admin-password '<pw>' --teacher-password '<pw>'
   python scripts/seed_clean_demo.py --dry-run
   python scripts/seed_clean_demo.py --inspect
 """
@@ -259,7 +264,8 @@ def seed_database(
     teacher_pw: str,
     student_pw: str,
 ) -> dict[str, Any]:
-    """Insert exactly 1 Admin, 1 Teacher, 4 Students, 4 Biometric Profiles, and Academic Catalog."""
+    """Insert the admin, the teacher, the academic catalog, and any demo students
+    for which an embedding was supplied (none when ``embeddings`` is empty)."""
     db = client[db_name]
     now = dt.datetime.now(dt.timezone.utc)
 
@@ -311,6 +317,9 @@ def seed_database(
 
     for spec in STUDENT_SPECS:
         ident = spec["identity"]
+        if ident not in embeddings:
+            # No biometric fixture for this demo student: students register themselves
+            continue
         uid = spec["user_id"]
         sid = spec["student_id"]
         roll = spec["roll_number"]
@@ -442,6 +451,11 @@ def main() -> None:
         "--dry-run", action="store_true", help="Test connection and biometrics without writing"
     )
     parser.add_argument(
+        "--no-demo-students",
+        action="store_true",
+        help="Seed only the admin, the teacher and the academic catalog (no demo students)",
+    )
+    parser.add_argument(
         "--inspect", action="store_true", help="Inspect database document counts and exit"
     )
 
@@ -462,14 +476,28 @@ def main() -> None:
         return
 
     # 2. Extract Biometric Embeddings
-    embeddings, loader_tier = load_tier3_benchmark_json()
-    print(f"[OK] Biometric Embeddings Source: {loader_tier}")
+    embeddings: dict[str, list[float]] = {}
+    if args.no_demo_students:
+        print("[INFO] --no-demo-students: seeding admin, teacher and academic catalog only.")
+    else:
+        try:
+            embeddings, loader_tier = load_tier3_benchmark_json()
+            print(f"[OK] Biometric Embeddings Source: {loader_tier}")
+        except RuntimeError:
+            print(
+                "[INFO] No biometric fixtures found (VISION_FIXTURES_DIR is not set or has no "
+                "benchmark_embeddings.json)."
+            )
+            print(
+                "       Seeding admin, teacher and academic catalog only. Students register "
+                "through the web portal with their own photos."
+            )
     for ident, vec in embeddings.items():
         norm = math.sqrt(sum(x * x for x in vec))
         print(f"     • {ident:10s}: {len(vec)}-dimensional vector | L2 norm: {norm:.6f}")
 
     if args.dry_run:
-        print("\n[INFO] Dry run requested. Embeddings verified. No database records modified.")
+        print("\n[INFO] Dry run requested. No database records modified.")
         client.close()
         return
 
@@ -508,12 +536,19 @@ def main() -> None:
     print(f"    Name     : {TEACHER_NAME}")
     print("    Assigned : DS-B, DS-C | Subjects: Machine Learning, Deep Learning\n")
 
-    print("  STUDENT ACCOUNTS (Total: 4, All in DS-B):")
-    for s in STUDENT_SPECS:
-        print(
-            f"    • {s['name']:14s} | ID: {s['student_id']:8s} | Roll: {s['roll_number']:5s} | "
-            f"Class: {s['class_code']} | Email: {s['email']}"
-        )
+    seeded_ids = {st["id"] for st in result["students"]}
+    if seeded_ids:
+        print(f"  DEMO STUDENT ACCOUNTS (Total: {len(seeded_ids)}, All in DS-B):")
+        for s in STUDENT_SPECS:
+            if s["student_id"] not in seeded_ids:
+                continue
+            print(
+                f"    • {s['name']:14s} | ID: {s['student_id']:8s} | Roll: {s['roll_number']:5s} | "
+                f"Class: {s['class_code']} | Email: {s['email']}"
+            )
+    else:
+        print("  STUDENT ACCOUNTS: none seeded.")
+        print("    Students register at the web portal with their own photo.")
 
     print("\n  ACADEMIC STRUCTURE:")
     print("    Classes  : DS-A, DS-B, DS-C, CS-A, CS-B, CS-C, AIML-A, AIML-B")
