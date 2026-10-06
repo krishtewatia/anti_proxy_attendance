@@ -12,3 +12,11 @@ htmlcov/
 tests/
 *.log
 scratch/
+
+# Biometric data never goes into the image
+*.npz
+*.npy
+*.pkl
+*.pickle
+*embeddings*.json
+uploads/
