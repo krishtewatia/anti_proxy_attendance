@@ -48,7 +48,7 @@ repos:
     hooks:
       - id: bandit
         name: Bandit Security Scanner
-        entry: backend/.venv/Scripts/bandit.exe
+        entry: ./backend/.venv/Scripts/bandit.exe
         language: system
         types: [python]
         files: ^backend/app/
