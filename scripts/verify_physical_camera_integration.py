@@ -42,10 +42,16 @@ def run_verification():
     print("  [OK] Teacher authenticated successfully.")
 
     # Clean up any leftover active session
-    prev_active = requests.get(f"{BACKEND_URL}/api/v1/attendance/active-session", timeout=2.0).json()
+    prev_active = requests.get(
+        f"{BACKEND_URL}/api/v1/attendance/active-session", timeout=2.0
+    ).json()
     if prev_active.get("has_active_session"):
         print(f"  - Finalizing preexisting session {prev_active['session_id']}...")
-        requests.post(f"{BACKEND_URL}/api/v1/sessions/{prev_active['session_id']}/end", headers=headers, timeout=2.0)
+        requests.post(
+            f"{BACKEND_URL}/api/v1/sessions/{prev_active['session_id']}/end",
+            headers=headers,
+            timeout=2.0,
+        )
         time.sleep(1.0)
 
     # -------------------------------------------------------------------------
@@ -61,8 +67,12 @@ def run_verification():
         print(f"  - Camera Connected    : {st_data.get('camera_connected')}")
         print(f"  - Active Session      : {st_data.get('active_session_id')}")
 
-        assert st_data.get("camera_active") is False, "Camera should be CLOSED when no session is active!"
-        assert st_data.get("camera_connected") is False, "Camera should report NOT connected when idle!"
+        assert st_data.get("camera_active") is False, (
+            "Camera should be CLOSED when no session is active!"
+        )
+        assert st_data.get("camera_connected") is False, (
+            "Camera should report NOT connected when idle!"
+        )
         print("  [OK] Verified: Physical camera is CLOSED and IDLE before attendance begins.")
     except Exception as exc:
         print(f"  [FAIL] Initial camera idle check failed: {exc}")
@@ -106,13 +116,19 @@ def run_verification():
     for attempt in range(10):
         time.sleep(0.8)
         st_data = requests.get(f"{VISION_URL}/status", timeout=2.0).json()
-        print(f"  Polling {attempt+1}/10: camera_active={st_data.get('camera_active')}, camera_connected={st_data.get('camera_connected')}, session={st_data.get('active_session_id')}")
+        print(
+            f"  Polling {attempt + 1}/10: camera_active={st_data.get('camera_active')}, camera_connected={st_data.get('camera_connected')}, session={st_data.get('active_session_id')}"
+        )
         if st_data.get("camera_active") and st_data.get("camera_connected"):
             camera_opened = True
-            print(f"  [OK] Physical webcam OPENED automatically! Device: {st_data.get('camera_name')} ({st_data.get('resolution')})")
+            print(
+                f"  [OK] Physical webcam OPENED automatically! Device: {st_data.get('camera_name')} ({st_data.get('resolution')})"
+            )
             break
 
-    assert camera_opened, "Vision agent failed to automatically open physical camera within 8 seconds!"
+    assert camera_opened, (
+        "Vision agent failed to automatically open physical camera within 8 seconds!"
+    )
 
     # -------------------------------------------------------------------------
     # Step 5: Verify Live MJPEG Stream
@@ -131,7 +147,7 @@ def run_verification():
     # -------------------------------------------------------------------------
     # Step 6: Attendance Dispatch & MongoDB Record
     # -------------------------------------------------------------------------
-    print("\n[Step 6] Marking Confirmed Student PRESENT (student1 / Rahul Sharma)...")
+    print("\n[Step 6] Marking Confirmed Student PRESENT (student1 / Alex Example)...")
     mark_resp = requests.post(
         f"{BACKEND_URL}/api/v1/attendance/mark",
         json={"identity": "student1", "session_id": session_id},
@@ -139,8 +155,12 @@ def run_verification():
     )
     assert mark_resp.status_code == 200, f"Mark attendance failed: {mark_resp.text}"
     mark_data = mark_resp.json()
-    assert mark_data.get("status") in ("marked", "already_present"), f"Unexpected mark status: {mark_data}"
-    print(f"  [OK] Student marked: {mark_data.get('student_name')} ({mark_data.get('student_id')}) -> PRESENT ({mark_data.get('status')})")
+    assert mark_data.get("status") in ("marked", "already_present"), (
+        f"Unexpected mark status: {mark_data}"
+    )
+    print(
+        f"  [OK] Student marked: {mark_data.get('student_name')} ({mark_data.get('student_id')}) -> PRESENT ({mark_data.get('status')})"
+    )
 
     # In-memory & backend duplicate prevention
     dup_resp = requests.post(
@@ -174,15 +194,21 @@ def run_verification():
     assert end_resp.status_code == 200, f"End session failed: {end_resp.text}"
     print("  [OK] Session status transitioned to FINALIZED.")
 
-    print("\n[Step 8] Verifying Vision Agent auto-detects session end and RELEASES physical webcam...")
+    print(
+        "\n[Step 8] Verifying Vision Agent auto-detects session end and RELEASES physical webcam..."
+    )
     camera_released = False
     for attempt in range(10):
         time.sleep(0.8)
         st_data = requests.get(f"{VISION_URL}/status", timeout=2.0).json()
-        print(f"  Polling {attempt+1}/10: camera_active={st_data.get('camera_active')}, session={st_data.get('active_session_id')}")
+        print(
+            f"  Polling {attempt + 1}/10: camera_active={st_data.get('camera_active')}, session={st_data.get('active_session_id')}"
+        )
         if not st_data.get("camera_active") and not st_data.get("camera_connected"):
             camera_released = True
-            print("  [OK] Physical webcam RELEASES cleanly and is now available to other applications!")
+            print(
+                "  [OK] Physical webcam RELEASES cleanly and is now available to other applications!"
+            )
             break
 
     assert camera_released, "Vision agent failed to release webcam after session ended!"
@@ -206,7 +232,9 @@ def run_verification():
         timeout=3.0,
     ).json()
     session_b_id = create_b["session_id"]
-    requests.post(f"{BACKEND_URL}/api/v1/sessions/{session_b_id}/start", headers=headers, timeout=3.0)
+    requests.post(
+        f"{BACKEND_URL}/api/v1/sessions/{session_b_id}/start", headers=headers, timeout=3.0
+    )
     print(f"  - Session B started: {session_b_id}")
 
     # Wait for camera to reopen for Session B
@@ -226,7 +254,9 @@ def run_verification():
         json={"identity": "student1", "session_id": session_b_id},
         timeout=3.0,
     ).json()
-    assert mark_b.get("status") in ("marked", "already_present"), f"Student should be marked in Session B: {mark_b}"
+    assert mark_b.get("status") in ("marked", "already_present"), (
+        f"Student should be marked in Session B: {mark_b}"
+    )
     print(f"  [OK] Student marked PRESENT in Session B ({mark_b.get('status')}).")
 
     # End Session B
@@ -247,7 +277,7 @@ def run_verification():
     )
     assert csv_resp.status_code == 200, "CSV export failed"
     csv_text = csv_resp.text
-    assert "Rahul Sharma" in csv_text or "student1" in csv_text, "Rahul not found in CSV"
+    assert "Alex Example" in csv_text or "student1" in csv_text, "Alex not found in CSV"
     assert "PRESENT" in csv_text, "PRESENT status missing from CSV"
     print(f"  [OK] CSV Export generated ({len(csv_text.splitlines())} lines).")
 

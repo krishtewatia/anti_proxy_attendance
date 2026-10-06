@@ -191,9 +191,9 @@ def main():
         print(f"  - Margin         : {fdata.get('margin')}")
 
         assert fdata["recognized"] is True
-        assert fdata["student_name"] == "Rahul Sharma"
+        assert fdata["student_name"] == "Alex Example"
         assert fdata["similarity"] >= 0.50
-        print("  [OK] SCRFD + ArcFace successfully recognized Rahul Sharma!")
+        print("  [OK] SCRFD + ArcFace successfully recognized Alex Example!")
 
         # Verify attendance record in Backend
         time.sleep(0.5)
@@ -209,11 +209,11 @@ def main():
             (
                 r
                 for r in records
-                if r["student_name"] == "Rahul Sharma" or r["identity"] in ("student1", "person_01")
+                if r["student_name"] == "Alex Example" or r["identity"] in ("student1", "person_01")
             ),
             None,
         )
-        assert student1_rec is not None, f"Rahul Sharma not found in attendance records: {records}"
+        assert student1_rec is not None, f"Alex Example not found in attendance records: {records}"
         assert student1_rec["status"] == "PRESENT", (
             f"Expected PRESENT, got {student1_rec['status']}"
         )

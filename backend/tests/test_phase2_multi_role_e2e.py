@@ -51,11 +51,11 @@ async def test_phase2_student_registration_and_biometric(stub_vision_embedding):
         dummy_img = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.' \",#\x1c\x1c(7),01444\x1f'9=82<.342\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xbf\x00\xff\xd9"
         dummy_b64 = base64.b64encode(dummy_img).decode("utf-8")
 
-        test_email = f"rahul_p2_{int(datetime.now().timestamp())}@example.com"
+        test_email = f"alex_p2_{int(datetime.now().timestamp())}@example.com"
         test_student_id = f"DS2026_{int(datetime.now().timestamp())}"
 
         reg_payload = {
-            "name": "Rahul Sharma",
+            "name": "Alex Example",
             "email": test_email,
             "password": "StudentSecurePass123!",
             "student_id": test_student_id,
@@ -69,7 +69,7 @@ async def test_phase2_student_registration_and_biometric(stub_vision_embedding):
             reg_res = await client.post("/api/v1/students/register", json=reg_payload)
             assert reg_res.status_code == 201, reg_res.text
             profile = reg_res.json()
-            assert profile["name"] == "Rahul Sharma"
+            assert profile["name"] == "Alex Example"
             assert profile["student_id"] == test_student_id
             assert profile["branch"] == "Data Science"
             assert profile["section"] == "B"
@@ -132,8 +132,8 @@ async def test_phase2_teacher_flow_auto_roster_and_one_active_session(vision_fra
         await upsert_student_profile(
             user_id="user_test_stu_dsb",
             identity="DS_STU_001",
-            name="Rahul Sharma",
-            email="rahul.dsb@campus.edu",
+            name="Alex Example",
+            email="alex.dsb@campus.edu",
             student_id="DS_STU_001",
             roll_number="101",
             branch="Data Science",

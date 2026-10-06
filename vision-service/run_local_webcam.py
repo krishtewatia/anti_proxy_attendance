@@ -44,28 +44,11 @@ from pipeline.live_cv_pipeline import (
 
 logger = logging.getLogger("vision_service")
 
-# Standard student name & roll number catalog mapping
-STUDENT_NAME_MAP: dict[str, str] = {
-    "student1": "Rahul Sharma",
-    "student2": "Aman Kumar",
-    "student3": "Priya Singh",
-    "student4": "Krish Tewatia",
-    "person_01": "Rahul Sharma",
-    "person_02": "Aman Kumar",
-    "person_03": "Priya Singh",
-    "person_04": "Krish Tewatia",
-}
+# Names and student ids are not built in. This development runner only knows
+# gallery labels; the backend's student records are the source of real names.
+STUDENT_NAME_MAP: dict[str, str] = {}
 
-STUDENT_ID_MAP: dict[str, str] = {
-    "student1": "DS202601",
-    "student2": "DS202602",
-    "student3": "DS202603",
-    "student4": "DS202604",
-    "person_01": "DS202601",
-    "person_02": "DS202602",
-    "person_03": "DS202603",
-    "person_04": "DS202604",
-}
+STUDENT_ID_MAP: dict[str, str] = {}
 
 
 class VisionServerState:

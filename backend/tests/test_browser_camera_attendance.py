@@ -87,7 +87,7 @@ async def test_mark_student_present_and_duplicate_prevention(teacher_auth_header
     await db["student_profiles"].insert_one(
         {
             "student_id": "DS202601",
-            "full_name": "Rahul Sharma",
+            "full_name": "Alex Example",
             "biometric_identity": "student1",
         }
     )
@@ -102,18 +102,18 @@ async def test_mark_student_present_and_duplicate_prevention(teacher_auth_header
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # 1. First recognition marks PRESENT
         vision_frames.faces = [
-            vision_frames.recognized("sess_browser_001", "student1", name="Rahul Sharma")
+            vision_frames.recognized("sess_browser_001", "student1", name="Alex Example")
         ]
         mark_resp = await client.post(frame_url, headers=teacher_auth_headers, content=FRAME_BYTES)
         assert mark_resp.status_code == 200
         data1 = mark_resp.json()
         assert data1["faces"][0]["mark_status"] == "marked"
         assert data1["identity"] == "student1"
-        assert data1["student_name"] == "Rahul Sharma"
+        assert data1["student_name"] == "Alex Example"
 
         # 2. Duplicate frame recognition is idempotent
         vision_frames.faces = [
-            vision_frames.recognized("sess_browser_001", "student1", name="Rahul Sharma")
+            vision_frames.recognized("sess_browser_001", "student1", name="Alex Example")
         ]
         dup_resp = await client.post(frame_url, headers=teacher_auth_headers, content=FRAME_BYTES)
         assert dup_resp.status_code == 200
@@ -171,7 +171,7 @@ async def test_vision_gallery_sync_endpoint(service_key_headers):
     await db["student_profiles"].insert_one(
         {
             "student_id": "DS202699",
-            "name": "Vikram Verma",
+            "name": "Eden Testcase",
             "identity": "DS202699",
             "class_code": "DS-B",
             "has_biometric": True,
@@ -196,11 +196,11 @@ async def test_vision_gallery_sync_endpoint(service_key_headers):
         assert resp.status_code == 200
         data = resp.json()
         assert data["count"] >= 1
-        vikram = next((g for g in data["gallery"] if g["identity"] == "DS202699"), None)
-        assert vikram is not None
-        assert vikram["name"] == "Vikram Verma"
-        assert vikram["student_id"] == "DS202699"
-        assert len(vikram["embedding"]) == 512
+        eden = next((g for g in data["gallery"] if g["identity"] == "DS202699"), None)
+        assert eden is not None
+        assert eden["name"] == "Eden Testcase"
+        assert eden["student_id"] == "DS202699"
+        assert len(eden["embedding"]) == 512
 
 
 @pytest.mark.anyio
@@ -220,7 +220,7 @@ async def test_newly_enrolled_student_marked_present(teacher_auth_headers, visio
     await db["student_profiles"].insert_one(
         {
             "student_id": "DS202699",
-            "name": "Vikram Verma",
+            "name": "Eden Testcase",
             "identity": "DS202699",
             "class_code": "DS-B",
             "has_biometric": True,
@@ -236,16 +236,16 @@ async def test_newly_enrolled_student_marked_present(teacher_auth_headers, visio
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Mark newly enrolled student
-        vision_frames.faces = [vision_frames.recognized(sess_id, "DS202699", name="Vikram Verma")]
+        vision_frames.faces = [vision_frames.recognized(sess_id, "DS202699", name="Eden Testcase")]
         resp = await client.post(frame_url, headers=teacher_auth_headers, content=FRAME_BYTES)
         assert resp.status_code == 200
         data = resp.json()
         assert data["faces"][0]["mark_status"] == "marked"
         assert data["identity"] == "DS202699"
-        assert data["student_name"] == "Vikram Verma"
+        assert data["student_name"] == "Eden Testcase"
 
         # Check idempotency
-        vision_frames.faces = [vision_frames.recognized(sess_id, "DS202699", name="Vikram Verma")]
+        vision_frames.faces = [vision_frames.recognized(sess_id, "DS202699", name="Eden Testcase")]
         resp_dup = await client.post(frame_url, headers=teacher_auth_headers, content=FRAME_BYTES)
         assert resp_dup.status_code == 200
         assert resp_dup.json()["faces"][0]["mark_status"] == "already_present"
@@ -257,7 +257,7 @@ async def test_newly_enrolled_student_marked_present(teacher_auth_headers, visio
         )
         assert att_resp.status_code == 200
         records = att_resp.json()["records"]
-        vikram_rec = next((r for r in records if r["identity"] == "DS202699"), None)
-        assert vikram_rec is not None
-        assert vikram_rec["status"] == "PRESENT"
-        assert vikram_rec["student_name"] == "Vikram Verma"
+        eden_rec = next((r for r in records if r["identity"] == "DS202699"), None)
+        assert eden_rec is not None
+        assert eden_rec["status"] == "PRESENT"
+        assert eden_rec["student_name"] == "Eden Testcase"

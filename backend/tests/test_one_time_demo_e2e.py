@@ -2,16 +2,16 @@
 
 Validates the full demo sequence requested by the user:
 1. Teacher starts attendance session (Data Structures — CSE-A).
-2. Roster is initialized with Rahul, Aman, Priya, Krish.
-3. Rahul appears -> recognized -> marked PRESENT (1 student present).
-4. Aman appears -> recognized -> marked PRESENT (2 students present).
-5. Rahul appears again -> already present -> no duplicate record.
+2. Roster is initialized with Alex, Blake, Casey, Devon.
+3. Alex appears -> recognized -> marked PRESENT (1 student present).
+4. Blake appears -> recognized -> marked PRESENT (2 students present).
+5. Alex appears again -> already present -> no duplicate record.
 6. Teacher ends attendance -> finalizes session.
 7. Final result:
-   - Rahul: PRESENT
-   - Aman: PRESENT
-   - Priya: ABSENT
-   - Krish: ABSENT
+   - Alex: PRESENT
+   - Blake: PRESENT
+   - Casey: ABSENT
+   - Devon: ABSENT
 8. Teacher downloads CSV export -> verified clean format.
 """
 
@@ -69,7 +69,7 @@ async def test_one_time_attendance_demo_flow(vision_frames):
         session_id = session["session_id"]
 
         try:
-            # 3. Enroll Students onto Roster (Rahul, Aman, Priya, Krish)
+            # 3. Enroll Students onto Roster (Alex, Blake, Casey, Devon)
             roster_res = await client.put(
                 f"/api/v1/sessions/{session_id}/roster",
                 headers=headers,
@@ -95,17 +95,17 @@ async def test_one_time_attendance_demo_flow(vision_frames):
 
             frame_url = f"/api/v1/attendance/{session_id}/process-frame"
 
-            # 5. Step 6 of Demo: Rahul stands in front of camera -> recognized -> marked PRESENT
+            # 5. Step 6 of Demo: Alex stands in front of camera -> recognized -> marked PRESENT
             # (frames go through the authenticated backend route; the vision call is stubbed
             # and returns a signed recognition result, as the real service does)
             vision_frames.faces = [
-                vision_frames.recognized(session_id, "student1", name="Rahul Sharma")
+                vision_frames.recognized(session_id, "student1", name="Alex Example")
             ]
-            mark_rahul_1 = await client.post(frame_url, headers=headers, content=FRAME_BYTES)
-            assert mark_rahul_1.status_code == 200, mark_rahul_1.text
-            res_r1 = mark_rahul_1.json()
+            mark_alex_1 = await client.post(frame_url, headers=headers, content=FRAME_BYTES)
+            assert mark_alex_1.status_code == 200, mark_alex_1.text
+            res_r1 = mark_alex_1.json()
             assert res_r1["faces"][0]["mark_status"] == "marked"
-            assert res_r1["student_name"] == "Rahul Sharma" or "Rahul" in res_r1["student_name"]
+            assert res_r1["student_name"] == "Alex Example" or "Alex" in res_r1["student_name"]
 
             # Check attendance list: 1 student present
             att_after_r1 = await client.get(
@@ -113,18 +113,18 @@ async def test_one_time_attendance_demo_flow(vision_frames):
                 headers=headers,
             )
             assert att_after_r1.json()["present_count"] == 1
-            rahul_rec = next(r for r in att_after_r1.json()["records"] if r["identity"] == "student1")
-            assert rahul_rec["status"] == "PRESENT"
+            alex_rec = next(r for r in att_after_r1.json()["records"] if r["identity"] == "student1")
+            assert alex_rec["status"] == "PRESENT"
 
-            # 6. Step 7 of Demo: Aman stands in front -> recognized -> marked PRESENT
+            # 6. Step 7 of Demo: Blake stands in front -> recognized -> marked PRESENT
             vision_frames.faces = [
-                vision_frames.recognized(session_id, "student2", name="Aman Kumar")
+                vision_frames.recognized(session_id, "student2", name="Blake Sample")
             ]
-            mark_aman = await client.post(frame_url, headers=headers, content=FRAME_BYTES)
-            assert mark_aman.status_code == 200, mark_aman.text
-            res_a = mark_aman.json()
+            mark_blake = await client.post(frame_url, headers=headers, content=FRAME_BYTES)
+            assert mark_blake.status_code == 200, mark_blake.text
+            res_a = mark_blake.json()
             assert res_a["faces"][0]["mark_status"] == "marked"
-            assert res_a["student_name"] == "Aman Kumar" or "Aman" in res_a["student_name"]
+            assert res_a["student_name"] == "Blake Sample" or "Blake" in res_a["student_name"]
 
             # Check attendance list: 2 students present
             att_after_a = await client.get(
@@ -133,13 +133,13 @@ async def test_one_time_attendance_demo_flow(vision_frames):
             )
             assert att_after_a.json()["present_count"] == 2
 
-            # 7. Step 8 of Demo: Rahul appears again -> already present -> no duplicate
+            # 7. Step 8 of Demo: Alex appears again -> already present -> no duplicate
             vision_frames.faces = [
-                vision_frames.recognized(session_id, "student1", name="Rahul Sharma")
+                vision_frames.recognized(session_id, "student1", name="Alex Example")
             ]
-            mark_rahul_2 = await client.post(frame_url, headers=headers, content=FRAME_BYTES)
-            assert mark_rahul_2.status_code == 200, mark_rahul_2.text
-            res_r2 = mark_rahul_2.json()
+            mark_alex_2 = await client.post(frame_url, headers=headers, content=FRAME_BYTES)
+            assert mark_alex_2.status_code == 200, mark_alex_2.text
+            res_r2 = mark_alex_2.json()
             assert res_r2["faces"][0]["mark_status"] == "already_present"
 
             # Present count still 2
@@ -167,8 +167,8 @@ async def test_one_time_attendance_demo_flow(vision_frames):
             assert final_data["present_count"] == 2
 
             status_by_name = {r["student_name"]: r["status"] for r in final_data["records"]}
-            assert status_by_name.get("Rahul Sharma") == "PRESENT" or status_by_name.get("Rahul") == "PRESENT"
-            assert status_by_name.get("Aman Kumar") == "PRESENT" or status_by_name.get("Aman") == "PRESENT"
+            assert status_by_name.get("Alex Example") == "PRESENT" or status_by_name.get("Alex") == "PRESENT"
+            assert status_by_name.get("Blake Sample") == "PRESENT" or status_by_name.get("Blake") == "PRESENT"
 
             # 10. Step 11: Teacher downloads attendance CSV
             export_res = await client.get(

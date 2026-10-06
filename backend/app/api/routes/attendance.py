@@ -34,33 +34,17 @@ router = APIRouter(
 )
 
 
-DEFAULT_STUDENT_CATALOG: dict[str, dict[str, str]] = {
-    "student1": {"student_id": "DS202601", "name": "Rahul Sharma"},
-    "student2": {"student_id": "DS202602", "name": "Aman Kumar"},
-    "student3": {"student_id": "DS202603", "name": "Priya Singh"},
-    "student4": {"student_id": "DS202604", "name": "Krish Tewatia"},
-    "person_01": {"student_id": "DS202601", "name": "Rahul Sharma"},
-    "person_02": {"student_id": "DS202602", "name": "Aman Kumar"},
-    "person_03": {"student_id": "DS202603", "name": "Priya Singh"},
-    "person_04": {"student_id": "DS202604", "name": "Krish Tewatia"},
-}
-
-
 async def _resolve_student_info(db) -> dict[str, dict]:
-    """Return map of identity -> { student_id, name } with catalog fallback."""
-    mapping = {k: dict(v) for k, v in DEFAULT_STUDENT_CATALOG.items()}
+    """Return map of identity -> { student_id, name } from registered student records only."""
+    mapping: dict[str, dict] = {}
     cursor = db["student_profiles"].find({})
     docs = await cursor.to_list(length=None)
     for doc in docs:
         ident = doc.get("identity") or doc.get("biometric_identity")
         if ident:
-            stu_id = doc.get("student_id") or mapping.get(ident, {}).get("student_id", ident)
-            name = (
-                doc.get("name") or doc.get("full_name") or mapping.get(ident, {}).get("name", ident)
-            )
             mapping[ident] = {
-                "student_id": stu_id,
-                "name": name,
+                "student_id": doc.get("student_id") or ident,
+                "name": doc.get("name") or doc.get("full_name") or ident,
             }
     return mapping
 

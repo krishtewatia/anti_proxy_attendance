@@ -7,7 +7,7 @@ Tests:
 3. Frame processing with registered student (person_01):
    - SCRFD face detection
    - ArcFace embedding extraction & gallery cosine matching
-   - Recognition result (Rahul Sharma, similarity > 0.50, margin > 0.15)
+   - Recognition result (Alex Example, similarity > 0.50, margin > 0.15)
    - Bounding box annotation
 4. Non-face frame handling (gracefully rejects with detected_faces=0).
 5. State reset on session end.
@@ -95,7 +95,7 @@ def run_test():
             "  [OK] Confirmed: Vision server does NOT acquire physical camera; stands by for browser."
         )
 
-        # 3. Post registered student frame (Rahul Sharma / person_01)
+        # 3. Post registered student frame (Alex Example / person_01)
         print("\n[Step 3] Posting Registered Student Frame to /process-frame...")
         assert TEST_IMAGE_PATH.exists(), f"Missing test image: {TEST_IMAGE_PATH}"
         with open(TEST_IMAGE_PATH, "rb") as f:
@@ -114,8 +114,8 @@ def run_test():
         print(f"  - box             : {data.get('box')}")
 
         assert data["recognized"] is True, "Student should be recognized"
-        assert data["student_name"] == "Rahul Sharma", (
-            f"Expected Rahul Sharma, got {data.get('student_name')}"
+        assert data["student_name"] == "Alex Example", (
+            f"Expected Alex Example, got {data.get('student_name')}"
         )
         assert data["similarity"] >= 0.50, (
             f"Expected similarity >= 0.50, got {data.get('similarity')}"
@@ -132,7 +132,7 @@ def run_test():
         print(f"  - camera_active   : {st2.get('camera_active')}")
         print(f"  - last_recognized : {st2.get('last_recognized')}")
         assert st2["camera_active"] is True
-        assert st2["last_recognized"] == "Rahul Sharma"
+        assert st2["last_recognized"] == "Alex Example"
         print("  [OK] Confirmed: Server telemetry updated from browser frame.")
 
         # 5. Post non-face frame

@@ -217,7 +217,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
           id="register-name"
           type="text"
           className="auth-input"
-          placeholder={role === "STUDENT" ? "e.g. Rahul Sharma" : "e.g. Dr. A. Sharma"}
+          placeholder={role === "STUDENT" ? "e.g. Alex Example" : "e.g. Dr. A. Example"}
           value={name}
           onChange={(e) => setName(e.target.value)}
           required

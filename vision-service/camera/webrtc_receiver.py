@@ -784,26 +784,10 @@ class WebRTCSignalingServer:
         self.session_marked_identities: dict[str, Set[str]] = {}
 
         self.gallery: dict[str, np.ndarray] = {}
-        self.student_names: dict[str, str] = {
-            "student1": "Rahul Sharma",
-            "student2": "Aman Kumar",
-            "student3": "Priya Singh",
-            "student4": "Krish Tewatia",
-            "person_01": "Rahul Sharma",
-            "person_02": "Aman Kumar",
-            "person_03": "Priya Singh",
-            "person_04": "Krish Tewatia",
-        }
-        self.student_ids: dict[str, str] = {
-            "student1": "DS202601",
-            "student2": "DS202602",
-            "student3": "DS202603",
-            "student4": "DS202604",
-            "person_01": "DS202601",
-            "person_02": "DS202602",
-            "person_03": "DS202603",
-            "person_04": "DS202604",
-        }
+        # Names and student ids come only from the backend's student records
+        # (gallery sync and enrollment calls); nothing is built in.
+        self.student_names: dict[str, str] = {}
+        self.student_ids: dict[str, str] = {}
         self._init_gallery()
 
         self._last_gallery_sync: float = 0.0
