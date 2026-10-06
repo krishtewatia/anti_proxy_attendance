@@ -27,6 +27,7 @@ A modern, privacy-conscious classroom attendance ERP powered by client-side brow
 - [Running the Project Locally](#running-the-project-locally)
 - [API / Service Overview](#api--service-overview)
 - [Automated Testing & Verification](#automated-testing--verification)
+- [CI/CD Security Gates](#cicd-security-gates)
 - [Security & Reliability](#security--reliability)
 - [Known Limitations](#known-limitations)
 - [Future Improvements](#future-improvements)
@@ -474,6 +475,31 @@ docker exec anti-proxy-vision-service python -m unittest discover tests/
 ```bash
 python scripts/verify_full_browser_webcam_e2e.py
 ```
+
+---
+
+## CI/CD Security Gates
+
+Every push and pull request to `main` runs two GitHub Actions workflows: `ci.yml` (Continuous Integration) and `security.yml` (DevSecOps & Security Scanning, which also runs every Monday). Together they produce ten status checks, and all ten must pass before a change is merged.
+
+| Status check | Tool | Fails when |
+| :--- | :--- | :--- |
+| **Backend Tests & Coverage** | pytest + pytest-cov, with a MongoDB 7 service | Any test fails, or backend coverage is below **75%**. The threshold should only ever go up. Tests marked `integration`, `slow` or `needs_models` are excluded. |
+| **Vision Service Fast Tests** | pytest (model-free suites) | Any test fails. |
+| **Frontend Lint & Build** | Oxlint, TypeScript (`tsc -b`), Vite build, frontend test suites | Any lint error, type error, build failure or failing suite. Lint warnings do not fail the check. |
+| **Secret Scanning (Gitleaks)** | Gitleaks, default rules plus `.gitleaks.toml` | Any secret is found in the pushed commits. Only `backend/tests/` and the CI placeholder JWT value are allowlisted. |
+| **Code Scanning (Semgrep)** | Semgrep `--config auto --error`, with `.semgrepignore` | Any finding at all. Results are also uploaded to the Code scanning tab. |
+| **Python Security (Bandit & pip-audit)** | Bandit (`-c pyproject.toml -ll -ii`) on backend and vision-service; pip-audit on both requirements files | Bandit reports a finding of **medium or higher** severity and confidence, or pip-audit finds **any** known vulnerability. |
+| **Node Security (npm audit)** | `npm audit --audit-level=high` | Any **high or critical** advisory in the frontend dependencies. |
+| **Container Scanning (Trivy) - backend** | Trivy image scan of the freshly built backend image | Any **HIGH or CRITICAL** vulnerability that has a fix available. |
+| **Container Scanning (Trivy) - frontend** | Trivy image scan of the freshly built frontend image | Any **HIGH or CRITICAL** vulnerability that has a fix available. |
+| **Container Scanning (Trivy) - vision-service** | Trivy image scan of the freshly built vision-service image | Any **HIGH or CRITICAL** vulnerability that has a fix available. |
+
+Supporting controls:
+
+- **Pinned actions**: every GitHub Action is pinned to a full commit SHA, with the version in a trailing comment so Dependabot can still update it.
+- **Dependabot cooldown**: updates are proposed 7 days after a release, not immediately.
+- **Pre-commit hooks**: the same Gitleaks, Ruff and Bandit checks run locally before each commit (`.pre-commit-config.yaml`).
 
 ---
 
