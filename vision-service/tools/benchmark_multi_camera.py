@@ -1,5 +1,6 @@
 """Benchmark CPU and throughput FPS for 1 vs 2 concurrent cameras."""
 
+import os
 import json
 from pathlib import Path
 import sys
@@ -11,9 +12,20 @@ if str(SERVICE_ROOT) not in sys.path:
 from camera_worker import MultiCameraRunner
 from pipeline.live_cv_pipeline import create_face_analysis, load_gallery
 
-CLIP_1 = SERVICE_ROOT / "tests" / "video_test" / "person_1_vid.mp4"
-CLIP_2 = SERVICE_ROOT / "tests" / "video_test" / "person_2_vid.mp4"
-ENROLLMENT_DIR = SERVICE_ROOT / "tests" / "recognition_benchmark"
+CLIP_1 = (
+    Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured")
+    / "video_test"
+    / "person_1_vid.mp4"
+)
+CLIP_2 = (
+    Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured")
+    / "video_test"
+    / "person_2_vid.mp4"
+)
+ENROLLMENT_DIR = (
+    Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured")
+    / "recognition_benchmark"
+)
 
 
 def main():
