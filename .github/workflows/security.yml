@@ -138,7 +138,7 @@ jobs:
           load: true
 
       - name: Scan Backend Image with Trivy
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: "anti-proxy-backend:scan"
           format: "table"
@@ -155,7 +155,7 @@ jobs:
           load: true
 
       - name: Scan Frontend Image with Trivy
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: "anti-proxy-frontend:scan"
           format: "table"
