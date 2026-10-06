@@ -18,6 +18,7 @@ Note: Attendance database, business logic, and API calls are decoupled.
 This test benchmarks pure spatial boundary crossing and directionality.
 """
 
+import os
 from collections import defaultdict
 from enum import Enum
 from pathlib import Path
@@ -43,7 +44,7 @@ from tracking.bytetrack import BYTETracker, box_iou
 # CONFIGURATION
 # ============================================================
 
-VIDEO_DIR = SERVICE_ROOT / "tests" / "video_test"
+VIDEO_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test"
 TARGET_FPS = 5.0
 
 # Tracking parameters (consistent with Step 4.10.3 / 4.10.4)

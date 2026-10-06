@@ -1,3 +1,4 @@
+import os
 from itertools import combinations
 from pathlib import Path
 
@@ -6,7 +7,7 @@ import numpy as np
 from insightface.app import FaceAnalysis
 
 
-BASE_DIR = Path("vision-service/tests/recognition_benchmark")
+BASE_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "recognition_benchmark"
 
 
 def load_images():

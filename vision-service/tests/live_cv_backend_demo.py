@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
@@ -25,17 +26,15 @@ from tracking.bytetrack import BYTETracker, box_iou
 # ============================================================
 
 VIDEO_PATH = (
-    VISION_SERVICE_DIR
-    / "tests"
-    / "video_test"
+    Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test"
     / "entry_exit_simultaneous.mp4"
-    if (VISION_SERVICE_DIR / "tests" / "video_test" / "entry_exit_simultaneous.mp4").exists()
-    else VISION_SERVICE_DIR / "tests" / "video_test" / "multi_person_simultaneous.mp4"
+    if (Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test" / "entry_exit_simultaneous.mp4").exists()
+    else Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test" / "multi_person_simultaneous.mp4"
 )
 
 ENROLLMENT_DIR = (
-    VISION_SERVICE_DIR / "tests" / "recognition_benchmark"
-    if (VISION_SERVICE_DIR / "tests" / "recognition_benchmark").exists()
+    Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "recognition_benchmark"
+    if (Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "recognition_benchmark").exists()
     else VISION_SERVICE_DIR / "tests" / "face_images"
 )
 
