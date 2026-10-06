@@ -1,0 +1,22 @@
+# A .semgrepignore replaces Semgrep's built-in ignore list, so the defaults
+# are repeated here before the project-specific entries.
+.git/
+:include .gitignore
+node_modules/
+build/
+dist/
+vendor/
+.env/
+.venv/
+.tox/
+*.min.js
+.npm/
+.yarn/
+test/
+tests/
+.semgrep
+.semgrep_logs/
+
+# Project-specific: documentation and frontend test scripts are not shipped code
+docs/
+frontend/scripts/

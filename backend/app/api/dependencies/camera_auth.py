@@ -40,6 +40,11 @@ def _hash_key(key: str) -> str:
     return hashlib.sha256(key.strip().encode("utf-8")).hexdigest()
 
 
+def _key_fingerprint(key: str) -> str:
+    """Short, non-reversible identifier for a presented key. Raw keys are never logged."""
+    return _hash_key(key)[:8]
+
+
 def _get_configured_camera_keys() -> dict[str, str]:
     """Parse configured per-camera keys into camera_id -> sha256_hash mapping."""
     raw = settings.VISION_CAMERA_KEYS.strip()
@@ -92,7 +97,7 @@ async def require_camera_auth(
 
     if not api_key:
         logger.warning(
-            "Camera authentication failed: missing API key header (client_ip=%s, path=%s)",
+            "Camera authentication failed: no auth header (client_ip=%s, path=%s)",
             client_ip,
             request.url.path,
         )
@@ -143,7 +148,9 @@ async def require_camera_auth(
 
     # Authentication failed: no matching key or hash
     logger.warning(
-        "Camera authentication failed: invalid API key (client_ip=%s, path=%s)",
+        "Camera authentication failed: auth header not recognized "
+        "(fingerprint=%s, client_ip=%s, path=%s)",
+        _key_fingerprint(api_key),
         client_ip,
         request.url.path,
     )

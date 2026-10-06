@@ -114,6 +114,38 @@ async def test_invalid_api_key_returns_401(sec_client, mock_db):
 
 
 @pytest.mark.anyio
+async def test_failed_auth_logs_never_contain_the_raw_key(sec_client, caplog):
+    """A rejected key is logged only as a short hash prefix, never as the raw value."""
+    raw_key = "wrong-secret-key-must-not-be-logged-9f3a"
+
+    with caplog.at_level(logging.DEBUG):
+        wrong = await sec_client.post(
+            "/api/v1/events",
+            json=make_event("evt_log_redaction_wrong"),
+            headers={"X-API-Key": raw_key},
+        )
+        missing = await sec_client.post(
+            "/api/v1/events",
+            json=make_event("evt_log_redaction_missing"),
+        )
+
+    assert wrong.status_code == 401
+    assert missing.status_code == 401
+
+    auth_records = [r for r in caplog.records if r.name == "app.api.dependencies.camera_auth"]
+    assert len(auth_records) >= 2
+
+    # Check the rendered message and the raw args of every captured record
+    for record in caplog.records:
+        assert raw_key not in record.getMessage()
+        assert raw_key not in repr(record.args)
+    assert raw_key not in caplog.text
+
+    # The rejected key is still traceable through its non-reversible fingerprint
+    assert _hash_key(raw_key)[:8] in caplog.text
+
+
+@pytest.mark.anyio
 async def test_valid_master_key_accepted(sec_client, mock_db):
     """Valid master API key in X-API-Key header is accepted."""
     resp = await sec_client.post(
