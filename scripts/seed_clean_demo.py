@@ -216,7 +216,12 @@ def load_tier3_benchmark_json() -> tuple[dict[str, list[float]], str]:
             except Exception:
                 continue
 
-    raise RuntimeError("Unable to load authentic benchmark embeddings from filesystem.")
+    raise RuntimeError(
+        "Unable to load benchmark embeddings. The embeddings file is biometric data and is "
+        "not tracked in git; regenerate it locally with "
+        ".agents/teamwork/survey_explorer_1/extract_benchmark_embeddings.py "
+        "(requires the InsightFace models) before seeding."
+    )
 
 
 def inspect_database(client: MongoClient, db_name: str) -> None:
