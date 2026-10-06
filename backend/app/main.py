@@ -25,13 +25,22 @@ from app.database.academic import seed_academic_data_if_empty
 
 from app.core.config import settings
 from app.core.logging_security import setup_security_logging
-from app.security.config import JWT_SECRET_KEY, validate_jwt_secret_strength
+from app.security.config import (
+    JWT_SECRET_KEY,
+    is_insecure_recognition_key_allowed,
+    validate_jwt_secret_strength,
+    validate_recognition_signing_key,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup Security Validations
     validate_jwt_secret_strength(JWT_SECRET_KEY)
+    validate_recognition_signing_key(
+        settings.RECOGNITION_SIGNING_KEY,
+        allow_insecure=is_insecure_recognition_key_allowed(),
+    )
     setup_security_logging()
 
     # Startup: ensure database indexes are initialized
