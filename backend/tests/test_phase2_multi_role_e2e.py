@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.database import mongodb
 from app.main import app
+from tests.conftest import FRAME_BYTES
 
 # Needs the seeded demo accounts and a running vision service (see README).
 pytestmark = pytest.mark.integration
@@ -105,7 +106,7 @@ async def test_phase2_student_registration_and_biometric(stub_vision_embedding):
 
 
 @pytest.mark.anyio
-async def test_phase2_teacher_flow_auto_roster_and_one_active_session():
+async def test_phase2_teacher_flow_auto_roster_and_one_active_session(vision_frames):
     """Verify teacher session creation auto-loads DS-B roster and enforces 1-active-session rule."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -192,20 +193,19 @@ async def test_phase2_teacher_flow_auto_roster_and_one_active_session():
             assert student_rec["status"] == "ABSENT"
 
             # 5. One-time attendance marking: Face recognized -> PRESENT
-            mark_res = await client.post(
-                f"/api/v1/attendance/{session_id}/mark",
-                json={"session_id": session_id, "identity": "DS_STU_001"},
-            )
+            # (through the authenticated frame route; the vision call is stubbed and
+            # returns a signed recognition result, as the real service does)
+            frame_url = f"/api/v1/attendance/{session_id}/process-frame"
+            vision_frames.faces = [vision_frames.recognized(session_id, "DS_STU_001")]
+            mark_res = await client.post(frame_url, headers=headers, content=FRAME_BYTES)
             assert mark_res.status_code == 200
-            assert mark_res.json()["status"] == "marked"
+            assert mark_res.json()["faces"][0]["mark_status"] == "marked"
 
             # 6. Duplicate face seen -> Already Present
-            dup_res = await client.post(
-                f"/api/v1/attendance/{session_id}/mark",
-                json={"session_id": session_id, "identity": "DS_STU_001"},
-            )
+            vision_frames.faces = [vision_frames.recognized(session_id, "DS_STU_001")]
+            dup_res = await client.post(frame_url, headers=headers, content=FRAME_BYTES)
             assert dup_res.status_code == 200
-            assert dup_res.json()["status"] == "already_present"
+            assert dup_res.json()["faces"][0]["mark_status"] == "already_present"
 
             # 7. End session -> status FINALIZED
             end_res = await client.post(f"/api/v1/sessions/{session_id}/end", headers=headers)

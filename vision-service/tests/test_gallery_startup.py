@@ -60,11 +60,31 @@ def test_no_implicit_gallery_path_in_receiver_source():
     assert "/app/gallery.npz" not in source
 
 
-def test_explicit_gallery_path_is_honoured(isolated_server_factory, tmp_path, monkeypatch):
+def test_gallery_file_is_never_loaded_even_when_a_path_is_configured(
+    isolated_server_factory, tmp_path, monkeypatch
+):
+    """The backend is the only source of embeddings; no file path can override that."""
     npz_path = tmp_path / "dev_gallery.npz"
     _write_npz(npz_path, "dev_identity")
     monkeypatch.setenv("GALLERY_NPZ_PATH", str(npz_path))
 
     server = isolated_server_factory()
 
-    assert list(server.gallery.keys()) == ["dev_identity"]
+    assert server.gallery == {}
+
+
+def test_gallery_cache_file_is_never_read_or_written(isolated_server_factory, tmp_path):
+    """Embeddings are not persisted to, or restored from, a cache file on disk."""
+    cache_path = tmp_path / "enrolled_gallery.json"
+    cache_path.write_text(
+        '{"cached_identity": {"name": "x", "student_id": "x", "embedding": [1.0, 0.0]}}',
+        encoding="utf-8",
+    )
+    before = cache_path.read_text(encoding="utf-8")
+
+    server = isolated_server_factory()
+    assert server.gallery == {}
+
+    server.gallery["someone"] = np.ones(512, dtype=np.float32)
+    server._save_enrolled_gallery_file()
+    assert cache_path.read_text(encoding="utf-8") == before
