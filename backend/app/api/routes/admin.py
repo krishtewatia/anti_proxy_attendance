@@ -131,8 +131,12 @@ async def admin_list_students(
             roll_number=s.get("roll_number", ""),
             branch=s.get("branch", ""),
             section=s.get("section", ""),
-            class_code=s.get("class_code", ""),
-            photo_url=None,
+            photo_url=(
+                s.get("photo_url")
+                or (
+                    f"/api/v1/students/{s.get('student_id')}/photo" if s.get("student_id") else None
+                )
+            ),
             has_biometric=s.get("has_biometric", False),
             created_at=s.get("created_at"),
         )

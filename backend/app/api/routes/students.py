@@ -101,6 +101,59 @@ async def get_student_dashboard_endpoint(
         ) from exc
 
 
+@router.get(
+    "/{student_id}/photo",
+    summary="Serve student profile photograph",
+)
+async def get_student_photo_endpoint(student_id: str):
+    """Serve student profile photograph from persistent storage or database."""
+    import base64
+    from fastapi.responses import Response
+
+    from app.core.config import UPLOADS_DIR
+
+    file_path = UPLOADS_DIR / f"{student_id}.jpg"
+
+    if file_path.exists():
+        content = file_path.read_bytes()
+        return Response(
+            content=content,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    # Check MongoDB student_profiles collection for photo_base64
+    db = get_database()
+    doc = await db["student_profiles"].find_one(
+        {"$or": [{"student_id": student_id}, {"identity": student_id}]}
+    )
+    photo_b64 = doc.get("photo_base64") if doc else None
+    if not photo_b64:
+        bio_doc = await db["biometric_profiles"].find_one({"identity": student_id})
+        if bio_doc and bio_doc.get("photo_base64"):
+            photo_b64 = bio_doc["photo_base64"]
+
+    if photo_b64:
+        raw_b64 = photo_b64.strip()
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        try:
+            content = base64.b64decode(raw_b64)
+            UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+            file_path.write_bytes(content)
+            return Response(
+                content=content,
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+        except Exception:
+            pass
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail="Student photograph not found"
+    )
+
+
 @router.post(
     "/photo",
     summary="Upload or update student biometric photograph",
@@ -121,6 +174,8 @@ async def upload_student_photo_endpoint(
         identity=profile.identity,
         photo_base64=payload.photo_base64,
         enrolled_by=current_user["user_id"],
+        student_name=profile.name,
+        student_id=profile.student_id,
     )
     if not ok:
         raise HTTPException(
@@ -128,7 +183,20 @@ async def upload_student_photo_endpoint(
             detail=msg,
         )
 
-    return {"status": "success", "message": msg, "has_biometric": True}
+    photo_url = f"/api/v1/students/{profile.student_id}/photo"
+    db = get_database()
+    await db["student_profiles"].update_one(
+        {"user_id": current_user["user_id"]},
+        {
+            "$set": {
+                "photo_base64": payload.photo_base64,
+                "photo_url": photo_url,
+                "has_biometric": True,
+            }
+        },
+    )
+
+    return {"status": "success", "message": msg, "has_biometric": True, "photo_url": photo_url}
 
 
 # --- Legacy Endpoints for Backward Compatibility ---

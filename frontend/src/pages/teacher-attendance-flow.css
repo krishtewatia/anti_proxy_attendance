@@ -255,6 +255,16 @@
   object-fit: cover;
 }
 
+.recognition-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
 .erp-camera-footer {
   margin-top: 0.5rem;
   font-size: 0.75rem;

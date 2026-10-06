@@ -1,4 +1,4 @@
-export { api } from "./api.ts";
+export { api, getApiBaseUrl } from "./api.ts";
 export {
   auth,
   clearStoredAuth,

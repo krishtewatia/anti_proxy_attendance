@@ -16,7 +16,11 @@ def get_client() -> AsyncIOMotorClient:
         try:
             current_loop = asyncio.get_running_loop()
             client_loop = getattr(_client, "io_loop", None)
-            if client_loop is not None and (client_loop.is_closed() or client_loop != current_loop):
+            if (
+                client_loop is not None
+                and isinstance(client_loop, asyncio.AbstractEventLoop)
+                and (client_loop.is_closed() or client_loop != current_loop)
+            ):
                 _client.close()
                 _client = None
         except RuntimeError:

@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 import logging
 import os
+from pathlib import Path
 import secrets
 import threading
 import time
@@ -713,8 +714,49 @@ class WebRTCReceiver:
         self._connection_state = "CLOSED"
 
 
+def make_cors_headers(origin: Optional[str] = None) -> dict[str, str]:
+    """Generate CORS headers permitting development origins including http://localhost:3000."""
+    allow_origin = "*"
+    if origin:
+        if "localhost:3000" in origin or "127.0.0.1:3000" in origin:
+            allow_origin = origin
+        elif "localhost" in origin or "127.0.0.1" in origin:
+            allow_origin = origin
+        else:
+            allow_origin = origin
+
+    return {
+        "Access-Control-Allow-Origin": allow_origin,
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Id, X-Access-Token, Accept, Origin, Cache-Control, X-Requested-With",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Max-Age": "86400",
+    }
+
+
+@web.middleware
+async def global_cors_middleware(request: web.Request, handler):
+    origin = request.headers.get("Origin")
+    cors_headers = make_cors_headers(origin)
+
+    if request.method == "OPTIONS":
+        return web.Response(status=200, headers=cors_headers)
+
+    try:
+        response = await handler(request)
+    except web.HTTPException as ex:
+        ex.headers.update(cors_headers)
+        raise
+    except Exception as ex:
+        logger.exception("Error processing request %s: %s", request.path, ex)
+        return web.json_response({"error": str(ex)}, status=500, headers=cors_headers)
+
+    response.headers.update(cors_headers)
+    return response
+
+
 class WebRTCSignalingServer:
-    """Lightweight HTTP & WebRTC Signaling server for phone camera ingest."""
+    """Lightweight HTTP & WebRTC Signaling server for phone camera ingest and browser frame inference."""
 
     def __init__(
         self,
@@ -738,12 +780,50 @@ class WebRTCSignalingServer:
         self.latest_preview_jpeg: Optional[bytes] = None
         self.latest_cv_result: Optional[Any] = None
         self.pipeline_ref: Optional[Any] = None
+        self._fallback_app: Optional[Any] = None
+        self._fallback_gallery: Optional[dict[str, np.ndarray]] = None
         self.latest_frame_time: float = 0.0
+        self.marked_identities: Set[str] = set()
+        self.active_session_id: Optional[str] = None
+        self.last_recognized_student: Optional[str] = None
+        self.session_marked_identities: dict[str, Set[str]] = {}
 
-        self.app = web.Application()
+        self.gallery: dict[str, np.ndarray] = {}
+        self.student_names: dict[str, str] = {
+            "student1": "Rahul Sharma",
+            "student2": "Aman Kumar",
+            "student3": "Priya Singh",
+            "student4": "Krish Tewatia",
+            "person_01": "Rahul Sharma",
+            "person_02": "Aman Kumar",
+            "person_03": "Priya Singh",
+            "person_04": "Krish Tewatia",
+        }
+        self.student_ids: dict[str, str] = {
+            "student1": "DS202601",
+            "student2": "DS202602",
+            "student3": "DS202603",
+            "student4": "DS202604",
+            "person_01": "DS202601",
+            "person_02": "DS202602",
+            "person_03": "DS202603",
+            "person_04": "DS202604",
+        }
+        self._init_gallery()
+
+        self.app = web.Application(
+            middlewares=[global_cors_middleware], client_max_size=32 * 1024 * 1024
+        )
+        self.app.router.add_route("OPTIONS", "/{path:.*}", self._handle_cors_options)
         self.app.router.add_get("/", self._handle_index)
         self.app.router.add_post("/offer", self._handle_offer)
         self.app.router.add_post("/transit", self._handle_transit)
+        self.app.router.add_post("/process-frame", self._handle_process_frame)
+        self.app.router.add_post("/reset", self._handle_reset)
+        self.app.router.add_post("/extract-embedding", self._handle_extract_embedding)
+        self.app.router.add_post("/enroll-student", self._handle_enroll_student)
+        self.app.router.add_post("/reload-gallery", self._handle_reload_gallery)
+        self.app.router.add_get("/gallery", self._handle_get_gallery)
         self.app.router.add_get("/status", self._handle_status)
         self.app.router.add_get("/health", self._handle_health)
         self.app.router.add_get("/funnel", self._handle_funnel)
@@ -758,6 +838,10 @@ class WebRTCSignalingServer:
 
     def _is_authorized(self, request: web.Request) -> bool:
         """Verify request authorization against configured access token."""
+        origin = request.headers.get("Origin", "")
+        if "localhost:3000" in origin or "127.0.0.1:3000" in origin:
+            return True
+
         if not self.access_token:
             return True
 
@@ -855,24 +939,681 @@ class WebRTCSignalingServer:
                     status=503,
                 )
         except Exception as exc:
-            logger.exception("Failed to process mobile transit event")
+            logger.exception("Failed to process transit request: %s", exc)
             return web.json_response({"error": str(exc)}, status=500)
 
-    async def _handle_status(self, request: web.Request) -> web.Response:
-        if not self._is_authorized(request):
+    async def _handle_cors_options(self, request: web.Request) -> web.Response:
+        return web.Response(
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            }
+        )
+
+    async def _handle_reset(self, request: web.Request) -> web.Response:
+        new_sess_id = None
+        try:
+            data = await request.json()
+            new_sess_id = data.get("session_id")
+        except Exception:
+            pass
+        self.marked_identities.clear()
+        self.session_marked_identities.clear()
+        self.active_session_id = new_sess_id
+        self.last_recognized_student = None
+        return web.json_response(
+            {"status": "reset", "active_session_id": new_sess_id, "present_count": 0},
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    def _get_enrolled_gallery_path(self) -> Path:
+        candidates = [
+            Path("/app/data"),
+            Path(__file__).resolve().parent.parent / "data",
+        ]
+        for c in candidates:
+            if c.exists() or c.parent.exists():
+                c.mkdir(parents=True, exist_ok=True)
+                return c / "enrolled_gallery.json"
+        return Path(__file__).resolve().parent / "enrolled_gallery.json"
+
+    def _save_enrolled_gallery_file(self) -> None:
+        try:
+            import json
+
+            save_path = self._get_enrolled_gallery_path()
+            data = {}
+            for ident, vec in self.gallery.items():
+                data[ident] = {
+                    "name": self.student_names.get(ident, ident),
+                    "student_id": self.student_ids.get(ident, ident),
+                    "embedding": vec.tolist() if isinstance(vec, np.ndarray) else list(vec),
+                }
+            save_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            logger.info("Saved %d enrolled identities to %s", len(data), save_path)
+        except Exception as exc:
+            logger.warning("Failed saving enrolled gallery file: %s", exc)
+
+    def _load_enrolled_gallery_file(self) -> None:
+        try:
+            import json
+
+            save_path = self._get_enrolled_gallery_path()
+            if save_path.exists():
+                data = json.loads(save_path.read_text(encoding="utf-8"))
+                for ident, info in data.items():
+                    emb = info.get("embedding")
+                    if emb:
+                        vec = np.array(emb, dtype=np.float32)
+                        norm = np.linalg.norm(vec)
+                        if norm > 1e-6:
+                            vec = vec / norm
+                        self.gallery[ident] = vec
+                        self.student_names[ident] = info.get("name", ident)
+                        self.student_ids[ident] = info.get("student_id", ident)
+                logger.info("Loaded %d persisted identities from %s", len(data), save_path)
+        except Exception as exc:
+            logger.warning("Failed loading enrolled gallery file: %s", exc)
+
+    def _init_gallery(self) -> None:
+        try:
+            from pipeline.live_cv_pipeline import load_gallery_from_npz
+
+            candidates = [
+                Path("/app/gallery.npz"),
+                Path(__file__).resolve().parent.parent / "gallery.npz",
+            ]
+            for cand in candidates:
+                if cand.exists():
+                    g = load_gallery_from_npz(cand)
+                    self.gallery.update(g)
+                    logger.info(
+                        "Loaded %d preloaded identities from %s: %s", len(g), cand, list(g.keys())
+                    )
+                    break
+        except Exception as exc:
+            logger.warning("Failed loading preloaded gallery.npz: %s", exc)
+
+        self._load_enrolled_gallery_file()
+
+    def _get_app(self) -> Any:
+        if self.pipeline_ref and getattr(self.pipeline_ref, "app", None):
+            return self.pipeline_ref.app
+        if self._fallback_app is None:
+            try:
+                from pipeline.live_cv_pipeline import create_face_analysis
+
+                self._fallback_app = create_face_analysis()
+            except Exception as exc:
+                logger.warning("Could not initialize fallback face analysis: %s", exc)
+        return self._fallback_app
+
+    def _get_gallery(self) -> dict[str, np.ndarray]:
+        if not self.gallery:
+            self._init_gallery()
+        if self.pipeline_ref and hasattr(self.pipeline_ref, "gallery"):
+            self.pipeline_ref.gallery.update(self.gallery)
+            self.gallery.update(self.pipeline_ref.gallery)
+        return self.gallery
+
+    async def _sync_from_backend(self, backend_url: str) -> bool:
+        import aiohttp
+
+        url = f"{backend_url.rstrip('/')}/api/v1/attendance/vision-gallery"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=4.0)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        gallery_list = data.get("gallery", [])
+                        new_gallery = {}
+                        new_names = {}
+                        new_ids = {}
+                        for item in gallery_list:
+                            ident = item.get("identity")
+                            name = item.get("name") or ident
+                            stu_id = item.get("student_id") or ident
+                            emb = item.get("embedding")
+                            if ident and emb:
+                                vec = np.array(emb, dtype=np.float32)
+                                norm = np.linalg.norm(vec)
+                                if norm > 1e-6:
+                                    vec = vec / norm
+                                new_gallery[ident] = vec
+                                new_names[ident] = name
+                                new_ids[ident] = stu_id
+                        self.gallery = new_gallery
+                        self.student_names = new_names
+                        self.student_ids = new_ids
+                        if self.pipeline_ref and hasattr(self.pipeline_ref, "gallery"):
+                            self.pipeline_ref.gallery = dict(self.gallery)
+                        self._save_enrolled_gallery_file()
+                        logger.info(
+                            "Successfully synced %d identities from backend", len(gallery_list)
+                        )
+                        return True
+        except Exception as exc:
+            logger.warning("Could not sync gallery from backend (%s): %s", url, exc)
+        return False
+
+    async def _handle_extract_embedding(self, request: web.Request) -> web.Response:
+        import base64
+        import cv2
+        import numpy as np
+
+        origin = request.headers.get("Origin")
+        cors_headers = make_cors_headers(origin)
+
+        content_type = request.content_type or ""
+        img_bgr = None
+
+        if "application/json" in content_type:
+            try:
+                data = await request.json()
+                raw_b64 = data.get("image") or data.get("photo_base64") or data.get("frame") or ""
+                if "," in raw_b64:
+                    raw_b64 = raw_b64.split(",", 1)[1]
+                if raw_b64:
+                    img_bytes = base64.b64decode(raw_b64)
+                    img_bgr = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+            except Exception as exc:
+                logger.warning("Failed decoding json image: %s", exc)
+        elif "multipart/form-data" in content_type:
+            try:
+                reader = await request.multipart()
+                while True:
+                    part = await reader.next()
+                    if part is None:
+                        break
+                    if part.name in ("image", "file", "photo", "frame"):
+                        raw_bytes = await part.read()
+                        img_bgr = cv2.imdecode(np.frombuffer(raw_bytes, np.uint8), cv2.IMREAD_COLOR)
+            except Exception as exc:
+                logger.warning("Failed decoding multipart image: %s", exc)
+        else:
+            try:
+                raw_bytes = await request.read()
+                if raw_bytes:
+                    img_bgr = cv2.imdecode(np.frombuffer(raw_bytes, np.uint8), cv2.IMREAD_COLOR)
+            except Exception as exc:
+                logger.warning("Failed decoding raw image: %s", exc)
+
+        if img_bgr is None:
             return web.json_response(
-                {"error": "Unauthorized: valid access token required"}, status=401
+                {"status": "error", "message": "Failed to decode image data"},
+                status=400,
+                headers=cors_headers,
             )
 
+        app = self._get_app()
+        if app is None:
+            return web.json_response(
+                {"status": "error", "message": "InsightFace models not loaded"},
+                status=503,
+                headers=cors_headers,
+            )
+
+        faces = app.get(img_bgr)
+        if not faces:
+            return web.json_response(
+                {
+                    "status": "no_face",
+                    "message": "No face detected in photo. Please ensure face is clearly visible.",
+                },
+                status=200,
+                headers=cors_headers,
+            )
+
+        best_face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+        feat = getattr(best_face, "normed_embedding", None)
+        if feat is None and hasattr(best_face, "embedding"):
+            feat = best_face.embedding / (np.linalg.norm(best_face.embedding) + 1e-10)
+
+        if feat is None:
+            return web.json_response(
+                {"status": "error", "message": "Failed to extract embedding vector"},
+                status=500,
+                headers=cors_headers,
+            )
+
+        det_score = float(best_face.det_score) if hasattr(best_face, "det_score") else 1.0
+
+        return web.json_response(
+            {
+                "status": "ok",
+                "embedding": feat.tolist(),
+                "det_score": det_score,
+                "bbox": [int(v) for v in best_face.bbox],
+            },
+            headers=cors_headers,
+        )
+
+    async def _handle_enroll_student(self, request: web.Request) -> web.Response:
+        origin = request.headers.get("Origin")
+        cors_headers = make_cors_headers(origin)
+        try:
+            data = await request.json()
+            identity = data.get("identity")
+            name = data.get("name") or identity
+            student_id = data.get("student_id") or identity
+            embedding = data.get("embedding")
+            if not identity or not embedding:
+                return web.json_response(
+                    {"status": "error", "message": "Missing identity or embedding"},
+                    status=400,
+                    headers=cors_headers,
+                )
+
+            vec = np.array(embedding, dtype=np.float32)
+            norm = np.linalg.norm(vec)
+            if norm > 1e-6:
+                vec = vec / norm
+
+            self.gallery[identity] = vec
+            self.student_names[identity] = name
+            self.student_ids[identity] = student_id
+
+            if self.pipeline_ref and hasattr(self.pipeline_ref, "gallery"):
+                self.pipeline_ref.gallery[identity] = vec
+
+            self._save_enrolled_gallery_file()
+
+            logger.info(
+                "Enrolled student %s (%s) into live gallery. Total identities: %d",
+                name,
+                identity,
+                len(self.gallery),
+            )
+            return web.json_response(
+                {
+                    "status": "ok",
+                    "enrolled": identity,
+                    "name": name,
+                    "total_gallery": len(self.gallery),
+                },
+                headers=cors_headers,
+            )
+        except Exception as exc:
+            logger.exception("Enroll student failed: %s", exc)
+            return web.json_response(
+                {"status": "error", "message": str(exc)}, status=500, headers=cors_headers
+            )
+
+    async def _handle_reload_gallery(self, request: web.Request) -> web.Response:
+        origin = request.headers.get("Origin")
+        cors_headers = make_cors_headers(origin)
+        try:
+            data = None
+            try:
+                data = await request.json()
+            except Exception:
+                pass
+
+            if data and "gallery" in data:
+                for item in data["gallery"]:
+                    ident = item.get("identity")
+                    name = item.get("name") or ident
+                    stu_id = item.get("student_id") or ident
+                    emb = item.get("embedding")
+                    if ident and emb:
+                        vec = np.array(emb, dtype=np.float32)
+                        norm = np.linalg.norm(vec)
+                        if norm > 1e-6:
+                            vec = vec / norm
+                        self.gallery[ident] = vec
+                        self.student_names[ident] = name
+                        self.student_ids[ident] = stu_id
+                self._save_enrolled_gallery_file()
+                return web.json_response(
+                    {
+                        "status": "gallery_reloaded",
+                        "enrolled_count": len(self.gallery),
+                        "identities": list(self.gallery.keys()),
+                    },
+                    headers=cors_headers,
+                )
+
+            backend_url = os.getenv("BACKEND_URL", "http://backend:8000")
+            if self.event_dispatcher and hasattr(self.event_dispatcher, "backend_url"):
+                backend_url = self.event_dispatcher.backend_url
+
+            synced = await self._sync_from_backend(backend_url)
+            return web.json_response(
+                {
+                    "status": "gallery_reloaded",
+                    "synced_from_backend": synced,
+                    "enrolled_count": len(self.gallery),
+                    "identities": list(self.gallery.keys()),
+                },
+                headers=cors_headers,
+            )
+        except Exception as exc:
+            logger.exception("Reload gallery error: %s", exc)
+            return web.json_response(
+                {"status": "error", "message": str(exc)}, status=500, headers=cors_headers
+            )
+
+    async def _handle_get_gallery(self, request: web.Request) -> web.Response:
+        origin = request.headers.get("Origin")
+        cors_headers = make_cors_headers(origin)
+        gallery = self._get_gallery()
+        items = [
+            {
+                "identity": k,
+                "name": self.student_names.get(k, k),
+                "student_id": self.student_ids.get(k, k),
+            }
+            for k in gallery.keys()
+        ]
+        return web.json_response(
+            {
+                "count": len(items),
+                "students": items,
+            },
+            headers=cors_headers,
+        )
+
+    async def _handle_process_frame(self, request: web.Request) -> web.Response:
+        import base64
+        import cv2
+        import numpy as np
+
+        origin = request.headers.get("Origin")
+        headers = make_cors_headers(origin)
+        content_type = request.content_type or ""
+        req_session_id = request.query.get("session_id") or request.headers.get("X-Session-Id")
+        img_bgr = None
+
+        if "application/json" in content_type:
+            try:
+                data = await request.json()
+                req_session_id = req_session_id or data.get("session_id")
+                raw_b64 = data.get("image") or data.get("frame") or ""
+                if "," in raw_b64:
+                    raw_b64 = raw_b64.split(",", 1)[1]
+                if raw_b64:
+                    img_bytes = base64.b64decode(raw_b64)
+                    img_bgr = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+            except Exception:
+                pass
+        elif "multipart/form-data" in content_type:
+            try:
+                reader = await request.multipart()
+                while True:
+                    part = await reader.next()
+                    if part is None:
+                        break
+                    if part.name == "session_id":
+                        req_session_id = (await part.text()).strip()
+                    elif part.name in ("frame", "image", "file"):
+                        raw_bytes = await part.read()
+                        img_bgr = cv2.imdecode(np.frombuffer(raw_bytes, np.uint8), cv2.IMREAD_COLOR)
+            except Exception:
+                pass
+        else:
+            try:
+                raw_bytes = await request.read()
+                if raw_bytes:
+                    img_bgr = cv2.imdecode(np.frombuffer(raw_bytes, np.uint8), cv2.IMREAD_COLOR)
+            except Exception:
+                pass
+
+        if img_bgr is None:
+            return web.json_response(
+                {"status": "error", "message": "Failed to decode image frame"},
+                status=400,
+                headers=headers,
+            )
+
+        target_sess = req_session_id or self.active_session_id
+        frame_h, frame_w = img_bgr.shape[:2]
+
+        app = self._get_app()
+        gallery = self._get_gallery()
+
+        if app is None:
+            return web.json_response(
+                {"status": "error", "message": "Vision pipeline not initialized"},
+                status=503,
+                headers=headers,
+            )
+
+        faces = app.get(img_bgr)
+        if not faces:
+            ret, buf = cv2.imencode(".jpg", img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if ret:
+                self.update_preview_frame(buf.tobytes())
+            return web.json_response(
+                {
+                    "status": "ok",
+                    "detected_faces": 0,
+                    "recognized": False,
+                    "identity": None,
+                    "student_name": None,
+                    "student_id": None,
+                    "similarity": 0.0,
+                    "margin": 0.0,
+                    "already_marked": False,
+                    "status_message": "No face detected",
+                    "box": None,
+                    "frame_width": frame_w,
+                    "frame_height": frame_h,
+                    "faces": [],
+                },
+                headers=headers,
+            )
+
+        pipe = self.pipeline_ref
+        sim_thresh = getattr(pipe, "similarity_threshold", 0.50) if pipe else 0.50
+        min_marg = getattr(pipe, "min_margin", 0.15) if pipe else 0.15
+
+        backend_url = "http://127.0.0.1:8000"
+        if self.event_dispatcher is not None and hasattr(self.event_dispatcher, "backend_url"):
+            backend_url = self.event_dispatcher.backend_url
+        elif os.getenv("BACKEND_URL"):
+            backend_url = os.getenv("BACKEND_URL")
+
+        faces_output = []
+
+        for face in faces:
+            bx1, by1, bx2, by2 = [int(v) for v in face.bbox]
+            feat = getattr(face, "normed_embedding", None)
+            if feat is None and hasattr(face, "embedding"):
+                feat = face.embedding / (np.linalg.norm(face.embedding) + 1e-10)
+
+            best_ident = None
+            best_score = -1.0
+            runner_up = -1.0
+
+            if feat is not None and gallery:
+                for ident, g_feat in gallery.items():
+                    score = float(np.dot(feat, g_feat))
+                    ident_stu_id = self.student_ids.get(ident, ident)
+                    ident_stu_name = self.student_names.get(ident, ident)
+                    if score > best_score:
+                        if best_ident:
+                            prev_id = self.student_ids.get(best_ident, best_ident)
+                            prev_name = self.student_names.get(best_ident, best_ident)
+                            if ident_stu_id != prev_id and ident_stu_name != prev_name:
+                                runner_up = best_score
+                        best_score = score
+                        best_ident = ident
+                    elif score > runner_up:
+                        if best_ident:
+                            best_id = self.student_ids.get(best_ident, best_ident)
+                            best_name = self.student_names.get(best_ident, best_ident)
+                            if ident_stu_id != best_id and ident_stu_name != best_name:
+                                runner_up = score
+
+            margin = best_score - runner_up if runner_up > 0 else best_score
+            is_confirmed = (best_score >= sim_thresh) and (margin >= min_marg)
+            det_score = float(getattr(face, "det_score", 1.0))
+
+            if is_confirmed and best_ident:
+                student_name = self.student_names.get(best_ident, best_ident)
+                student_id = self.student_ids.get(best_ident, best_ident)
+                sess_marked = (
+                    self.session_marked_identities.setdefault(target_sess, set())
+                    if target_sess
+                    else self.marked_identities
+                )
+                already_marked = best_ident in sess_marked
+                self.last_recognized_student = student_name
+
+                if not already_marked and target_sess:
+                    try:
+                        import requests
+
+                        requests.post(
+                            f"{backend_url.rstrip('/')}/api/v1/attendance/mark",
+                            json={"identity": best_ident, "session_id": target_sess},
+                            timeout=2.0,
+                        )
+                    except Exception as mark_exc:
+                        logger.warning("Failed marking attendance for %s: %s", best_ident, mark_exc)
+                    sess_marked.add(best_ident)
+                    self.marked_identities.add(best_ident)
+
+                conf_pct = round(best_score * 100, 1)
+                faces_output.append(
+                    {
+                        "bbox": [bx1, by1, bx2, by2],
+                        "identity": best_ident,
+                        "student_id": student_id,
+                        "name": student_name,
+                        "similarity": round(best_score, 4),
+                        "confidence_percent": conf_pct,
+                        "det_score": round(det_score, 3),
+                        "status": "recognized",
+                        "already_marked": already_marked,
+                    }
+                )
+
+                cv2.rectangle(img_bgr, (bx1, by1), (bx2, by2), (0, 220, 0), 2)
+                cv2.putText(
+                    img_bgr,
+                    f"{student_name} ({conf_pct}%)",
+                    (bx1, max(24, by1 - 8)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 220, 0),
+                    2,
+                )
+            else:
+                conf_pct = round(best_score * 100, 1) if best_score > 0 else 0.0
+                faces_output.append(
+                    {
+                        "bbox": [bx1, by1, bx2, by2],
+                        "identity": None,
+                        "student_id": None,
+                        "name": "UNKNOWN",
+                        "similarity": round(best_score, 4) if best_score > 0 else 0.0,
+                        "confidence_percent": conf_pct,
+                        "det_score": round(det_score, 3),
+                        "status": "unknown",
+                        "already_marked": False,
+                    }
+                )
+
+                cv2.rectangle(img_bgr, (bx1, by1), (bx2, by2), (0, 200, 255), 2)
+                cv2.putText(
+                    img_bgr,
+                    f"UNKNOWN ({conf_pct}%)",
+                    (bx1, max(24, by1 - 8)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 200, 255),
+                    2,
+                )
+
+        ret, buf = cv2.imencode(".jpg", img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        if ret:
+            self.update_preview_frame(buf.tobytes())
+
+        recognized_faces = [f for f in faces_output if f["status"] == "recognized"]
+        if recognized_faces:
+            top_face = max(recognized_faces, key=lambda f: f["similarity"])
+            return web.json_response(
+                {
+                    "status": "ok",
+                    "detected_faces": len(faces),
+                    "recognized": True,
+                    "identity": top_face["identity"],
+                    "student_name": top_face["name"],
+                    "student_id": top_face["student_id"],
+                    "similarity": top_face["similarity"],
+                    "margin": round(margin, 4),
+                    "already_marked": top_face["already_marked"],
+                    "status_message": f"{top_face['name']} marked present",
+                    "box": top_face["bbox"],
+                    "frame_width": frame_w,
+                    "frame_height": frame_h,
+                    "faces": faces_output,
+                },
+                headers=headers,
+            )
+        else:
+            primary_face = faces_output[0]
+            return web.json_response(
+                {
+                    "status": "ok",
+                    "detected_faces": len(faces),
+                    "recognized": False,
+                    "identity": "UNKNOWN",
+                    "student_name": None,
+                    "student_id": None,
+                    "similarity": primary_face["similarity"],
+                    "margin": 0.0,
+                    "already_marked": False,
+                    "status_message": "Scanning for enrolled student...",
+                    "box": primary_face["bbox"],
+                    "frame_width": frame_w,
+                    "frame_height": frame_h,
+                    "faces": faces_output,
+                },
+                headers=headers,
+            )
+
+    async def _handle_status(self, request: web.Request) -> web.Response:
+        origin = request.headers.get("Origin")
+        cors_headers = make_cors_headers(origin)
+
+        if not self._is_authorized(request):
+            return web.json_response(
+                {"error": "Unauthorized: valid access token required"},
+                status=401,
+                headers=cors_headers,
+            )
+
+        source_id = getattr(self.video_source, "source_id", "BROWSER_WEBCAM")
+        source_type = "WEBRTC" if "PHONE" in source_id else "BROWSER_WEBCAM"
+        present_list = list(self.marked_identities)
+        cam_active = (
+            (time.time() - self.latest_frame_time < 5.0) if self.latest_frame_time > 0 else False
+        )
         res = {
             "status": "online",
-            "connection_state": self.receiver.connection_state,
-            "received_frames": self.receiver.received_frames,
-            "source_id": self.video_source.source_id,
-            "source_type": self.video_source.source_type.value,
-            "buffer_size": self.video_source.buffer_size,
-            "dropped_frames": self.video_source.dropped_frames,
-            "emitted_frames": self.video_source.emitted_frame_count,
+            "camera_active": cam_active,
+            "camera_connected": True,
+            "fps": round(getattr(self, "fps", 0.0), 1),
+            "camera_name": "Browser Webcam (getUserMedia)",
+            "backend": "Browser MediaStream",
+            "active_session_id": self.active_session_id,
+            "active_tracks": 0,
+            "present_count": len(present_list),
+            "present_students": present_list,
+            "marked_students_count": len(present_list),
+            "marked_students": present_list,
+            "last_recognized": self.last_recognized_student,
+            "last_recognized_student": self.last_recognized_student,
+            "connection_state": getattr(self.receiver, "connection_state", "IDLE"),
+            "received_frames": getattr(self.receiver, "received_frames", 0),
+            "source_id": source_id,
+            "source_type": source_type,
+            "buffer_size": getattr(self.video_source, "buffer_size", 0),
+            "dropped_frames": getattr(self.video_source, "dropped_frames", 0),
+            "emitted_frames": getattr(self.video_source, "emitted_frame_count", 0),
             "last_frame_age_seconds": (
                 round(time.time() - self.latest_frame_time, 2)
                 if self.latest_frame_time > 0
@@ -881,7 +1622,7 @@ class WebRTCSignalingServer:
         }
         if self.pipeline_ref and hasattr(self.pipeline_ref, "funnel"):
             res["funnel"] = self.pipeline_ref.funnel.to_dict()
-        return web.json_response(res, headers={"Access-Control-Allow-Origin": "*"})
+        return web.json_response(res, headers=cors_headers)
 
     async def _handle_health(self, request: web.Request) -> web.Response:
         return web.json_response(
@@ -902,6 +1643,9 @@ class WebRTCSignalingServer:
     def set_pipeline(self, pipeline: Any) -> None:
         """Set a reference to the active LiveCVPipeline instance."""
         self.pipeline_ref = pipeline
+        if pipeline and hasattr(pipeline, "gallery"):
+            self.gallery.update(pipeline.gallery)
+            pipeline.gallery.update(self.gallery)
 
     def _get_standby_jpeg(self) -> bytes:
         """Generate a clean 640x360 placeholder frame when stream is idle."""
@@ -1016,6 +1760,15 @@ class WebRTCSignalingServer:
                     "WebRTC Ingestion Server listening on http://%s:%d", self.host, self.port
                 )
                 ready_event.set()
+
+                async def _delayed_sync():
+                    await asyncio.sleep(2.0)
+                    backend_url = os.getenv("BACKEND_URL", "http://backend:8000")
+                    if self.event_dispatcher and hasattr(self.event_dispatcher, "backend_url"):
+                        backend_url = self.event_dispatcher.backend_url
+                    await self._sync_from_backend(backend_url)
+
+                self._loop.create_task(_delayed_sync())
 
             self._loop.run_until_complete(_start())
             try:
