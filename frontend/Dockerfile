@@ -21,7 +21,7 @@ RUN npm run build
 # ------------------------------------------------------------------------------
 # Stage 2: Serve with Unprivileged Nginx
 # ------------------------------------------------------------------------------
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.30-alpine AS runtime
 
 # Copy custom Nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf

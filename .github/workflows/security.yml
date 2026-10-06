@@ -79,13 +79,15 @@ jobs:
       - name: Install Security Scanners
         run: pip install bandit pip-audit
 
+      # Both steps share the [tool.bandit] config in pyproject.toml and the same
+      # medium+ severity/confidence gate. No fallback: a finding fails the job.
       - name: Run Bandit (Backend AST Analysis)
         run: |
-          bandit -r backend/app -c pyproject.toml || bandit -r backend/app -ll -ii
+          bandit -r backend/app -c pyproject.toml -ll -ii
 
       - name: Run Bandit (Vision Service AST Analysis)
         run: |
-          bandit -r vision-service/pipeline vision-service/camera vision-service/events -ll -ii
+          bandit -r vision-service/pipeline vision-service/camera vision-service/events -c pyproject.toml -ll -ii
 
       - name: Run pip-audit (Backend Dependencies)
         run: |
@@ -120,8 +122,12 @@ jobs:
   # 5. Container Image Vulnerability Scanning (Trivy)
   # ============================================================================
   container-scan:
-    name: Container Scanning (Trivy)
+    name: Container Scanning (Trivy) - ${{ matrix.service }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, frontend, vision-service]
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -129,36 +135,20 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Backend Image
+      # The image is built in this job so the scan always sees the current Dockerfile.
+      - name: Build ${{ matrix.service }} Image
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: ./${{ matrix.service }}
           push: false
-          tags: anti-proxy-backend:scan
+          tags: anti-proxy-${{ matrix.service }}:scan
           load: true
 
-      - name: Scan Backend Image with Trivy
-        uses: aquasecurity/trivy-action@0.29.0
+      - name: Scan ${{ matrix.service }} Image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: "anti-proxy-backend:scan"
+          image-ref: "anti-proxy-${{ matrix.service }}:scan"
           format: "table"
-          exit-code: "0"
-          ignore-unfixed: true
-          severity: "CRITICAL,HIGH"
-
-      - name: Build Frontend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: false
-          tags: anti-proxy-frontend:scan
-          load: true
-
-      - name: Scan Frontend Image with Trivy
-        uses: aquasecurity/trivy-action@0.29.0
-        with:
-          image-ref: "anti-proxy-frontend:scan"
-          format: "table"
-          exit-code: "0"
+          exit-code: "1"
           ignore-unfixed: true
           severity: "CRITICAL,HIGH"
