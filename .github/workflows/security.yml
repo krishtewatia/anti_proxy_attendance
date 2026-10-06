@@ -133,7 +133,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # The image is built in this job so the scan always sees the current Dockerfile.
       - name: Build ${{ matrix.service }} Image
