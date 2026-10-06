@@ -119,8 +119,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--gallery-npz",
-        default=os.getenv("GALLERY_NPZ_PATH", str(SERVICE_ROOT / "gallery.npz")),
-        help="Path to precomputed gallery .npz file (default: vision-service/gallery.npz)",
+        default=os.getenv("GALLERY_NPZ_PATH", ""),
+        help=(
+            "Optional path to a precomputed gallery .npz file for local development. "
+            "Default: none; the gallery starts empty and is synced from the backend."
+        ),
     )
     args = parser.parse_args()
 
@@ -194,7 +197,6 @@ def main() -> None:
             from insightface.app import FaceAnalysis
             from pipeline import (
                 LiveCVPipeline,
-                load_gallery,
                 load_gallery_from_npz,
                 configure_scrfd_threads,
                 swap_scrfd_detector,
@@ -224,14 +226,16 @@ def main() -> None:
                     app, intra_threads=args.intra_threads, inter_threads=args.inter_threads
                 )
 
-            npz_file = Path(args.gallery_npz)
-            if npz_file.exists():
-                print(f"[INFO] Loading biometric gallery from precomputed .npz: {npz_file}")
-                gallery = load_gallery_from_npz(npz_file)
-            else:
-                gallery_dir = SERVICE_ROOT / "tests" / "recognition_benchmark"
-                print(f"[INFO] Loading biometric gallery from benchmark directory: {gallery_dir}")
-                gallery = load_gallery(app, gallery_dir)
+            # The gallery starts empty and is filled from the backend at runtime.
+            # Nothing is loaded implicitly from the image or the working directory.
+            gallery = {}
+            if args.gallery_npz:
+                npz_file = Path(args.gallery_npz)
+                if npz_file.exists():
+                    print(f"[INFO] Loading biometric gallery from explicit .npz: {npz_file}")
+                    gallery = load_gallery_from_npz(npz_file)
+                else:
+                    print(f"[WARN] --gallery-npz {npz_file} not found; starting with an empty gallery")
             print(f"[INFO] Loaded {len(gallery)} enrolled identities: {list(gallery.keys())}")
 
             pipeline = LiveCVPipeline(

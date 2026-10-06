@@ -101,6 +101,7 @@ jobs:
                  tests/test_kinematic_anti_spoof.py \
                  tests/test_multi_camera_orchestration.py \
                  tests/test_rtsp_robustness.py \
+                 tests/test_gallery_startup.py \
                  -v
 
   # ============================================================================
