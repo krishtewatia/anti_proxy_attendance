@@ -13,3 +13,13 @@ tests/video_test/*.mp4
 tests/video_test/*.avi
 data/
 *.log
+
+# Biometric data never goes into the image: embeddings, galleries, and the
+# test suite (which contains volunteer face photos and video clips).
+*.npz
+*.npy
+*.pkl
+*.pickle
+enrolled_gallery.json
+*embeddings*.json
+tests/
