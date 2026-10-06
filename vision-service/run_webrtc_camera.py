@@ -117,14 +117,6 @@ def main() -> None:
         default=os.getenv("KINEMATIC_SPOOF_POLICY", "FLAG"),
         help="Action to take when kinematic spoof is detected (default: FLAG)",
     )
-    parser.add_argument(
-        "--gallery-npz",
-        default=os.getenv("GALLERY_NPZ_PATH", ""),
-        help=(
-            "Optional path to a precomputed gallery .npz file for local development. "
-            "Default: none; the gallery starts empty and is synced from the backend."
-        ),
-    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -197,7 +189,6 @@ def main() -> None:
             from insightface.app import FaceAnalysis
             from pipeline import (
                 LiveCVPipeline,
-                load_gallery_from_npz,
                 configure_scrfd_threads,
                 swap_scrfd_detector,
             )
@@ -226,16 +217,9 @@ def main() -> None:
                     app, intra_threads=args.intra_threads, inter_threads=args.inter_threads
                 )
 
-            # The gallery starts empty and is filled from the backend at runtime.
-            # Nothing is loaded implicitly from the image or the working directory.
+            # The gallery starts empty. Embeddings are loaded only from the backend
+            # over its authenticated internal route, never from a file.
             gallery = {}
-            if args.gallery_npz:
-                npz_file = Path(args.gallery_npz)
-                if npz_file.exists():
-                    print(f"[INFO] Loading biometric gallery from explicit .npz: {npz_file}")
-                    gallery = load_gallery_from_npz(npz_file)
-                else:
-                    print(f"[WARN] --gallery-npz {npz_file} not found; starting with an empty gallery")
             print(f"[INFO] Loaded {len(gallery)} enrolled identities: {list(gallery.keys())}")
 
             pipeline = LiveCVPipeline(
