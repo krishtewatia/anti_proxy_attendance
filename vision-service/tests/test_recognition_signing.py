@@ -107,3 +107,64 @@ def test_signature_depends_on_the_key():
 def test_signing_requires_a_key_a_session_and_an_identity(kwargs):
     with pytest.raises(ValueError):
         sign_recognition(**kwargs)
+
+
+# ------------------------------------------------------------------------------
+# The service must refuse to run without a real signing key
+# ------------------------------------------------------------------------------
+
+import secrets  # noqa: E402
+
+from camera.recognition_signing import validate_signing_key  # noqa: E402
+
+GOOD_KEY = secrets.token_hex(32)  # generated per run; no key material in the repo
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        None,
+        "",
+        "   ",
+        "replace_with_secure_random_recognition_signing_key_here",
+        "replace_with_output_of_the_command_above",
+        "too-short-key",
+    ],
+)
+def test_missing_placeholder_or_short_key_is_refused(key):
+    with pytest.raises(RuntimeError) as excinfo:
+        validate_signing_key(key)
+    assert "RECOGNITION_SIGNING_KEY" in str(excinfo.value)
+
+
+def test_generated_key_is_accepted_and_dev_override_skips_the_check():
+    validate_signing_key(GOOD_KEY)
+    validate_signing_key(None, allow_insecure=True)
+
+
+@pytest.mark.parametrize(
+    "key", [None, "replace_with_secure_random_recognition_signing_key_here"]
+)
+def test_runner_exits_before_serving_when_the_key_is_not_real(key):
+    """run_webrtc_camera.py must stop at startup, with a clear message and exit code 1."""
+    import os
+    import subprocess
+
+    env = {k: v for k, v in os.environ.items() if k not in {
+        "RECOGNITION_SIGNING_KEY", "ALLOW_INSECURE_RECOGNITION_KEY"
+    }}
+    if key is not None:
+        env["RECOGNITION_SIGNING_KEY"] = key
+
+    proc = subprocess.run(
+        [sys.executable, "run_webrtc_camera.py", "--port", "0"],
+        cwd=str(SERVICE_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert proc.returncode == 1
+    assert "RECOGNITION_SIGNING_KEY" in proc.stderr
+    assert "listening" not in (proc.stdout + proc.stderr).lower()
