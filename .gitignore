@@ -56,6 +56,10 @@ data/
 *.pickle
 enrolled_gallery.json
 *embeddings*.json
+# Volunteer face photos, clips and frames live outside the repo (VISION_FIXTURES_DIR)
+vision-service/tests/recognition_benchmark/
+vision-service/tests/video_test/
+vision-service/tests/multi_person_output/
 data/evaluation/
 vision-service/evaluation/data/
 

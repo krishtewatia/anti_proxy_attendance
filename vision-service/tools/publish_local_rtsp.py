@@ -16,6 +16,7 @@ Tool Options and Licenses:
 
 from __future__ import annotations
 
+import os
 import argparse
 from pathlib import Path
 import shutil
@@ -23,7 +24,11 @@ import subprocess
 import sys
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CLIP = SERVICE_ROOT / "tests" / "video_test" / "person_1_vid.mp4"
+DEFAULT_CLIP = (
+    Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured")
+    / "video_test"
+    / "person_1_vid.mp4"
+)
 
 
 def print_setup_instructions() -> None:
@@ -39,7 +44,7 @@ def print_setup_instructions() -> None:
     print("\nOption 2: Docker MediaMTX")
     print("     docker run --rm -it --network=host bluenviron/mediamtx:latest")
     print("\nPublishing a Looping Video Stream with FFmpeg:")
-    print("     ffmpeg -re -stream_loop -1 -i tests/video_test/person_1_vid.mp4 \\")
+    print("     ffmpeg -re -stream_loop -1 -i $VISION_FIXTURES_DIR/video_test/person_1_vid.mp4 \\")
     print("            -c:v libx264 -preset ultrafast -tune zerolatency -b:v 1M \\")
     print("            -f rtsp rtsp://localhost:8554/cam_room_101_door")
     print("=" * 72)
