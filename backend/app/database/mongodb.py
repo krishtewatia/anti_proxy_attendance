@@ -89,6 +89,17 @@ async def init_indexes(db: AsyncIOMotorDatabase):
         [("resource_type", 1), ("resource_id", 1), ("timestamp", 1)],
         name="idx_audit_resource_history",
     )
+    # Replay protection for signed recognition results: unique nonce + TTL expiry
+    await db["recognition_nonces"].create_index(
+        "nonce",
+        unique=True,
+        name="uq_recognition_nonce",
+    )
+    await db["recognition_nonces"].create_index(
+        "expires_at",
+        expireAfterSeconds=0,
+        name="ttl_recognition_nonce",
+    )
     # Enforce unique camera_id on cameras collection
     await db["cameras"].create_index(
         [("camera_id", 1)],

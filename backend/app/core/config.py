@@ -34,6 +34,24 @@ class Settings:
         "yes",
     }
 
+    # Internal vision service (reachable only from the backend)
+    VISION_SERVICE_URL: str = os.getenv("VISION_SERVICE_URL", "http://vision-service:8088")
+    VISION_FRAME_TIMEOUT_SECONDS: float = float(os.getenv("VISION_FRAME_TIMEOUT_SECONDS", "5"))
+
+    # Signed recognition results: shared HMAC key and freshness limits
+    RECOGNITION_SIGNING_KEY: str = os.getenv("RECOGNITION_SIGNING_KEY", "")
+    RECOGNITION_MAX_TTL_SECONDS: int = int(os.getenv("RECOGNITION_MAX_TTL_SECONDS", "30"))
+    RECOGNITION_MAX_CLOCK_SKEW_SECONDS: int = int(
+        os.getenv("RECOGNITION_MAX_CLOCK_SKEW_SECONDS", "5")
+    )
+
+    # Frame path protection (browser -> backend -> vision service)
+    FRAME_MAX_BYTES: int = int(os.getenv("FRAME_MAX_BYTES", str(5 * 1024 * 1024)))
+    FRAME_RATE_LIMIT_PER_MINUTE: int = int(os.getenv("FRAME_RATE_LIMIT_PER_MINUTE", "300"))
+    TEACHER_FRAME_RATE_LIMIT_PER_MINUTE: int = int(
+        os.getenv("TEACHER_FRAME_RATE_LIMIT_PER_MINUTE", "600")
+    )
+
     # CORS configuration
     CORS_ALLOWED_ORIGINS: list[str] = [
         origin.strip()
