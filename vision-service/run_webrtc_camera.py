@@ -119,6 +119,19 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Fail closed: never serve recognition results without a real signing key.
+    from camera.recognition_signing import validate_signing_key
+
+    try:
+        validate_signing_key(
+            os.getenv("RECOGNITION_SIGNING_KEY"),
+            allow_insecure=os.getenv("ALLOW_INSECURE_RECOGNITION_KEY", "false").lower()
+            in {"true", "1", "yes"},
+        )
+    except RuntimeError as exc:
+        print(f"[FATAL] {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
