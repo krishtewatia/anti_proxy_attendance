@@ -5,11 +5,12 @@ with temporal alignment so both subjects approach and cross the virtual boundary
 simultaneously in parallel lanes.
 """
 
+import os
 from pathlib import Path
 import cv2
 import numpy as np
 
-VIDEO_DIR = Path(__file__).resolve().parent / "video_test"
+VIDEO_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test"
 V1_PATH = VIDEO_DIR / "person_1_vid.mp4"
 V2_PATH = VIDEO_DIR / "person_2_vid.mp4"
 OUTPUT_PATH = VIDEO_DIR / "multi_person_simultaneous.mp4"
