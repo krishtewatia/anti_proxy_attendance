@@ -44,6 +44,15 @@ updates:
       - dependency-name: "av"
         versions:
           - ">=18"
+      # The vision service runs on Python 3.11. numpy 2.5+ and scipy 1.18+ have
+      # no Python 3.11 release, so a PR raising those floors can never install.
+      # Remove both rules when the vision service moves to Python 3.12.
+      - dependency-name: "numpy"
+        versions:
+          - ">=2.5"
+      - dependency-name: "scipy"
+        versions:
+          - ">=1.18"
 
   # React Frontend Dependencies
   - package-ecosystem: "npm"
