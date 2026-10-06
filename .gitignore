@@ -52,6 +52,10 @@ data/
 **/evaluation_dataset/
 *.npy
 *.npz
+*.pkl
+*.pickle
+enrolled_gallery.json
+*embeddings*.json
 data/evaluation/
 vision-service/evaluation/data/
 
