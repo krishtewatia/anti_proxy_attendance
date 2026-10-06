@@ -23,6 +23,7 @@ from app.schemas.attendance import AttendanceRecord
 from app.schemas.live_session import SessionLiveSnapshotResponse
 from app.schemas.session import SessionCreate, SessionResponse
 from app.schemas.session_roster import SessionRoster
+from app.services.audit_service import record_audit_event
 from app.services.live_session_service import compute_session_live_snapshot
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,21 @@ router = APIRouter(
     prefix="/api/v1/sessions",
     tags=["sessions"],
 )
+
+
+async def _audit_status_change(current_user: dict, session_id: str, new_status: str) -> None:
+    """Record a SESSION_UPDATED audit event without failing the request."""
+    try:
+        await record_audit_event(
+            actor_user_id=current_user["user_id"],
+            actor_role=current_user.get("role", "TEACHER"),
+            action="SESSION_UPDATED",
+            resource_type="SESSION",
+            resource_id=session_id,
+            metadata={"status": new_status},
+        )
+    except Exception:
+        logger.exception("Failed to record audit event for SESSION_UPDATED")
 
 
 @router.post(
@@ -105,6 +121,36 @@ async def create_session_endpoint(
                 target_class,
             )
 
+    # 5. Record audit event (resilient to audit logging failure)
+    try:
+        start_time_iso = (
+            created_session["start_time"].isoformat()
+            if hasattr(created_session["start_time"], "isoformat")
+            else str(created_session["start_time"])
+        )
+        end_time_iso = (
+            created_session["end_time"].isoformat()
+            if hasattr(created_session["end_time"], "isoformat")
+            else str(created_session["end_time"])
+        )
+        await record_audit_event(
+            actor_user_id=current_user["user_id"],
+            actor_role=current_user.get("role", "TEACHER"),
+            action="SESSION_CREATED",
+            resource_type="SESSION",
+            resource_id=created_session["session_id"],
+            metadata={
+                "course_name": created_session["course_name"],
+                "classroom_id": created_session["classroom_id"],
+                "class_code": created_session.get("class_code"),
+                "start_time": start_time_iso,
+                "end_time": end_time_iso,
+                "required_presence_percentage": created_session["required_presence_percentage"],
+            },
+        )
+    except Exception:
+        logger.exception("Failed to record audit event for SESSION_CREATED")
+
     return SessionResponse(
         session_id=created_session["session_id"],
         course_name=created_session["course_name"],
@@ -142,6 +188,7 @@ async def start_session_endpoint(
 
     await update_session_status(session_id, "ACTIVE")
     session["status"] = "ACTIVE"
+    await _audit_status_change(current_user, session_id, "ACTIVE")
 
     return SessionResponse(
         session_id=session["session_id"],
@@ -176,6 +223,7 @@ async def end_session_endpoint(
     session = await get_owned_session(session_id, current_user)
     await update_session_status(session_id, "FINALIZED")
     session["status"] = "FINALIZED"
+    await _audit_status_change(current_user, session_id, "FINALIZED")
 
     return SessionResponse(
         session_id=session["session_id"],

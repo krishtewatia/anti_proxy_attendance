@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 class AttendanceSummaryItem(BaseModel):
     """Attendance information for one student in a session."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     attendance_id: str
     identity: str
@@ -25,7 +25,7 @@ class AttendanceSummaryItem(BaseModel):
 class AttendanceSessionResponse(BaseModel):
     """Attendance summary for one session."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     session_id: str
     course_name: Optional[str] = None

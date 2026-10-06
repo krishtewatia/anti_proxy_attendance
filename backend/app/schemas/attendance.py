@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 class AttendanceInterval(BaseModel):
     """Legacy interval model retained for backwards compatibility."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     entry_time: Optional[datetime] = None
     exit_time: Optional[datetime] = None
@@ -16,7 +16,7 @@ class AttendanceInterval(BaseModel):
 class AttendanceRecord(BaseModel):
     """Clean One-Time AI Face Recognition Attendance Record."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     attendance_id: str
     session_id: str
@@ -38,7 +38,7 @@ class AttendanceRecord(BaseModel):
 class MarkAttendanceRequest(BaseModel):
     """Payload to mark a student present in a session."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     identity: str
     session_id: Optional[str] = None
@@ -49,7 +49,7 @@ class MarkAttendanceRequest(BaseModel):
 class MarkAttendanceResponse(BaseModel):
     """Response returned when marking a student."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     status: Literal["marked", "already_present", "not_found", "error"]
     identity: str

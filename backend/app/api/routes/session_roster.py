@@ -8,6 +8,7 @@ from app.schemas.session_roster_response import (
     SessionRosterResponse,
     SessionRosterUpdate,
 )
+from app.services.audit_service import record_audit_event
 from app.services.session_enrollment import (
     enroll_session_roster,
     get_enrolled_roster,
@@ -40,6 +41,21 @@ async def update_session_roster(
         session_id=session_id,
         identities=payload.identities,
     )
+
+    # Record audit event (resilient to audit logging failure)
+    try:
+        await record_audit_event(
+            actor_user_id=current_user["user_id"],
+            actor_role=current_user.get("role", "TEACHER"),
+            action="ROSTER_UPDATED",
+            resource_type="SESSION_ROSTER",
+            resource_id=session_id,
+            metadata={
+                "student_count": len(roster.identities),
+            },
+        )
+    except Exception:
+        logger.exception("Failed to record audit event for ROSTER_UPDATED")
 
     return SessionRosterResponse(
         session_id=roster.session_id,

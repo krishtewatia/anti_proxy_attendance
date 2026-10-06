@@ -498,3 +498,118 @@ async def test_non_roster_identity_does_not_create_attendance_record():
     assert records[0]["identity"] == "person_01"
     # Verify no record created for guest_visitor_99
     assert all(r["identity"] != "guest_visitor_99" for r in records)
+
+
+@pytest.mark.anyio
+async def test_concurrent_sessions_scan_in_a_does_not_mark_present_in_b():
+    """Same student rostered in two concurrent sessions, scanned only in A, is ABSENT in B."""
+    db = mongodb.get_database()
+
+    session_a_id = "session_concurrent_A"
+    session_b_id = "session_concurrent_B"
+    start = datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 10, 20, 11, 0, 0, tzinfo=timezone.utc)
+
+    # One-time recognition mark recorded in session A only
+    await db["attendance_records"].insert_one({
+        "attendance_id": f"att_{session_a_id}_person_01",
+        "session_id": session_a_id,
+        "identity": "person_01",
+        "status": "PRESENT",
+        "marked_at": start + timedelta(minutes=3),
+    })
+
+    # Doorway events recorded in session A only, covering the whole shared window
+    await db[settings.EVENTS_COLLECTION].insert_many([
+        {
+            "event_id": "evt_concurrent_a_entry",
+            "session_id": session_a_id,
+            "classroom_id": "ROOM_101",
+            "identity": "person_01",
+            "direction": "ENTRY",
+            "timestamp": start + timedelta(minutes=2),
+        },
+        {
+            "event_id": "evt_concurrent_a_exit",
+            "session_id": session_a_id,
+            "classroom_id": "ROOM_101",
+            "identity": "person_01",
+            "direction": "EXIT",
+            "timestamp": start + timedelta(minutes=58),
+        },
+    ])
+
+    records_b = await finalize_session_attendance(
+        session_id=session_b_id,
+        session_start=start,
+        session_end=end,
+        required_presence_percentage=75.0,
+        roster=SessionRoster(session_id=session_b_id, identities=["person_01"]),
+    )
+
+    assert len(records_b) == 1
+    rec_b = records_b[0]
+    assert rec_b["session_id"] == session_b_id
+    assert rec_b["status"] == "ABSENT"
+    assert rec_b["marked_at"] is None
+    assert rec_b["presence_duration_seconds"] == 0.0
+    assert rec_b["presence_intervals"] == []
+
+    records_a = await finalize_session_attendance(
+        session_id=session_a_id,
+        session_start=start,
+        session_end=end,
+        required_presence_percentage=75.0,
+        roster=SessionRoster(session_id=session_a_id, identities=["person_01"]),
+    )
+
+    assert len(records_a) == 1
+    assert records_a[0]["status"] == "PRESENT"
+    assert records_a[0]["presence_duration_seconds"] == 3360.0
+
+
+@pytest.mark.anyio
+async def test_event_without_session_id_counts_for_neither_overlapping_session():
+    """An event with no session_id is never attributed to a session by time window."""
+    db = mongodb.get_database()
+
+    session_a_id = "session_overlap_A"
+    session_b_id = "session_overlap_B"
+    start_a = datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc)
+    end_a = datetime(2026, 10, 20, 11, 0, 0, tzinfo=timezone.utc)
+    start_b = datetime(2026, 10, 20, 10, 30, 0, tzinfo=timezone.utc)
+    end_b = datetime(2026, 10, 20, 11, 30, 0, tzinfo=timezone.utc)
+
+    # Unscoped ENTRY/EXIT pair that falls inside both session windows
+    await db[settings.EVENTS_COLLECTION].insert_many([
+        {
+            "event_id": "evt_unscoped_entry",
+            "session_id": None,
+            "identity": "person_01",
+            "direction": "ENTRY",
+            "timestamp": start_b + timedelta(minutes=1),
+        },
+        {
+            "event_id": "evt_unscoped_exit",
+            "identity": "person_01",
+            "direction": "EXIT",
+            "timestamp": end_a - timedelta(minutes=1),
+        },
+    ])
+
+    for session_id, start, end in (
+        (session_a_id, start_a, end_a),
+        (session_b_id, start_b, end_b),
+    ):
+        records = await finalize_session_attendance(
+            session_id=session_id,
+            session_start=start,
+            session_end=end,
+            required_presence_percentage=10.0,
+            roster=SessionRoster(session_id=session_id, identities=["person_01"]),
+        )
+
+        assert len(records) == 1
+        assert records[0]["status"] == "ABSENT"
+        assert records[0]["presence_duration_seconds"] == 0.0
+        assert records[0]["presence_intervals"] == []

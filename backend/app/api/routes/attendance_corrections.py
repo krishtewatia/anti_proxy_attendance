@@ -6,12 +6,16 @@ from app.database.attendance import get_attendance_record
 from app.schemas.attendance_correction import (
     AttendanceCorrectionCreate,
     AttendanceCorrectionResponse,
+    AttendanceStatusToggle,
+    AttendanceStatusToggleResponse,
 )
 from app.services.attendance_correction import (
     AttendanceNotFoundError,
     correct_attendance,
     get_correction_history,
 )
+
+TOGGLE_CORRECTION_REASON = "Manual status toggle by teacher"
 
 router = APIRouter(
     prefix="/api/v1/attendance",
@@ -21,15 +25,15 @@ router = APIRouter(
 
 @router.patch(
     "/{session_id}/records/{attendance_id}",
-    response_model=AttendanceCorrectionResponse,
+    response_model=AttendanceCorrectionResponse | AttendanceStatusToggleResponse,
     status_code=status.HTTP_200_OK,
 )
 async def correct_session_attendance(
     session_id: str,
     attendance_id: str,
-    payload: AttendanceCorrectionCreate,
+    payload: AttendanceCorrectionCreate | AttendanceStatusToggle,
     current_user: Annotated[dict, Depends(require_teacher)],
-) -> AttendanceCorrectionResponse:
+) -> AttendanceCorrectionResponse | AttendanceStatusToggleResponse:
     """
     Manually correct an attendance record for a session.
 
@@ -56,13 +60,23 @@ async def correct_session_attendance(
             detail="Attendance record does not belong to this session",
         )
 
-    # 3. Call service layer
+    # 3. Call service layer (a status toggle is audited exactly like a full correction)
+    is_toggle = isinstance(payload, AttendanceStatusToggle)
+    if is_toggle:
+        new_status = payload.status
+        new_presence_seconds = float(record.get("presence_duration_seconds", 0.0))
+        reason = TOGGLE_CORRECTION_REASON
+    else:
+        new_status = payload.new_status
+        new_presence_seconds = payload.new_presence_seconds
+        reason = payload.reason
+
     try:
         correction_result = await correct_attendance(
             attendance_id=attendance_id,
-            new_status=payload.new_status,
-            new_presence_seconds=payload.new_presence_seconds,
-            reason=payload.reason,
+            new_status=new_status,
+            new_presence_seconds=new_presence_seconds,
+            reason=reason,
             corrected_by=current_user["user_id"],
         )
     except AttendanceNotFoundError as exc:
@@ -74,6 +88,15 @@ async def correct_session_attendance(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
+        )
+
+    if is_toggle:
+        return AttendanceStatusToggleResponse(
+            attendance_id=attendance_id,
+            session_id=session_id,
+            status=correction_result.new_status,
+            correction_id=correction_result.correction_id,
+            message=f"Attendance updated to {correction_result.new_status}",
         )
 
     return correction_result
