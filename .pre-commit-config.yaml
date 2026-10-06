@@ -19,7 +19,6 @@ repos:
       - id: detect-private-key
       - id: check-added-large-files
         args: ["--maxkb=10000"]
-        exclude: ^vision-service/tests/video_test/.*\.mp4$
 
   # ----------------------------------------------------------------------------
   # 2. Secret Detection (Gitleaks)

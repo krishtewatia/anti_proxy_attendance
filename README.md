@@ -329,7 +329,7 @@ anti_proxy_project/
 │   │   └── webrtc_receiver.py      # HTTP frame ingestion, SCRFD/ArcFace pipeline, gallery
 │   ├── detection/                  # SCRFD ONNX model wrappers
 │   ├── recognition/                # ArcFace embedding extraction & similarity matching
-│   ├── tests/                      # Vision unit tests & benchmark face datasets
+│   ├── tests/                      # Vision unit tests (biometric fixtures live outside the repo)
 │   ├── Dockerfile                  # Python container with InsightFace & ONNX Runtime
 │   └── requirements.txt            # Vision service dependencies
 ├── docker-compose.yml              # Local orchestration stack specification
@@ -469,6 +469,31 @@ npm run build
 ### Run Vision Service Attendance Tests
 ```bash
 docker exec anti-proxy-vision-service python -m unittest discover tests/
+```
+
+### Biometric Test Fixtures (Not in the Repository)
+
+Face photos, video clips, sampled frames and embeddings of the volunteer test subjects are biometric data. They are **not stored in git** and are not distributed with this project. Tests and tools that need them read a local folder named by `VISION_FIXTURES_DIR`; without it, those tests skip.
+
+Expected layout:
+
+```text
+<VISION_FIXTURES_DIR>/
+├── recognition_benchmark/person_01..04/   # enrollment photos per subject
+├── video_test/                            # *.mp4 clips and sampled_frames/
+├── multi_person_output/                   # frames written by the benchmark tools
+└── benchmark_embeddings.json              # used by scripts/seed_clean_demo.py
+```
+
+How to obtain them:
+
+- **Project maintainers**: use the private copy kept by the project owner. Do not commit it, upload it, or bake it into an image.
+- **Everyone else**: collect your own data from consenting adult volunteers, following `docs/evaluation/collection_protocol.md`, and arrange it in the layout above.
+
+Run the fixture-dependent vision tests locally (they need the InsightFace models too):
+
+```bash
+VISION_FIXTURES_DIR=/path/to/fixtures pytest -m "needs_models or slow" tests/test_real_cv_attendance_e2e.py
 ```
 
 ### Run Full-Stack End-to-End Verification

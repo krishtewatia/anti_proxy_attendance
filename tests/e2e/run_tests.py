@@ -77,7 +77,7 @@ def preflight_check() -> bool:
         print("  [INFO] Live daemon not responding. In-process ASGI transport will be used.")
 
     # 3. Check Benchmark Vectors
-    bench_file = PROJECT_ROOT / ".agents" / "teamwork" / "survey_explorer_1" / "benchmark_embeddings.json"
+    bench_file = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "benchmark_embeddings.json"
     if bench_file.exists():
         print(f"  [OK] Authentic InsightFace embeddings found: {bench_file.name}")
     else:

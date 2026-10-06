@@ -8,6 +8,7 @@ Verifies that OpenCV can:
 5. Save sampled frames to disk for visual verification.
 """
 
+import os
 import argparse
 from pathlib import Path
 import cv2
@@ -135,8 +136,8 @@ def main():
     args = parser.parse_args()
 
     tests_dir = Path(__file__).resolve().parent
-    video_dir = tests_dir / "video_test"
-    output_dir = tests_dir / "video_test" / "sampled_frames"
+    video_dir = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test"
+    output_dir = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test" / "sampled_frames"
 
     video_files = sorted(
         path

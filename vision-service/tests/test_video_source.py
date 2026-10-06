@@ -1,5 +1,6 @@
 """Unit tests for the unified Video Source Abstraction (Step 2D.1)."""
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 import queue
@@ -26,6 +27,18 @@ from camera import (
     WebRTCVideoSource,
     create_video_source,
 )
+
+
+# Real video clips are biometric fixtures kept outside the repository.
+VIDEO_FIXTURES_DIR = (
+    Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test"
+)
+
+
+def require_clip(test: unittest.TestCase, path: Path) -> None:
+    """Skip a test that needs a real clip when the fixtures are not available."""
+    if not Path(path).exists():
+        test.skipTest("Video fixtures not available: set VISION_FIXTURES_DIR (see README)")
 
 
 class TestVideoFrameContract(unittest.TestCase):
@@ -69,14 +82,15 @@ class TestFileVideoSource(unittest.TestCase):
     """Test FileVideoSource adapter using local test video files."""
 
     def setUp(self):
-        self.video_path = SERVICE_ROOT / "tests" / "video_test" / "person_1_vid.mp4"
+        self.video_path = VIDEO_FIXTURES_DIR / "person_1_vid.mp4"
         if not self.video_path.exists():
             # Fallback to any available video in video_test
-            candidates = list((SERVICE_ROOT / "tests" / "video_test").glob("*.mp4"))
+            candidates = list((VIDEO_FIXTURES_DIR).glob("*.mp4"))
             if candidates:
                 self.video_path = candidates[0]
 
     def test_open_extracts_metadata(self):
+        require_clip(self, self.video_path)
         source = FileVideoSource(self.video_path, target_fps=5.0)
         source.open()
         try:
@@ -90,6 +104,7 @@ class TestFileVideoSource(unittest.TestCase):
             self.assertFalse(source.is_opened)
 
     def test_read_samples_frames_with_monotonic_timestamps(self):
+        require_clip(self, self.video_path)
         source = FileVideoSource(self.video_path, target_fps=5.0)
         source.open()
         try:
@@ -111,6 +126,7 @@ class TestFileVideoSource(unittest.TestCase):
             source.release()
 
     def test_context_manager_and_streaming(self):
+        require_clip(self, self.video_path)
         with FileVideoSource(self.video_path, target_fps=5.0) as source:
             self.assertTrue(source.is_opened)
             frames_read = 0
@@ -273,7 +289,7 @@ class TestFactoryAndPolymorphism(unittest.TestCase):
     """Test the factory helper and cross-source interchangeability."""
 
     def setUp(self):
-        self.video_path = SERVICE_ROOT / "tests" / "video_test" / "person_1_vid.mp4"
+        self.video_path = VIDEO_FIXTURES_DIR / "person_1_vid.mp4"
 
     def test_factory_creates_file_source(self):
         src = create_video_source("FILE", source_uri=self.video_path)
@@ -295,6 +311,7 @@ class TestFactoryAndPolymorphism(unittest.TestCase):
             create_video_source("UNKNOWN_FORMAT")
 
     def test_unified_cv_consumer_pipeline_polymorphism(self):
+        require_clip(self, self.video_path)
         """Demonstrate that downstream CV pipeline code functions identically
 
         regardless of whether frames arrive from Phone/WebRTC or Recorded File.
