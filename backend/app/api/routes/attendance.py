@@ -1,28 +1,30 @@
 import csv
-from datetime import datetime, timezone
 import io
 import logging
-import os
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api.dependencies.auth import get_owned_session, require_teacher
+from app.api.dependencies.camera_auth import require_service_key
+from app.api.dependencies.rate_limiter import (
+    frame_session_rate_limiter,
+    frame_teacher_rate_limiter,
+)
+from app.core.config import settings
 from app.database.attendance import (
     get_attendance_by_session,
     upsert_attendance,
 )
 from app.database.mongodb import get_database
 from app.database.session_roster import get_session_roster
-from app.schemas.attendance import (
-    AttendanceRecord,
-    MarkAttendanceRequest,
-    MarkAttendanceResponse,
-)
+from app.schemas.attendance import AttendanceRecord
 from app.schemas.attendance_response import (
     AttendanceSessionResponse,
     AttendanceSummaryItem,
 )
+from app.services.recognition_service import verify_and_mark
+from app.services.vision_client import VisionServiceUnavailable, forward_frame_to_vision
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,8 @@ async def _resolve_student_info(db) -> dict[str, dict]:
 
 @router.get(
     "/active-session",
-    summary="Get currently active attendance session metadata",
+    summary="Get currently active attendance session metadata (service key required)",
+    dependencies=[Depends(require_service_key)],
 )
 async def get_active_session_info():
     """Retrieve metadata of the current active attendance session for camera/vision integration."""
@@ -84,7 +87,8 @@ async def get_active_session_info():
 
 @router.get(
     "/vision-gallery",
-    summary="Fetch all enrolled biometric profiles and identities for vision service sync",
+    summary="Biometric gallery for the vision service (service key required)",
+    dependencies=[Depends(require_service_key)],
 )
 async def get_vision_gallery_endpoint():
     """Returns all enrolled student biometric profiles with identities, names, and mean embeddings for vision matching."""
@@ -194,99 +198,6 @@ async def get_session_attendance(
     )
 
 
-@router.post(
-    "/{session_id}/mark",
-    response_model=MarkAttendanceResponse,
-)
-@router.post(
-    "/mark",
-    response_model=MarkAttendanceResponse,
-)
-async def mark_student_attendance(
-    payload: MarkAttendanceRequest,
-    session_id: Optional[str] = None,
-) -> MarkAttendanceResponse:
-    """One-Time Attendance Marker:
-
-    Recognized student face -> Mark PRESENT.
-    If already present -> Return 'already_present' without duplicate events or resets.
-    """
-    db = get_database()
-    target_session_id = session_id or payload.session_id
-
-    # If no session_id provided, find the active session
-    if not target_session_id:
-        active_sess = await db["sessions"].find_one({"status": "ACTIVE"}, sort=[("created_at", -1)])
-        if not active_sess:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No active attendance session found to mark attendance.",
-            )
-        target_session_id = active_sess["session_id"]
-
-    ident = payload.identity
-    if not ident or ident == "UNKNOWN":
-        return MarkAttendanceResponse(
-            status="error",
-            identity="UNKNOWN",
-            message="Cannot mark unconfirmed or UNKNOWN face",
-        )
-
-    student_map = await _resolve_student_info(db)
-    s_info = student_map.get(ident, {})
-    stu_id = s_info.get("student_id", ident)
-    stu_name = s_info.get("name", ident)
-
-    # Check existing attendance record in MongoDB
-    rec = await db["attendance_records"].find_one(
-        {"session_id": target_session_id, "identity": ident}
-    )
-
-    if rec and rec.get("status") == "PRESENT":
-        return MarkAttendanceResponse(
-            status="already_present",
-            identity=ident,
-            student_id=stu_id,
-            student_name=stu_name,
-            message=f"{stu_name} is already marked present",
-        )
-
-    # Mark as PRESENT
-    now = datetime.now(timezone.utc)
-    updated_record = AttendanceRecord(
-        attendance_id=f"att_{target_session_id}_{ident}",
-        session_id=target_session_id,
-        identity=ident,
-        student_id=stu_id,
-        student_name=stu_name,
-        status="PRESENT",
-        marked_at=now,
-    )
-    await upsert_attendance(updated_record)
-
-    # Ensure student is included in the session's roster
-    await db["session_rosters"].update_one(
-        {"session_id": target_session_id},
-        {"$addToSet": {"identities": ident}},
-        upsert=True,
-    )
-
-    logger.info(
-        "Student marked PRESENT: %s (%s) for session %s",
-        stu_name,
-        stu_id,
-        target_session_id,
-    )
-
-    return MarkAttendanceResponse(
-        status="marked",
-        identity=ident,
-        student_id=stu_id,
-        student_name=stu_name,
-        message=f"✓ {stu_name} marked PRESENT",
-    )
-
-
 @router.get(
     "/{session_id}/export",
     summary="Export attendance as clean CSV file",
@@ -337,45 +248,106 @@ async def export_session_attendance_csv(
     )
 
 
+def _public_face(face: dict) -> dict:
+    """Copy of a vision face result that is safe to return to the browser."""
+    return {k: v for k, v in face.items() if k != "recognition"}
+
+
 @router.post(
     "/{session_id}/process-frame",
-    summary="Process browser-captured camera frame for live face recognition",
-)
-@router.post(
-    "/process-frame",
-    summary="Process browser-captured camera frame for live face recognition",
+    summary="Recognize faces in one camera frame and mark verified students present",
 )
 async def process_attendance_frame(
+    session_id: str,
     request: Request,
-    session_id: Optional[str] = None,
-):
-    """Forward browser camera frame to Vision Service for SCRFD + ArcFace inference."""
+    current_user: Annotated[dict, Depends(require_teacher)],
+) -> dict:
+    """The only way a recognition marks attendance.
+
+    The browser sends a frame with the teacher's JWT. The backend checks
+    ownership and that the session is ACTIVE, forwards the frame to the
+    internal vision service, verifies each signed recognition result, and
+    marks rostered students present. The browser never asserts an identity.
+    Frame contents are not stored or logged.
+    """
+    session = await get_owned_session(session_id, current_user)
+
+    if session.get("status") != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Attendance can only be marked while the session is active.",
+        )
+
+    await frame_session_rate_limiter.check(f"session:{session_id}")
+    await frame_teacher_rate_limiter.check(f"teacher:{current_user['user_id']}")
+
+    declared_length = request.headers.get("content-length")
+    if declared_length and declared_length.isdigit():
+        if int(declared_length) > settings.FRAME_MAX_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Frame is too large.",
+            )
     body = await request.body()
+    if not body:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty frame.",
+        )
+    if len(body) > settings.FRAME_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Frame is too large.",
+        )
+
     content_type = request.headers.get("content-type", "image/jpeg")
 
-    vision_url = os.getenv("VISION_SERVICE_URL", "http://127.0.0.1:8088")
-    if os.getenv("APP_ENV") == "production" and "127.0.0.1" in vision_url:
-        vision_url = "http://vision-service:8088"
-
-    headers = {"Content-Type": content_type}
-    if session_id:
-        headers["X-Session-Id"] = session_id
-
     try:
-        import httpx
+        vision_result = await forward_frame_to_vision(body, content_type, session_id)
+    except VisionServiceUnavailable:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Vision service unavailable. Please retry.",
+            headers={"Retry-After": "2"},
+        )
 
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.post(
-                f"{vision_url.rstrip('/')}/process-frame",
-                content=body,
-                headers=headers,
-                params={"session_id": session_id} if session_id else None,
-            )
-            return resp.json()
-    except Exception as exc:
-        logger.warning("Vision service process-frame forward failed: %s", exc)
-        return {
-            "status": "error",
-            "message": f"Vision service unreachable: {exc}",
-            "recognized": False,
-        }
+    db = get_database()
+    raw_faces = vision_result.get("faces")
+    faces: list[dict] = []
+
+    for raw_face in raw_faces if isinstance(raw_faces, list) else []:
+        if not isinstance(raw_face, dict):
+            continue
+        face = _public_face(raw_face)
+
+        if raw_face.get("status") == "recognized":
+            result = await verify_and_mark(db, session, raw_face.get("recognition"))
+            face["mark_status"] = result.status
+            if result.status == "rejected":
+                face["mark_reason"] = result.reason
+                if result.reason != "not_on_roster":
+                    # An unverifiable result is never shown as a recognized student
+                    face["status"] = "unverified"
+                    face["identity"] = None
+                    face["student_id"] = None
+                    face["name"] = "UNKNOWN"
+        faces.append(face)
+
+    accepted = [f for f in faces if f.get("mark_status") in {"marked", "already_present"}]
+    top = max(accepted, key=lambda f: f.get("similarity") or 0.0) if accepted else None
+    primary = top or (faces[0] if faces else None)
+
+    return {
+        "status": "ok",
+        "session_id": session_id,
+        "detected_faces": len(faces),
+        "recognized": top is not None,
+        "identity": top.get("identity") if top else None,
+        "student_name": top.get("name") if top else None,
+        "student_id": top.get("student_id") if top else None,
+        "similarity": (primary.get("similarity") or 0.0) if primary else 0.0,
+        "box": primary.get("bbox") if primary else None,
+        "frame_width": vision_result.get("frame_width"),
+        "frame_height": vision_result.get("frame_height"),
+        "faces": faces,
+    }

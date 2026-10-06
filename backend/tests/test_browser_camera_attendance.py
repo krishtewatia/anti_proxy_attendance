@@ -1,13 +1,15 @@
 from datetime import datetime, timezone
-import pytest
+
 from httpx import ASGITransport, AsyncClient
 from mongomock_motor import AsyncMongoMockClient
+import pytest
 
 from app.database import mongodb
 from app.database.users import create_user
 from app.main import app
 from app.security.jwt import create_access_token
 from app.security.passwords import hash_password
+from tests.conftest import FRAME_BYTES
 
 
 @pytest.fixture(autouse=True)
@@ -38,11 +40,12 @@ async def teacher_auth_headers():
 
 
 @pytest.mark.anyio
-async def test_active_session_query(teacher_auth_headers):
+async def test_active_session_query(teacher_auth_headers, service_key_headers):
+    # The active-session lookup is an internal route: it now needs the service key.
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Initially no active session
-        resp = await client.get("/api/v1/attendance/active-session")
+        resp = await client.get("/api/v1/attendance/active-session", headers=service_key_headers)
         assert resp.status_code == 200
         assert resp.json()["has_active_session"] is False
 
@@ -59,14 +62,16 @@ async def test_active_session_query(teacher_auth_headers):
             }
         )
 
-        resp2 = await client.get("/api/v1/attendance/active-session")
+        resp2 = await client.get("/api/v1/attendance/active-session", headers=service_key_headers)
         assert resp2.status_code == 200
         assert resp2.json()["has_active_session"] is True
         assert resp2.json()["session_id"] == "sess_live_123"
 
 
 @pytest.mark.anyio
-async def test_mark_student_present_and_duplicate_prevention(teacher_auth_headers):
+async def test_mark_student_present_and_duplicate_prevention(teacher_auth_headers, vision_frames):
+    # Marking now happens only through the authenticated frame route, backed by a
+    # signed recognition result from the (stubbed) vision service.
     transport = ASGITransport(app=app)
     db = mongodb.get_database()
     await db["sessions"].insert_one(
@@ -92,27 +97,28 @@ async def test_mark_student_present_and_duplicate_prevention(teacher_auth_header
             "identities": ["student1", "student2", "student3"],
         }
     )
+    frame_url = "/api/v1/attendance/sess_browser_001/process-frame"
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # 1. First recognition marks PRESENT
-        mark_resp = await client.post(
-            "/api/v1/attendance/mark",
-            json={"identity": "student1", "session_id": "sess_browser_001"},
-        )
+        vision_frames.faces = [
+            vision_frames.recognized("sess_browser_001", "student1", name="Rahul Sharma")
+        ]
+        mark_resp = await client.post(frame_url, headers=teacher_auth_headers, content=FRAME_BYTES)
         assert mark_resp.status_code == 200
         data1 = mark_resp.json()
-        assert data1["status"] == "marked"
+        assert data1["faces"][0]["mark_status"] == "marked"
         assert data1["identity"] == "student1"
         assert data1["student_name"] == "Rahul Sharma"
 
         # 2. Duplicate frame recognition is idempotent
-        dup_resp = await client.post(
-            "/api/v1/attendance/mark",
-            json={"identity": "student1", "session_id": "sess_browser_001"},
-        )
+        vision_frames.faces = [
+            vision_frames.recognized("sess_browser_001", "student1", name="Rahul Sharma")
+        ]
+        dup_resp = await client.post(frame_url, headers=teacher_auth_headers, content=FRAME_BYTES)
         assert dup_resp.status_code == 200
         data2 = dup_resp.json()
-        assert data2["status"] == "already_present"
+        assert data2["faces"][0]["mark_status"] == "already_present"
 
         # 3. Check session attendance records
         att_resp = await client.get(
@@ -127,28 +133,39 @@ async def test_mark_student_present_and_duplicate_prevention(teacher_auth_header
 
 
 @pytest.mark.anyio
-async def test_mark_attendance_rejects_unknown():
+async def test_mark_attendance_rejects_unknown(teacher_auth_headers, vision_frames):
+    # An UNKNOWN face in a frame never produces an attendance record.
     transport = ASGITransport(app=app)
     db = mongodb.get_database()
     await db["sessions"].insert_one(
         {
             "session_id": "sess_browser_002",
             "status": "ACTIVE",
+            "created_by": "teacher_browser_test",
             "start_time": datetime.now(timezone.utc),
         }
     )
+    await db["session_rosters"].insert_one(
+        {"session_id": "sess_browser_002", "identities": ["student1"]}
+    )
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vision_frames.faces = [vision_frames.unknown()]
         resp = await client.post(
-            "/api/v1/attendance/mark",
-            json={"identity": "UNKNOWN", "session_id": "sess_browser_002"},
+            "/api/v1/attendance/sess_browser_002/process-frame",
+            headers=teacher_auth_headers,
+            content=FRAME_BYTES,
         )
         assert resp.status_code == 200
-        assert resp.json()["status"] == "error"
+        assert resp.json()["recognized"] is False
+        assert resp.json()["faces"][0]["status"] == "unknown"
+
+    assert await db["attendance_records"].count_documents({"session_id": "sess_browser_002"}) == 0
 
 
 @pytest.mark.anyio
-async def test_vision_gallery_sync_endpoint():
+async def test_vision_gallery_sync_endpoint(service_key_headers):
+    # The biometric gallery is an internal route: it now needs the service key.
     transport = ASGITransport(app=app)
     db = mongodb.get_database()
     await db["student_profiles"].insert_one(
@@ -172,7 +189,10 @@ async def test_vision_gallery_sync_endpoint():
     )
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/v1/attendance/vision-gallery")
+        unauthenticated = await client.get("/api/v1/attendance/vision-gallery")
+        assert unauthenticated.status_code == 401
+
+        resp = await client.get("/api/v1/attendance/vision-gallery", headers=service_key_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["count"] >= 1
@@ -184,7 +204,7 @@ async def test_vision_gallery_sync_endpoint():
 
 
 @pytest.mark.anyio
-async def test_newly_enrolled_student_marked_present(teacher_auth_headers):
+async def test_newly_enrolled_student_marked_present(teacher_auth_headers, vision_frames):
     transport = ASGITransport(app=app)
     db = mongodb.get_database()
     sess_id = "sess_browser_new_001"
@@ -212,26 +232,23 @@ async def test_newly_enrolled_student_marked_present(teacher_auth_headers):
             "identities": ["student1", "DS202699"],
         }
     )
+    frame_url = f"/api/v1/attendance/{sess_id}/process-frame"
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Mark newly enrolled student
-        resp = await client.post(
-            "/api/v1/attendance/mark",
-            json={"identity": "DS202699", "session_id": sess_id},
-        )
+        vision_frames.faces = [vision_frames.recognized(sess_id, "DS202699", name="Vikram Verma")]
+        resp = await client.post(frame_url, headers=teacher_auth_headers, content=FRAME_BYTES)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "marked"
+        assert data["faces"][0]["mark_status"] == "marked"
         assert data["identity"] == "DS202699"
         assert data["student_name"] == "Vikram Verma"
 
         # Check idempotency
-        resp_dup = await client.post(
-            "/api/v1/attendance/mark",
-            json={"identity": "DS202699", "session_id": sess_id},
-        )
+        vision_frames.faces = [vision_frames.recognized(sess_id, "DS202699", name="Vikram Verma")]
+        resp_dup = await client.post(frame_url, headers=teacher_auth_headers, content=FRAME_BYTES)
         assert resp_dup.status_code == 200
-        assert resp_dup.json()["status"] == "already_present"
+        assert resp_dup.json()["faces"][0]["mark_status"] == "already_present"
 
         # Verify session roster status
         att_resp = await client.get(
