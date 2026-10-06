@@ -57,3 +57,19 @@ events_rate_limiter = SlidingWindowRateLimiter()
 async def check_events_rate_limit(request: Request) -> None:
     client_host = request.client.host if request.client else "unknown"
     await events_rate_limiter.check(client_host)
+
+
+class _SettingLimiter(SlidingWindowRateLimiter):
+    """Sliding-window limiter whose limit is read from a settings attribute at check time."""
+
+    def __init__(self, setting_name: str):
+        super().__init__()
+        self._setting_name = setting_name
+
+    def get_limit(self) -> int:
+        return int(getattr(settings, self._setting_name))
+
+
+# Frame path: one budget per session and one per teacher.
+frame_session_rate_limiter = _SettingLimiter("FRAME_RATE_LIMIT_PER_MINUTE")
+frame_teacher_rate_limiter = _SettingLimiter("TEACHER_FRAME_RATE_LIMIT_PER_MINUTE")

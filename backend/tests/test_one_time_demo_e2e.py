@@ -22,6 +22,7 @@ import csv
 import io
 
 from app.main import app
+from tests.conftest import FRAME_BYTES
 from app.database import mongodb
 from app.core.config import settings
 
@@ -31,7 +32,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.anyio
-async def test_one_time_attendance_demo_flow():
+async def test_one_time_attendance_demo_flow(vision_frames):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # 1. Login as Teacher
@@ -88,15 +89,22 @@ async def test_one_time_attendance_demo_flow():
             for r in init_data["records"]:
                 assert r["status"] == "ABSENT"
 
+            # Attendance can only be marked while the session is ACTIVE
+            start_res = await client.post(f"/api/v1/sessions/{session_id}/start", headers=headers)
+            assert start_res.status_code == 200, start_res.text
+
+            frame_url = f"/api/v1/attendance/{session_id}/process-frame"
+
             # 5. Step 6 of Demo: Rahul stands in front of camera -> recognized -> marked PRESENT
-            mark_rahul_1 = await client.post(
-                f"/api/v1/attendance/{session_id}/mark",
-                headers=headers,
-                json={"identity": "student1"},
-            )
+            # (frames go through the authenticated backend route; the vision call is stubbed
+            # and returns a signed recognition result, as the real service does)
+            vision_frames.faces = [
+                vision_frames.recognized(session_id, "student1", name="Rahul Sharma")
+            ]
+            mark_rahul_1 = await client.post(frame_url, headers=headers, content=FRAME_BYTES)
             assert mark_rahul_1.status_code == 200, mark_rahul_1.text
             res_r1 = mark_rahul_1.json()
-            assert res_r1["status"] == "marked"
+            assert res_r1["faces"][0]["mark_status"] == "marked"
             assert res_r1["student_name"] == "Rahul Sharma" or "Rahul" in res_r1["student_name"]
 
             # Check attendance list: 1 student present
@@ -109,14 +117,13 @@ async def test_one_time_attendance_demo_flow():
             assert rahul_rec["status"] == "PRESENT"
 
             # 6. Step 7 of Demo: Aman stands in front -> recognized -> marked PRESENT
-            mark_aman = await client.post(
-                f"/api/v1/attendance/{session_id}/mark",
-                headers=headers,
-                json={"identity": "student2"},
-            )
+            vision_frames.faces = [
+                vision_frames.recognized(session_id, "student2", name="Aman Kumar")
+            ]
+            mark_aman = await client.post(frame_url, headers=headers, content=FRAME_BYTES)
             assert mark_aman.status_code == 200, mark_aman.text
             res_a = mark_aman.json()
-            assert res_a["status"] == "marked"
+            assert res_a["faces"][0]["mark_status"] == "marked"
             assert res_a["student_name"] == "Aman Kumar" or "Aman" in res_a["student_name"]
 
             # Check attendance list: 2 students present
@@ -127,15 +134,13 @@ async def test_one_time_attendance_demo_flow():
             assert att_after_a.json()["present_count"] == 2
 
             # 7. Step 8 of Demo: Rahul appears again -> already present -> no duplicate
-            mark_rahul_2 = await client.post(
-                f"/api/v1/attendance/{session_id}/mark",
-                headers=headers,
-                json={"identity": "student1"},
-            )
+            vision_frames.faces = [
+                vision_frames.recognized(session_id, "student1", name="Rahul Sharma")
+            ]
+            mark_rahul_2 = await client.post(frame_url, headers=headers, content=FRAME_BYTES)
             assert mark_rahul_2.status_code == 200, mark_rahul_2.text
             res_r2 = mark_rahul_2.json()
-            assert res_r2["status"] == "already_present"
-            assert "already marked" in res_r2["message"].lower()
+            assert res_r2["faces"][0]["mark_status"] == "already_present"
 
             # Present count still 2
             att_after_r2 = await client.get(

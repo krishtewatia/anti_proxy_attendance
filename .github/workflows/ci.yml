@@ -103,6 +103,8 @@ jobs:
                  tests/test_rtsp_robustness.py \
                  tests/test_gallery_startup.py \
                  tests/test_camera_lifecycle.py \
+                 tests/test_recognition_signing.py \
+                 tests/test_service_auth.py \
                  -v
 
   # ============================================================================
