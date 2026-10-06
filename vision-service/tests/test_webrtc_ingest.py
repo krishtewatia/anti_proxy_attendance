@@ -7,6 +7,8 @@ import sys
 import time
 import unittest
 
+import pytest
+
 from aiohttp import ClientSession
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.mediastreams import VideoStreamTrack
@@ -331,3 +333,9 @@ class TestWebRTCLiveFrameIngest(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# The phone WebRTC flow is dropped: /offer and the other WebRTC routes are no
+# longer registered on the vision service (it is an internal, key-protected API
+# now). These tests exercise that removed flow and are skipped until the WebRTC
+# code itself is deleted in the follow-up cleanup.
+pytestmark = pytest.mark.skip(reason="phone WebRTC flow removed; routes no longer registered")
