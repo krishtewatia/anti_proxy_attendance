@@ -15,6 +15,7 @@ Tests:
 
 from __future__ import annotations
 
+import os
 import io
 from pathlib import Path
 import subprocess
@@ -28,9 +29,7 @@ if not VISION_PYTHON.exists():
     VISION_PYTHON = Path(sys.executable)
 
 TEST_IMAGE_PATH = (
-    PROJECT_ROOT
-    / "vision-service"
-    / "tests"
+    Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured")
     / "recognition_benchmark"
     / "person_01"
     / "image_01.jpg"
