@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class SessionCreate(BaseModel):
     """Schema used when creating an attendance session."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     course_name: str = Field(min_length=1, max_length=200)
     classroom_id: str = Field(min_length=1, max_length=100, default="ROOM_101")
@@ -30,7 +30,7 @@ class SessionCreate(BaseModel):
 class SessionResponse(BaseModel):
     """Schema returned by the API for an attendance session."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     session_id: str
     course_name: str

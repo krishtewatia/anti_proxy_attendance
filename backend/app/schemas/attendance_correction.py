@@ -15,6 +15,24 @@ class AttendanceCorrectionCreate(BaseModel):
     reason: str = Field(min_length=1, max_length=1000)
 
 
+class AttendanceStatusToggle(BaseModel):
+    """One-click PRESENT <-> ABSENT correction from the teacher dashboard."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: AttendanceStatus
+
+
+class AttendanceStatusToggleResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    attendance_id: str
+    session_id: str
+    status: AttendanceStatus
+    correction_id: str
+    message: str
+
+
 class AttendanceCorrectionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
