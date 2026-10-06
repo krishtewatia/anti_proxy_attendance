@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import httpx
 
+from app.services.vision_client import vision_service_headers
 from app.database.biometric_profiles import upsert_biometric_profile
 from app.database.student_profiles import update_biometric_status
 
@@ -75,7 +76,7 @@ async def extract_and_register_student_photo(
                 resp = await client.post(
                     f"{v_url}/extract-embedding",
                     content=img_bytes,
-                    headers={"Content-Type": "image/jpeg"},
+                    headers={"Content-Type": "image/jpeg", **vision_service_headers()},
                 )
                 if resp.status_code == 200:
                     data = resp.json()
@@ -162,6 +163,7 @@ async def extract_and_register_student_photo(
                         "student_id": student_id or identity,
                         "embedding": embedding,
                     },
+                    headers=vision_service_headers(),
                 )
                 if enroll_resp.status_code == 200:
                     enrolled_in_vision = True
@@ -178,7 +180,7 @@ async def extract_and_register_student_photo(
         for v_url in candidate_urls:
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
-                    await client.post(f"{v_url}/reload-gallery")
+                    await client.post(f"{v_url}/reload-gallery", headers=vision_service_headers())
                     break
             except Exception:
                 pass
