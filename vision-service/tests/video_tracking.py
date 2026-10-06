@@ -15,6 +15,7 @@ Note: Recognition (ArcFace embeddings) is NOT evaluated in this step.
 This test benchmarks pure face tracking stability.
 """
 
+import os
 from collections import defaultdict
 from pathlib import Path
 import sys
@@ -39,7 +40,7 @@ from tracking.bytetrack import BYTETracker
 # CONFIGURATION
 # ============================================================
 
-VIDEO_DIR = SERVICE_ROOT / "tests" / "video_test"
+VIDEO_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test"
 TARGET_FPS = 5.0
 
 # Tracker tuning for 5 FPS face tracking

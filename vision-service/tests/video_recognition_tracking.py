@@ -23,6 +23,7 @@ Pipeline:
          - Fusion Candidate Identity
 """
 
+import os
 from collections import defaultdict
 from pathlib import Path
 import sys
@@ -47,8 +48,8 @@ from tracking.bytetrack import BYTETracker, box_iou
 # CONFIGURATION
 # ============================================================
 
-VIDEO_DIR = SERVICE_ROOT / "tests" / "video_test"
-ENROLLMENT_DIR = SERVICE_ROOT / "tests" / "recognition_benchmark"
+VIDEO_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test"
+ENROLLMENT_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "recognition_benchmark"
 if not ENROLLMENT_DIR.exists():
     ENROLLMENT_DIR = SERVICE_ROOT / "tests" / "face_images"
 

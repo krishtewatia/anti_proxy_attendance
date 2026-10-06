@@ -609,7 +609,7 @@ def main() -> None:
         logger.info("Loading precomputed gallery from %s", npz_path)
         gallery = load_gallery_from_npz(npz_path)
     else:
-        bench_dir = SERVICE_ROOT / "tests" / "recognition_benchmark"
+        bench_dir = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "recognition_benchmark"
         logger.info("Gallery .npz not found; computing from %s", bench_dir)
         gallery = load_gallery(app, bench_dir)
 
