@@ -18,6 +18,7 @@ Identity: person_01          Identity: person_02
 Crossing: ENTRY (t=3.6s)     Crossing: ENTRY (t=3.6s)
 """
 
+import os
 from collections import defaultdict
 from enum import Enum
 from pathlib import Path
@@ -43,9 +44,9 @@ from tracking.bytetrack import BYTETracker, box_iou
 # CONFIGURATION
 # ============================================================
 
-VIDEO_PATH = SERVICE_ROOT / "tests" / "video_test" / "multi_person_simultaneous.mp4"
-ENROLLMENT_DIR = SERVICE_ROOT / "tests" / "recognition_benchmark"
-OUTPUT_DIR = SERVICE_ROOT / "tests" / "multi_person_output"
+VIDEO_PATH = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test" / "multi_person_simultaneous.mp4"
+ENROLLMENT_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "recognition_benchmark"
+OUTPUT_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "multi_person_output"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 TARGET_FPS = 5.0

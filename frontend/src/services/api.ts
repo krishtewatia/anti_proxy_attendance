@@ -192,57 +192,8 @@ export const api = {
     );
   },
 
-  markAttendance(
-    identity: string,
-    sessionId?: string,
-  ): Promise<{
-    status: "marked" | "already_present" | "not_found" | "error";
-    identity: string;
-    student_id?: string;
-    student_name?: string;
-    message: string;
-  }> {
-    const endpoint = sessionId
-      ? `/api/v1/attendance/${encodeURIComponent(sessionId)}/mark`
-      : `/api/v1/attendance/mark`;
-    return request(endpoint, {
-      method: "POST",
-      body: JSON.stringify({ identity, session_id: sessionId }),
-    });
-  },
-
   getAttendanceExportUrl(sessionId: string): string {
     return `${API_BASE_URL}/api/v1/attendance/${encodeURIComponent(sessionId)}/export`;
-  },
-
-  async getVisionStatus(): Promise<{
-    status: string;
-    active_tracks: number;
-    marked_students_count: number;
-    marked_students: string[];
-    last_recognized_student: string | null;
-    last_status?: "marked" | "already_present" | "unknown";
-  } | null> {
-    try {
-      const host = typeof window !== "undefined" ? window.location.hostname || "localhost" : "localhost";
-      const res = await fetch(`http://${host}:8088/status`);
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Vision service offline or not running
-    }
-    return null;
-  },
-
-  async resetVisionSession(): Promise<boolean> {
-    try {
-      const host = typeof window !== "undefined" ? window.location.hostname || "localhost" : "localhost";
-      const res = await fetch(`http://${host}:8088/reset`, { method: "POST" });
-      return res.ok;
-    } catch {
-      return false;
-    }
   },
 
   correctAttendance(

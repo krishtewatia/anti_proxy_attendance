@@ -55,9 +55,9 @@ from pipeline.live_cv_pipeline import (
 from tracking.bytetrack import STrack
 
 # Test assets
-CLIP_ENTRY_EXIT = SERVICE_ROOT / "tests" / "video_test" / "entry_exit_simultaneous.mp4"
-CLIP_MULTI_PERSON = SERVICE_ROOT / "tests" / "video_test" / "multi_person_simultaneous.mp4"
-ENROLLMENT_DIR = SERVICE_ROOT / "tests" / "recognition_benchmark"
+CLIP_ENTRY_EXIT = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test" / "entry_exit_simultaneous.mp4"
+CLIP_MULTI_PERSON = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test" / "multi_person_simultaneous.mp4"
+ENROLLMENT_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "recognition_benchmark"
 SCRFD_MODEL_PATH = SERVICE_ROOT / "models" / "scrfd_500m_bnkps_shape640x640.onnx"
 
 CLIPS_AVAILABLE = CLIP_ENTRY_EXIT.exists() and ENROLLMENT_DIR.exists()
@@ -157,7 +157,11 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
                 inter_threads=2,
             )
             swap_scrfd_detector(cls.app, detector_type="0.5g", intra_threads=4, inter_threads=2)
-            cls.gallery = load_gallery(cls.app, ENROLLMENT_DIR)
+            # Build the gallery from the test fixtures under their own folder names
+            # (person_01..04). An empty identity_map switches off the default
+            # mapping to the demo accounts (student1..4), which these scenarios
+            # do not use, and nothing is read from a local gallery.npz.
+            cls.gallery = load_gallery(cls.app, ENROLLMENT_DIR, identity_map={})
         except Exception as exc:
             cls.tearDownClass()
             raise unittest.SkipTest(f"Failed to initialize real CV models or gallery: {exc}")

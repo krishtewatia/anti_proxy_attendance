@@ -1,6 +1,9 @@
 """Shared pytest fixtures for the backend suite."""
 
+import copy
 import json
+import secrets
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -10,6 +13,9 @@ from app.database import mongodb
 from app.database.cameras import create_camera_in_db
 
 TEST_CAMERA_API_KEY = "test-camera-bound-key-2026"
+TEST_RECOGNITION_KEY = "test-recognition-signing-key-2026"
+TEST_SERVICE_KEY = "test-internal-service-key-2026"
+FRAME_BYTES = b"placeholder frame bytes; the vision service call is stubbed in tests"
 
 
 @pytest.fixture
@@ -96,3 +102,127 @@ def stub_vision_embedding(monkeypatch):
         "httpx",
         SimpleNamespace(AsyncClient=_FakeVisionClient),
     )
+
+
+@pytest.fixture
+def service_key_headers(monkeypatch):
+    """Configure the internal service key and return headers that present it."""
+    monkeypatch.setattr(settings, "VISION_SERVICE_API_KEY", TEST_SERVICE_KEY)
+    monkeypatch.setattr(settings, "VISION_SERVICE_API_KEY_HASH", "")
+    return {"X-API-Key": TEST_SERVICE_KEY}
+
+
+@pytest.fixture
+def sign_recognition(monkeypatch):
+    """Configure the signing key and return a factory for signed recognition results.
+
+    Mirrors what the vision service produces. Keyword overrides let a test
+    build expired, mis-keyed or otherwise invalid results.
+    """
+    from app.services.recognition_service import compute_signature
+
+    monkeypatch.setattr(settings, "RECOGNITION_SIGNING_KEY", TEST_RECOGNITION_KEY)
+
+    def _sign(
+        session_id: str,
+        identity: str,
+        *,
+        confidence: float = 0.91,
+        issued_at: int | None = None,
+        ttl: int = 30,
+        nonce: str | None = None,
+        key: str = TEST_RECOGNITION_KEY,
+    ) -> dict:
+        issued = int(time.time()) if issued_at is None else int(issued_at)
+        expires = issued + ttl
+        token_nonce = nonce or secrets.token_hex(16)
+        return {
+            "session_id": session_id,
+            "identity": identity,
+            "confidence": confidence,
+            "issued_at": issued,
+            "expires_at": expires,
+            "nonce": token_nonce,
+            "signature": compute_signature(
+                key, session_id, identity, confidence, issued, expires, token_nonce
+            ),
+        }
+
+    return _sign
+
+
+class _VisionFrameStub:
+    """Stands in for the internal vision service on the frame path."""
+
+    def __init__(self, sign):
+        self._sign = sign
+        self.faces: list[dict] = []
+        self.calls: int = 0
+        self.error: Exception | None = None
+
+    def recognized(
+        self,
+        session_id: str,
+        identity: str,
+        *,
+        name: str | None = None,
+        similarity: float = 0.91,
+        recognition: dict | None | str = "signed",
+        **token_overrides,
+    ) -> dict:
+        """A confirmed face. By default it carries a valid signed result for the session."""
+        if recognition == "signed":
+            recognition = self._sign(session_id, identity, confidence=similarity, **token_overrides)
+        return {
+            "bbox": [10, 10, 110, 110],
+            "identity": identity,
+            "student_id": identity,
+            "name": name or identity,
+            "similarity": similarity,
+            "status": "recognized",
+            "recognition": recognition,
+        }
+
+    @staticmethod
+    def unknown(similarity: float = 0.2) -> dict:
+        return {
+            "bbox": [10, 10, 110, 110],
+            "identity": None,
+            "student_id": None,
+            "name": "UNKNOWN",
+            "similarity": similarity,
+            "status": "unknown",
+        }
+
+
+@pytest.fixture
+def vision_frames(monkeypatch, sign_recognition):
+    """Stub the backend's call to the vision service and reset the frame rate limiters.
+
+    Set ``vision_frames.faces`` to what the vision service should return for
+    the next frame.
+    """
+    from app.api.dependencies.rate_limiter import (
+        frame_session_rate_limiter,
+        frame_teacher_rate_limiter,
+    )
+
+    stub = _VisionFrameStub(sign_recognition)
+
+    async def _fake_forward(frame_bytes: bytes, content_type: str, session_id: str) -> dict:
+        stub.calls += 1
+        if stub.error is not None:
+            raise stub.error
+        return {
+            "status": "ok",
+            "frame_width": 640,
+            "frame_height": 480,
+            "faces": copy.deepcopy(stub.faces),
+        }
+
+    monkeypatch.setattr("app.api.routes.attendance.forward_frame_to_vision", _fake_forward)
+    frame_session_rate_limiter.reset()
+    frame_teacher_rate_limiter.reset()
+    yield stub
+    frame_session_rate_limiter.reset()
+    frame_teacher_rate_limiter.reset()

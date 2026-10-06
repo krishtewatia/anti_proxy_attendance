@@ -210,3 +210,30 @@ async def validate_camera_binding(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"API key is not authorized for camera '{camera_id}'",
         )
+
+
+async def require_service_key(
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+) -> None:
+    """Require the vision service master key. Always enforced.
+
+    Used for internal service-to-service routes (such as the biometric
+    gallery) that must never be reachable without the shared key, regardless
+    of the REQUIRE_CAMERA_AUTH development switch.
+    """
+    master_key = settings.VISION_SERVICE_API_KEY.strip()
+    master_hash = settings.VISION_SERVICE_API_KEY_HASH.strip().lower()
+
+    if x_api_key and (master_key or master_hash):
+        incoming_hash = _hash_key(x_api_key)
+        if master_key and secrets.compare_digest(incoming_hash, _hash_key(master_key)):
+            return None
+        if master_hash and secrets.compare_digest(incoming_hash, master_hash):
+            return None
+
+    logger.warning("Service route rejected: service credential absent or not recognized")
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Service authentication required",
+        headers={"WWW-Authenticate": "ApiKey"},
+    )

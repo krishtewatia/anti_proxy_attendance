@@ -31,9 +31,7 @@ if not BACKEND_PYTHON.exists():
     BACKEND_PYTHON = Path(sys.executable)
 
 TEST_IMAGE_PATH = (
-    PROJECT_ROOT
-    / "vision-service"
-    / "tests"
+    Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured")
     / "recognition_benchmark"
     / "person_01"
     / "image_01.jpg"

@@ -1,11 +1,14 @@
 """Integration & Acceptance Tests for Step 2D.2: Phone WebRTC Live Frame Ingest."""
 
+import os
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
 import time
 import unittest
+
+import pytest
 
 from aiohttp import ClientSession
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
@@ -241,7 +244,7 @@ class TestWebRTCLiveFrameIngest(unittest.IsolatedAsyncioTestCase):
     # =========================================================================
     async def test_acceptance_5_multiple_sources_remain_intact(self):
         """Proves FILE, RTSP, and WEBRTC all feed the exact same VideoFrame interface."""
-        test_video = SERVICE_ROOT / "tests" / "video_test" / "person_1_vid.mp4"
+        test_video = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-not-configured") / "video_test" / "person_1_vid.mp4"
 
         # 1. FILE Source
         file_src = FileVideoSource(test_video, source_id="RECORDED_TEST", target_fps=5.0)
@@ -331,3 +334,9 @@ class TestWebRTCLiveFrameIngest(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# The phone WebRTC flow is dropped: /offer and the other WebRTC routes are no
+# longer registered on the vision service (it is an internal, key-protected API
+# now). These tests exercise that removed flow and are skipped until the WebRTC
+# code itself is deleted in the follow-up cleanup.
+pytestmark = pytest.mark.skip(reason="phone WebRTC flow removed; routes no longer registered")
