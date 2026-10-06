@@ -102,6 +102,7 @@ jobs:
                  tests/test_multi_camera_orchestration.py \
                  tests/test_rtsp_robustness.py \
                  tests/test_gallery_startup.py \
+                 tests/test_camera_lifecycle.py \
                  -v
 
   # ============================================================================

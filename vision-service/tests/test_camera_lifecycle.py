@@ -24,7 +24,7 @@ if str(SERVICE_ROOT) not in sys.path:
 
 from camera.webcam_source import WebcamVideoSource
 from run_local_webcam import (
-    WebcamStreamState,
+    VisionServerState,
     check_backend_active_session,
 )
 
@@ -34,7 +34,7 @@ class TestCameraLifecycle(unittest.TestCase):
 
     def test_01_no_active_session_camera_remains_closed(self):
         """Test 1: When no active session exists, camera is not opened and remains idle."""
-        state = WebcamStreamState()
+        state = VisionServerState()
         self.assertFalse(state.camera_active)
         self.assertIsNone(state.active_session_id)
         self.assertIsNone(state.get_frame())
@@ -50,7 +50,7 @@ class TestCameraLifecycle(unittest.TestCase):
 
     def test_02_active_session_opens_camera(self):
         """Test 2: When an active session is detected, camera is opened and verified."""
-        state = WebcamStreamState()
+        state = VisionServerState()
         state.reset_session("session_math_101")
         self.assertEqual(state.active_session_id, "session_math_101")
 
@@ -75,7 +75,7 @@ class TestCameraLifecycle(unittest.TestCase):
 
     def test_03_active_session_captures_valid_frame(self):
         """Test 3: Active session reads valid frames and updates stream state."""
-        state = WebcamStreamState()
+        state = VisionServerState()
 
         with patch("cv2.VideoCapture") as mock_cap_cls:
             mock_cap = MagicMock()
@@ -101,7 +101,7 @@ class TestCameraLifecycle(unittest.TestCase):
 
     def test_04_session_ends_camera_releases(self):
         """Test 4: When session ends, stream state clears and camera releases cleanly."""
-        state = WebcamStreamState()
+        state = VisionServerState()
         dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
         state.update_frame(dummy_frame)
         self.assertTrue(state.camera_active)
@@ -126,7 +126,7 @@ class TestCameraLifecycle(unittest.TestCase):
 
     def test_05_session_a_to_session_b_lifecycle(self):
         """Test 5: Session A -> Session B safely resets marked identities and re-arms attendance."""
-        state = WebcamStreamState()
+        state = VisionServerState()
         state.reset_session("session_A")
         state.marked_identities.add("student_01")
         self.assertIn("student_01", state.marked_identities)
