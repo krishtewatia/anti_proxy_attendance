@@ -19,6 +19,7 @@ from pathlib import Path
 import sys
 import time
 import unittest
+from typing import Any
 
 import pytest
 from aiohttp import ClientSession

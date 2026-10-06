@@ -94,18 +94,13 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt pytest
 
-      - name: Run Fast Unit & Mock Tests
+      # Pytest discovery, not a fixed file list: every new test file is picked
+      # up automatically. Tests that need ONNX models, long video runs or
+      # external services opt out with the slow / needs_models / integration
+      # markers; tests that need biometric fixtures skip when they are absent.
+      - name: Run Vision Tests (discovery, model-free)
         run: |
-          pytest tests/test_event_dispatcher.py \
-                 tests/test_reliability_outbox.py \
-                 tests/test_kinematic_anti_spoof.py \
-                 tests/test_multi_camera_orchestration.py \
-                 tests/test_rtsp_robustness.py \
-                 tests/test_gallery_startup.py \
-                 tests/test_camera_lifecycle.py \
-                 tests/test_recognition_signing.py \
-                 tests/test_service_auth.py \
-                 -v
+          pytest -m "not slow and not needs_models and not integration" -v
 
   # ============================================================================
   # 3. Frontend Lint, Typecheck, Build, and Tests
