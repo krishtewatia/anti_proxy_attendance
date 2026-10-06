@@ -462,3 +462,93 @@ async def test_live_snapshot_anomalies_and_all_cameras_stale(
 
     finally:
         sessions_mod.compute_session_live_snapshot = orig_compute
+
+
+@pytest.mark.anyio
+async def test_live_snapshot_overlapping_sessions_do_not_share_students(
+    api_client: AsyncClient,
+    mock_db,
+) -> None:
+    """Two overlapping sessions: each live view shows only its own events and marks."""
+    teacher_id = f"teacher_{uuid.uuid4().hex[:8]}"
+    await create_user(
+        user_id=teacher_id,
+        email="teacher_overlap@school.edu",
+        password_hash=hash_password("pass123"),
+        role="TEACHER",
+    )
+    headers = {"Authorization": f"Bearer {create_access_token(user_id=teacher_id, role='TEACHER')}"}
+
+    now = datetime.now(timezone.utc)
+    session_a = f"sess_overlap_a_{uuid.uuid4().hex[:8]}"
+    session_b = f"sess_overlap_b_{uuid.uuid4().hex[:8]}"
+
+    # Both sessions are live right now, so their time windows overlap
+    for sess_id, classroom, start_offset in (
+        (session_a, "ROOM_A", 20),
+        (session_b, "ROOM_B", 10),
+    ):
+        await mock_db["sessions"].insert_one({
+            "session_id": sess_id,
+            "course_name": f"Course {classroom}",
+            "classroom_id": classroom,
+            "start_time": now - timedelta(minutes=start_offset),
+            "end_time": now + timedelta(minutes=40),
+            "required_presence_percentage": 50.0,
+            "status": "ACTIVE",
+            "created_by": teacher_id,
+        })
+
+    await mock_db[settings.EVENTS_COLLECTION].insert_many([
+        {
+            "event_id": "ev_overlap_a_entry",
+            "session_id": session_a,
+            "classroom_id": "ROOM_A",
+            "identity": "student_only_in_a",
+            "direction": "ENTRY",
+            "timestamp": now - timedelta(minutes=5),
+        },
+        {
+            "event_id": "ev_overlap_b_entry",
+            "session_id": session_b,
+            "classroom_id": "ROOM_B",
+            "identity": "student_only_in_b",
+            "direction": "ENTRY",
+            "timestamp": now - timedelta(minutes=4),
+        },
+        # Inside both windows but belongs to no session
+        {
+            "event_id": "ev_overlap_unscoped_entry",
+            "session_id": None,
+            "identity": "student_unscoped",
+            "direction": "ENTRY",
+            "timestamp": now - timedelta(minutes=3),
+        },
+    ])
+
+    # One-time recognition mark recorded in session B only
+    await mock_db["attendance_records"].insert_one({
+        "attendance_id": f"att_{session_b}_student_marked_in_b",
+        "session_id": session_b,
+        "identity": "student_marked_in_b",
+        "status": "PRESENT",
+        "marked_at": now - timedelta(minutes=2),
+    })
+
+    resp_a = await api_client.get(f"/api/v1/sessions/{session_a}/live-snapshot", headers=headers)
+    resp_b = await api_client.get(f"/api/v1/sessions/{session_b}/live-snapshot", headers=headers)
+    assert resp_a.status_code == 200
+    assert resp_b.status_code == 200
+    snap_a = resp_a.json()
+    snap_b = resp_b.json()
+
+    assert snap_a["session_state"] == "LIVE"
+    assert snap_b["session_state"] == "LIVE"
+
+    assert [s["identity"] for s in snap_a["students"]] == ["student_only_in_a"]
+    assert snap_a["students"][0]["state"] == "INSIDE"
+    assert [e["event_id"] for e in snap_a["recent_events"]] == ["ev_overlap_a_entry"]
+
+    assert [s["identity"] for s in snap_b["students"]] == ["student_only_in_b"]
+    assert snap_b["students"][0]["state"] == "INSIDE"
+    assert [e["event_id"] for e in snap_b["recent_events"]] == ["ev_overlap_b_entry"]

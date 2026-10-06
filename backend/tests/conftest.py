@@ -1,6 +1,7 @@
 """Shared pytest fixtures for the backend suite."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -48,3 +49,50 @@ def register_test_camera(monkeypatch):
         return {"X-API-Key": TEST_CAMERA_API_KEY}
 
     return _register
+
+
+class _FakeVisionResponse:
+    def __init__(self, payload: dict):
+        self.status_code = 200
+        self._payload = payload
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class _FakeVisionClient:
+    """Stands in for the vision service HTTP client used during biometric enrollment."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info):
+        return False
+
+    async def post(self, url: str, **kwargs):
+        if url.endswith("/extract-embedding"):
+            embedding = [0.0] * 512
+            embedding[0] = 1.0  # unit-norm 512-d vector, the shape ArcFace returns
+            return _FakeVisionResponse({"status": "ok", "embedding": embedding})
+        return _FakeVisionResponse({"status": "ok"})
+
+
+@pytest.fixture
+def stub_vision_embedding(monkeypatch):
+    """Stub the vision service's embedding call so no face photo is needed.
+
+    No real person's photo is committed to the repo; registration tests upload
+    a placeholder JPEG and this fixture answers ``/extract-embedding`` with a
+    synthetic 512-d vector. Everything after extraction (biometric profile
+    upsert, status flag, gallery sync call) still runs for real.
+    """
+    from app.services import student_biometric_service
+
+    monkeypatch.setattr(
+        student_biometric_service,
+        "httpx",
+        SimpleNamespace(AsyncClient=_FakeVisionClient),
+    )

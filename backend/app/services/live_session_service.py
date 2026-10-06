@@ -127,12 +127,8 @@ async def compute_session_live_snapshot(
     roster_doc = await get_session_roster(session_id)
     rostered_set = set(roster_doc.identities) if roster_doc else set()
 
-    raw_events = await get_events_for_session(
-        session_id=session_id,
-        session_start=start_time,
-        session_end=end_time,
-        db=db,
-    )
+    # Strictly session-scoped, same as finalization: no time-window attribution
+    raw_events = await get_events_for_session(session_id, db=db)
     events: list[dict] = []
     for ev in raw_events:
         ev_dict = dict(ev)
