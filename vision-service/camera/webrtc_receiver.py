@@ -1017,23 +1017,23 @@ class WebRTCSignalingServer:
             logger.warning("Failed loading enrolled gallery file: %s", exc)
 
     def _init_gallery(self) -> None:
-        try:
-            from pipeline.live_cv_pipeline import load_gallery_from_npz
+        """Start with an empty gallery; embeddings come from the backend at runtime.
 
-            candidates = [
-                Path("/app/gallery.npz"),
-                Path(__file__).resolve().parent.parent / "gallery.npz",
-            ]
-            for cand in candidates:
-                if cand.exists():
-                    g = load_gallery_from_npz(cand)
-                    self.gallery.update(g)
-                    logger.info(
-                        "Loaded %d preloaded identities from %s: %s", len(g), cand, list(g.keys())
-                    )
-                    break
-        except Exception as exc:
-            logger.warning("Failed loading preloaded gallery.npz: %s", exc)
+        No embeddings file is picked up implicitly from the image or the working
+        directory. A precomputed gallery is loaded only when GALLERY_NPZ_PATH is
+        set explicitly (local development). The enrolled-gallery cache holds only
+        what an earlier backend sync or enrollment wrote to the data volume.
+        """
+        explicit_npz = os.getenv("GALLERY_NPZ_PATH", "").strip()
+        if explicit_npz:
+            try:
+                from pipeline.live_cv_pipeline import load_gallery_from_npz
+
+                g = load_gallery_from_npz(Path(explicit_npz))
+                self.gallery.update(g)
+                logger.info("Loaded %d identities from GALLERY_NPZ_PATH=%s", len(g), explicit_npz)
+            except Exception as exc:
+                logger.warning("Failed loading gallery from GALLERY_NPZ_PATH: %s", exc)
 
         self._load_enrolled_gallery_file()
 
