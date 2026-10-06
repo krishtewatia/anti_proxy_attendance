@@ -15,6 +15,36 @@ import time
 from typing import Any, Optional
 
 RECOGNITION_TTL_SECONDS = 30
+SIGNING_KEY_MIN_LENGTH = 32
+PLACEHOLDER_KEY_PREFIX = "replace_with"
+
+
+def validate_signing_key(key: Optional[str], *, allow_insecure: bool = False) -> None:
+    """Refuse to run without a real signing key.
+
+    A missing, placeholder or short key must never reach a running service.
+    ``allow_insecure`` is the explicit development/test override
+    (ALLOW_INSECURE_RECOGNITION_KEY=true).
+    """
+    if allow_insecure:
+        return
+    if not key or not key.strip():
+        raise RuntimeError(
+            "RECOGNITION_SIGNING_KEY is not set. Generate one with "
+            '`python -c "import secrets; print(secrets.token_hex(32))"` and set it for both '
+            "the backend and the vision service."
+        )
+    cleaned = key.strip()
+    if cleaned.lower().startswith(PLACEHOLDER_KEY_PREFIX):
+        raise RuntimeError(
+            "RECOGNITION_SIGNING_KEY is still the placeholder from .env.example. "
+            "Replace it with a generated secret."
+        )
+    if len(cleaned) < SIGNING_KEY_MIN_LENGTH:
+        raise RuntimeError(
+            f"RECOGNITION_SIGNING_KEY must be at least {SIGNING_KEY_MIN_LENGTH} characters long "
+            f"(found {len(cleaned)})."
+        )
 
 
 def canonical_message(
