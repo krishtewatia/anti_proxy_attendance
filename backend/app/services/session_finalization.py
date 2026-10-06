@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from app.database.attendance import get_attendance_by_session, upsert_attendance
-from app.core.config import settings
+from app.database.events import get_events_for_session
 from app.database.mongodb import get_database
 from app.database.sessions import get_session, update_session_status
 from app.schemas.attendance import AttendanceInterval, AttendanceRecord
@@ -77,12 +77,7 @@ async def finalize_session_attendance(
     if has_window:
         # Strictly session-scoped: an event without this session_id is never
         # attributed by time window, so concurrent sessions cannot share events.
-        events = (
-            await db[settings.EVENTS_COLLECTION]
-            .find({"session_id": session_id})
-            .sort("timestamp", 1)
-            .to_list(length=None)
-        )
+        events = await get_events_for_session(session_id)
         for event in events:
             if event.get("direction") in {"ENTRY", "EXIT"}:
                 ts = event["timestamp"]

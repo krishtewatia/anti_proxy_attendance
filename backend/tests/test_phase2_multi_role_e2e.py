@@ -42,7 +42,7 @@ async def test_phase2_academic_structure_and_seeding():
 
 
 @pytest.mark.anyio
-async def test_phase2_student_registration_and_biometric():
+async def test_phase2_student_registration_and_biometric(stub_vision_embedding):
     """Verify student registration with academic grouping and photo generates biometric profile."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
