@@ -1,0 +1,16 @@
+# Gitleaks configuration: default rules plus a narrow allowlist for known test placeholders.
+title = "anti-proxy-attendance gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Backend test fixtures and the CI placeholder JWT secret"
+# Test code only uses throwaway keys that exist nowhere outside the test suite.
+paths = [
+    '''^backend/tests/''',
+]
+# The exact placeholder value set for JWT_SECRET_KEY in .github/workflows/ci.yml.
+regexes = [
+    '''^test_secret_key_at_least_32_characters_long_for_ci$''',
+]

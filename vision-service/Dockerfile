@@ -42,10 +42,13 @@ RUN groupadd -g 10002 visiongroup && \
 
 WORKDIR /app
 
-# Install dependencies from builder wheels
+# Install dependencies from builder wheels.
+# setuptools is upgraded first: the copy bundled with the base image vendors
+# vulnerable jaraco.context and wheel versions (flagged HIGH by Trivy).
 COPY --from=builder /build/wheels /wheels
 COPY requirements.txt .
-RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt && \
+RUN pip install --no-cache-dir --upgrade setuptools && \
+    pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt && \
     rm -rf /wheels requirements.txt
 
 # Prepare directories for model caching and offline event outbox
