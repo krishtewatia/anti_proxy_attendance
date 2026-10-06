@@ -3,6 +3,7 @@
 # published (possibly compromised) versions are not pulled in immediately.
 # groups: minor and patch updates are combined into one PR per ecosystem;
 # major updates are left ungrouped, so each one arrives as its own PR.
+# Exception: the two pip entries group every update (see the note there).
 version: 2
 updates:
   # Python Backend Dependencies
@@ -13,13 +14,15 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    # The requirements files use unpinned ranges (">=x"), so Dependabot has no
+    # current version to compare against and cannot tell a minor update from a
+    # major one. A group limited to minor/patch therefore matches nothing and
+    # every package gets its own PR. Grouping all updates is the only way to
+    # get one PR here; these PRs only raise the lower bound of each range.
     groups:
-      backend-pip-minor-patch:
+      backend-pip:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "patch"
 
   # Python Vision Service Dependencies
   - package-ecosystem: "pip"
@@ -29,13 +32,18 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    # Same reason as the backend entry: unpinned ranges cannot be split into
+    # minor/patch vs major, so all vision-service updates share one PR.
     groups:
-      vision-pip-minor-patch:
+      vision-pip:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "patch"
+    ignore:
+      # aiortc requires av<18, so pip cannot resolve the requirements with a
+      # newer av. Remove this once aiortc supports av 18 or later.
+      - dependency-name: "av"
+        versions:
+          - ">=18"
 
   # React Frontend Dependencies
   - package-ecosystem: "npm"
@@ -52,6 +60,18 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # TypeScript major upgrades are deferred until after the final demo;
+      # they need a deliberate migration, not an automated bump.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
+      # Type definitions must match the Node runtime. The frontend is built
+      # with Node 22 (frontend/Dockerfile and CI), so newer majors are not
+      # wanted. Raise this when the build image's Node version is raised.
+      - dependency-name: "@types/node"
+        versions:
+          - ">=23"
 
   # Docker Base Images (backend, frontend and vision-service in one entry so
   # their minor and patch updates share a single PR)
