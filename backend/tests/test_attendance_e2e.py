@@ -14,7 +14,7 @@ from app.security.passwords import hash_password
 
 
 @pytest.mark.anyio
-async def test_complete_attendance_flow():
+async def test_complete_attendance_flow(register_test_camera):
     mongodb._client = AsyncMongoMockClient()
     db = mongodb.get_database()
 
@@ -24,6 +24,8 @@ async def test_complete_attendance_flow():
     await db["attendance_events"].delete_many({})
     await db["attendance_records"].delete_many({})
     await db["users"].delete_many({})
+
+    camera_headers = await register_test_camera("cam_entrance", "ROOM_101")
 
     # Provision teacher user and bearer token
     await create_user(
@@ -159,7 +161,7 @@ async def test_complete_attendance_flow():
             response = await client.post(
                 "/api/v1/events",
                 json=payload,
-                headers={"X-API-Key": "test-vision-service-key-2026"},
+                headers=camera_headers,
             )
 
             assert response.status_code == 201

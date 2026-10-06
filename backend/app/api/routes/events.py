@@ -159,33 +159,6 @@ async def ingest_vision_event(
             headers={"Retry-After": "2"},
         )
 
-    # 6. One-Time AI Face Attendance: Auto-mark student PRESENT in attendance_records
-    if active_session and event.identity and event.identity != "UNKNOWN":
-        sess_id = active_session["session_id"]
-        stu_doc = await db["student_profiles"].find_one({"identity": event.identity})
-        stu_id = stu_doc.get("student_id", event.identity) if stu_doc else event.identity
-        stu_name = stu_doc.get("name", event.identity) if stu_doc else event.identity
-
-        att_col = db["attendance_records"]
-        existing_att = await att_col.find_one({"session_id": sess_id, "identity": event.identity})
-        if not existing_att or existing_att.get("status") != "PRESENT":
-            await att_col.update_one(
-                {"session_id": sess_id, "identity": event.identity},
-                {
-                    "$set": {
-                        "attendance_id": f"att_{sess_id}_{event.identity}",
-                        "session_id": sess_id,
-                        "identity": event.identity,
-                        "student_id": stu_id,
-                        "student_name": stu_name,
-                        "status": "PRESENT",
-                        "marked_at": datetime.now(timezone.utc),
-                        "updated_at": datetime.now(timezone.utc),
-                    }
-                },
-                upsert=True,
-            )
-
     return VisionEventResponse(
         event_id=event.event_id,
         status="accepted",

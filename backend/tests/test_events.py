@@ -19,14 +19,16 @@ async def mock_db():
 
 
 @pytest.fixture
-async def client(mock_db):
-    """Async test client with database dependency override."""
+async def client(mock_db, register_test_camera):
+    """Async test client with database dependency override and registered cameras."""
     app.dependency_overrides[get_database] = lambda: mock_db
+    camera_headers = await register_test_camera("CAM_ROOM_101_DOOR", "ROOM_101", db=mock_db)
+    await register_test_camera("CAM_LAB-3_DOOR", "LAB-3", db=mock_db)
     transport = ASGITransport(app=app)
     async with AsyncClient(
         transport=transport,
         base_url="http://testserver",
-        headers={"X-API-Key": "test-vision-service-key-2026"},
+        headers=camera_headers,
     ) as ac:
         yield ac
     app.dependency_overrides.clear()
@@ -351,3 +353,43 @@ async def test_event_ingestion_outside_session_window_session_id_is_null(
     assert doc is not None
     assert doc["classroom_id"] == "ROOM_101"
     assert doc["session_id"] is None
+
+
+@pytest.mark.anyio
+async def test_missing_or_wrong_camera_key_returns_401(client, mock_db):
+    """With camera auth required, a missing or wrong X-API-Key is rejected and nothing is stored."""
+    payload = {
+        "event_id": "evt_unauthenticated_001",
+        "camera_id": "CAM_ROOM_101_DOOR",
+        "track_id": 22,
+        "identity": "person_02",
+        "direction": "ENTRY",
+        "timestamp": "2026-09-23T14:30:15.820Z",
+        "evidence": {
+            "peak_similarity": 0.613,
+            "mean_similarity": 0.585,
+            "supporting_frames": 5,
+            "total_frames": 5,
+            "consistency_pct": 100.0,
+        },
+    }
+    assert settings.REQUIRE_CAMERA_AUTH is True
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as anonymous:
+        missing = await anonymous.post("/api/v1/events", json=payload)
+        wrong = await anonymous.post(
+            "/api/v1/events",
+            json=payload,
+            headers={"X-API-Key": "not-a-registered-camera-key"},
+        )
+
+    assert missing.status_code == 401
+    assert wrong.status_code == 401
+
+    count = await mock_db[settings.EVENTS_COLLECTION].count_documents({})
+    assert count == 0
+
+    # The same request with the registered camera key is accepted
+    accepted = await client.post("/api/v1/events", json=payload)
+    assert accepted.status_code == 201

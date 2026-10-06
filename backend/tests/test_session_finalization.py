@@ -20,6 +20,7 @@ async def test_finalize_session_attendance():
     events = [
         {
             "event_id": "evt_person01_entry",
+            "session_id": "session_001",
             "camera_id": "CAM_ROOM_101_DOOR",
             "track_id": 1,
             "identity": "person_01",
@@ -29,6 +30,7 @@ async def test_finalize_session_attendance():
         },
         {
             "event_id": "evt_person01_exit",
+            "session_id": "session_001",
             "camera_id": "CAM_ROOM_101_DOOR",
             "track_id": 2,
             "identity": "person_01",
@@ -38,6 +40,7 @@ async def test_finalize_session_attendance():
         },
         {
             "event_id": "evt_person02_entry",
+            "session_id": "session_001",
             "camera_id": "CAM_ROOM_101_DOOR",
             "track_id": 3,
             "identity": "person_02",
@@ -47,6 +50,7 @@ async def test_finalize_session_attendance():
         },
         {
             "event_id": "evt_person02_exit",
+            "session_id": "session_001",
             "camera_id": "CAM_ROOM_101_DOOR",
             "track_id": 4,
             "identity": "person_02",

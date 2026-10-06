@@ -22,6 +22,7 @@ async def test_session_finalization_is_idempotent():
     events = [
         {
             "event_id": "evt_idempotent_entry",
+            "session_id": "session_idempotent",
             "camera_id": "CAM_ROOM_101_DOOR",
             "track_id": 1,
             "identity": "person_01",
@@ -33,6 +34,7 @@ async def test_session_finalization_is_idempotent():
         },
         {
             "event_id": "evt_idempotent_exit",
+            "session_id": "session_idempotent",
             "camera_id": "CAM_ROOM_101_DOOR",
             "track_id": 2,
             "identity": "person_01",

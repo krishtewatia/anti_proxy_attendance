@@ -88,6 +88,7 @@ async def test_finalize_session_api(teacher_auth_headers):
         [
             {
                 "event_id": "evt_fin_001",
+                "session_id": session_id,
                 "camera_id": "cam_01",
                 "track_id": 1,
                 "identity": "person_01",
@@ -104,6 +105,7 @@ async def test_finalize_session_api(teacher_auth_headers):
             },
             {
                 "event_id": "evt_fin_002",
+                "session_id": session_id,
                 "camera_id": "cam_01",
                 "track_id": 1,
                 "identity": "person_01",
