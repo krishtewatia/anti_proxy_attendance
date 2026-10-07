@@ -132,6 +132,7 @@ def sign_recognition(monkeypatch):
         ttl: int = 30,
         nonce: str | None = None,
         key: str = TEST_RECOGNITION_KEY,
+        liveness: str = "passed",
     ) -> dict:
         issued = int(time.time()) if issued_at is None else int(issued_at)
         expires = issued + ttl
@@ -143,8 +144,9 @@ def sign_recognition(monkeypatch):
             "issued_at": issued,
             "expires_at": expires,
             "nonce": token_nonce,
+            "liveness": liveness,
             "signature": compute_signature(
-                key, session_id, identity, confidence, issued, expires, token_nonce
+                key, session_id, identity, confidence, issued, expires, token_nonce, liveness
             ),
         }
 

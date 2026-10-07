@@ -71,6 +71,8 @@ services:
       # No default: the stack refuses to start without a real signing key.
       RECOGNITION_SIGNING_KEY: ${RECOGNITION_SIGNING_KEY:?Set RECOGNITION_SIGNING_KEY in .env - see .env.example}
       ALLOW_INSECURE_RECOGNITION_KEY: ${ALLOW_INSECURE_RECOGNITION_KEY:-false}
+      # Same value as the vision service below: the two are deployed together.
+      LIVENESS_MODE: ${LIVENESS_MODE:-observe}
       VISION_SERVICE_URL: ${VISION_SERVICE_URL:-http://vision-service:8088}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080,http://127.0.0.1:3000,http://127.0.0.1:8080}
       EVENTS_MAX_PAYLOAD_BYTES: ${EVENTS_MAX_PAYLOAD_BYTES:-65536}
@@ -135,6 +137,9 @@ services:
       # No default: the stack refuses to start without a real signing key.
       RECOGNITION_SIGNING_KEY: ${RECOGNITION_SIGNING_KEY:?Set RECOGNITION_SIGNING_KEY in .env - see .env.example}
       ALLOW_INSECURE_RECOGNITION_KEY: ${ALLOW_INSECURE_RECOGNITION_KEY:-false}
+      # Liveness gate: observe (check and log) or enforce (block spoofs).
+      LIVENESS_MODE: ${LIVENESS_MODE:-observe}
+      LIVENESS_THRESHOLD: ${LIVENESS_THRESHOLD:-0.5}
       INSIGHTFACE_HOME: /home/visionuser/.insightface
       OUTBOX_DIR: /app/data
     volumes:

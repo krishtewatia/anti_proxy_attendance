@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liveness evaluation capture</title>
+<!--
+  Captures the liveness evaluation set (docs/evaluation/liveness_capture_guide.md).
+
+  Frames are taken exactly as the teacher page takes them: getUserMedia at
+  640x480, drawn to a canvas, encoded as JPEG at quality 0.8. They are written
+  straight into a folder you pick on this computer. Nothing is uploaded and
+  this page loads nothing from the network.
+
+  Serve it from localhost (camera and folder access need a secure context):
+      python -m http.server 8765 --directory vision-service/tools
+  then open http://localhost:8765/liveness_capture.html in Chrome or Edge.
+-->
+<style>
+  :root { color-scheme: light dark; --gap: 12px; }
+  body { font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; padding: 16px; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.note { margin: 0 0 var(--gap); opacity: 0.8; }
+  .row { display: flex; flex-wrap: wrap; gap: var(--gap); align-items: center; margin-bottom: var(--gap); }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  select, button, input { font: inherit; padding: 7px 10px; }
+  button.primary { font-weight: 600; }
+  video { width: 100%; max-width: 640px; aspect-ratio: 4 / 3; background: #000; border-radius: 8px; display: block; }
+  #status { min-height: 1.5em; font-weight: 600; }
+  #status.recording { color: #dc2626; }
+  table { border-collapse: collapse; margin-top: var(--gap); }
+  th, td { text-align: left; padding: 4px 14px 4px 0; font-variant-numeric: tabular-nums; }
+  code { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Liveness evaluation capture</h1>
+  <p class="note">Frames are saved only to the folder you choose. Use your own face only.</p>
+
+  <div class="row">
+    <button id="pick">1. Choose the <code>liveness</code> folder</button>
+    <span id="folder">No folder chosen</span>
+  </div>
+
+  <div class="row">
+    <label>Camera
+      <select id="camera"></select>
+    </label>
+    <label>What is in front of the camera
+      <select id="category">
+        <option value="live">live: my real face</option>
+        <option value="print">print: printed photo</option>
+        <option value="phone_screen">phone_screen: photo on a phone</option>
+        <option value="laptop_replay">laptop_replay: video on a laptop</option>
+      </select>
+    </label>
+    <label>Seconds
+      <input id="seconds" type="number" min="3" max="20" value="8" style="width: 5em">
+    </label>
+  </div>
+
+  <video id="video" autoplay playsinline muted></video>
+
+  <div class="row" style="margin-top: 12px">
+    <button id="record" class="primary" disabled>2. Record one attempt</button>
+    <span id="status" role="status"></span>
+  </div>
+
+  <table aria-label="Attempts saved so far">
+    <thead><tr><th>Category</th><th>Attempts saved</th><th>Target</th></tr></thead>
+    <tbody id="counts"></tbody>
+  </table>
+</main>
+
+<script>
+(() => {
+  const WIDTH = 640, HEIGHT = 480, JPEG_QUALITY = 0.8, FRAMES_PER_SECOND = 3;
+  const TARGETS = { live: 10, print: 8, phone_screen: 8, laptop_replay: 8 };
+  const $ = (id) => document.getElementById(id);
+  const video = $("video"), statusEl = $("status");
+  const canvas = document.createElement("canvas");
+  let rootDir = null, stream = null, busy = false;
+
+  const setStatus = (text, recording = false) => {
+    statusEl.textContent = text;
+    statusEl.classList.toggle("recording", recording);
+  };
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function startCamera(deviceId) {
+    if (stream) stream.getTracks().forEach((track) => track.stop());
+    const videoConstraints = { width: { ideal: WIDTH }, height: { ideal: HEIGHT } };
+    if (deviceId) videoConstraints.deviceId = { exact: deviceId };
+    stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+    video.srcObject = stream;
+  }
+
+  async function listCameras() {
+    const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+    const select = $("camera");
+    const current = select.value;
+    select.replaceChildren(...devices.map((device, index) => {
+      const option = document.createElement("option");
+      option.value = device.deviceId;
+      option.textContent = device.label || `Camera ${index + 1}`;
+      return option;
+    }));
+    if (current) select.value = current;
+  }
+
+  async function attemptNames(category) {
+    const names = [];
+    try {
+      const dir = await rootDir.getDirectoryHandle(category);
+      for await (const [name, handle] of dir.entries()) {
+        if (handle.kind === "directory" && /^attempt_\d+$/.test(name)) names.push(name);
+      }
+    } catch (error) {
+      if (error.name !== "NotFoundError") throw error;
+    }
+    return names.sort();
+  }
+
+  async function refreshCounts() {
+    const rows = [];
+    for (const category of Object.keys(TARGETS)) {
+      const count = rootDir ? (await attemptNames(category)).length : 0;
+      const row = document.createElement("tr");
+      for (const text of [category, String(count), String(TARGETS[category])]) {
+        const cell = document.createElement("td");
+        cell.textContent = text;
+        row.appendChild(cell);
+      }
+      rows.push(row);
+    }
+    $("counts").replaceChildren(...rows);
+  }
+
+  const grabFrame = () => new Promise((resolve) => {
+    canvas.width = video.videoWidth || WIDTH;
+    canvas.height = video.videoHeight || HEIGHT;
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY);
+  });
+
+  async function recordAttempt() {
+    if (busy || !rootDir || !stream) return;
+    busy = true;
+    $("record").disabled = true;
+    try {
+      const category = $("category").value;
+      const seconds = Math.min(20, Math.max(3, Number($("seconds").value) || 8));
+      const existing = await attemptNames(category);
+      const next = existing.length ? Number(existing[existing.length - 1].slice(8)) + 1 : 1;
+      const attemptName = `attempt_${String(next).padStart(2, "0")}`;
+      const categoryDir = await rootDir.getDirectoryHandle(category, { create: true });
+      const attemptDir = await categoryDir.getDirectoryHandle(attemptName, { create: true });
+
+      for (let n = 3; n > 0; n--) {
+        setStatus(`Get ready: ${n}`);
+        await sleep(1000);
+      }
+
+      const total = seconds * FRAMES_PER_SECOND;
+      for (let i = 1; i <= total; i++) {
+        const started = performance.now();
+        const blob = await grabFrame();
+        if (blob) {
+          const file = await attemptDir.getFileHandle(`frame_${String(i).padStart(3, "0")}.jpg`, { create: true });
+          const writable = await file.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        }
+        setStatus(`Recording ${category}/${attemptName}: frame ${i} of ${total}`, true);
+        await sleep(Math.max(0, 1000 / FRAMES_PER_SECOND - (performance.now() - started)));
+      }
+      setStatus(`Saved ${category}/${attemptName} (${total} frames).`);
+      await refreshCounts();
+    } catch (error) {
+      setStatus(`Could not save: ${error.message}`);
+    } finally {
+      busy = false;
+      $("record").disabled = false;
+    }
+  }
+
+  $("pick").addEventListener("click", async () => {
+    if (!window.showDirectoryPicker) {
+      setStatus("This browser cannot write to a folder. Use Chrome or Edge on a computer.");
+      return;
+    }
+    try {
+      rootDir = await window.showDirectoryPicker({ mode: "readwrite" });
+      $("folder").textContent = `Saving into: ${rootDir.name}`;
+      if (rootDir.name !== "liveness") {
+        setStatus("Note: the folder should be the 'liveness' folder inside your fixtures directory.");
+      }
+      $("record").disabled = !stream;
+      await refreshCounts();
+    } catch (error) {
+      if (error.name !== "AbortError") setStatus(`Could not open the folder: ${error.message}`);
+    }
+  });
+  $("camera").addEventListener("change", (event) => startCamera(event.target.value).catch((e) => setStatus(e.message)));
+  $("record").addEventListener("click", recordAttempt);
+
+  refreshCounts();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setStatus("Camera access is not available. Open this page from http://localhost.");
+  } else {
+    startCamera()
+      .then(listCameras)
+      .then(() => { $("record").disabled = !rootDir; })
+      .catch((error) => setStatus(`Camera not available: ${error.message}`));
+  }
+})();
+</script>
+</body>
+</html>

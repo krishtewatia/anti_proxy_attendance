@@ -28,6 +28,7 @@ def _expected_signature(token: dict, key: str = KEY) -> str:
         token["issued_at"],
         token["expires_at"],
         token["nonce"],
+        token["liveness"],
     )
     return hmac.new(key.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
@@ -41,14 +42,15 @@ def test_signature_matches_the_shared_test_vector():
         1790000000,
         1790000030,
         "0123456789abcdef0123456789abcdef",
+        "passed",
     )
     signature = hmac.new(b"shared-test-vector-key", message, hashlib.sha256).hexdigest()
-    assert signature == "f7c62bfa88f268a5dc4513f9c588139877106aa1c35b615a427d37d24796cfbe"
+    assert signature == "0939e8cfc0928551c44c41ef5ad0bd9985d649a2bbb1a8930fd9696e29a24e12"
 
 
 def test_signed_result_contains_session_identity_confidence_and_short_expiry():
     token = sign_recognition(
-        session_id="sess_1", identity="student1", confidence=0.87654321, key=KEY, now=1790000000
+        session_id="sess_1", identity="student1", confidence=0.87654321, key=KEY, liveness="passed", now=1790000000
     )
 
     assert token["session_id"] == "sess_1"
@@ -62,8 +64,8 @@ def test_signed_result_contains_session_identity_confidence_and_short_expiry():
 
 
 def test_every_result_has_a_fresh_nonce_and_signature():
-    first = sign_recognition(session_id="sess_1", identity="student1", confidence=0.9, key=KEY)
-    second = sign_recognition(session_id="sess_1", identity="student1", confidence=0.9, key=KEY)
+    first = sign_recognition(session_id="sess_1", identity="student1", confidence=0.9, key=KEY, liveness="passed")
+    second = sign_recognition(session_id="sess_1", identity="student1", confidence=0.9, key=KEY, liveness="passed")
 
     assert first["nonce"] != second["nonce"]
     assert first["signature"] != second["signature"]
@@ -78,11 +80,12 @@ def test_every_result_has_a_fresh_nonce_and_signature():
         ("issued_at", 1790000001),
         ("expires_at", 1790009999),
         ("nonce", "f" * 32),
+        ("liveness", "unchecked"),
     ],
 )
 def test_changing_any_signed_field_invalidates_the_signature(field, value):
     token = sign_recognition(
-        session_id="sess_1", identity="student1", confidence=0.9, key=KEY, now=1790000000
+        session_id="sess_1", identity="student1", confidence=0.9, key=KEY, liveness="passed", now=1790000000
     )
     tampered = {**token, field: value}
 
@@ -91,7 +94,7 @@ def test_changing_any_signed_field_invalidates_the_signature(field, value):
 
 def test_signature_depends_on_the_key():
     token = sign_recognition(
-        session_id="sess_1", identity="student1", confidence=0.9, key=KEY, now=1790000000
+        session_id="sess_1", identity="student1", confidence=0.9, key=KEY, liveness="passed", now=1790000000
     )
     assert _expected_signature(token, key="a-different-key") != token["signature"]
 
@@ -99,14 +102,36 @@ def test_signature_depends_on_the_key():
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"session_id": "sess_1", "identity": "student1", "confidence": 0.9, "key": ""},
-        {"session_id": "", "identity": "student1", "confidence": 0.9, "key": KEY},
-        {"session_id": "sess_1", "identity": "", "confidence": 0.9, "key": KEY},
+        {"session_id": "sess_1", "identity": "student1", "confidence": 0.9, "key": "", "liveness": "passed"},
+        {"session_id": "", "identity": "student1", "confidence": 0.9, "key": KEY, "liveness": "passed"},
+        {"session_id": "sess_1", "identity": "", "confidence": 0.9, "key": KEY, "liveness": "passed"},
     ],
 )
 def test_signing_requires_a_key_a_session_and_an_identity(kwargs):
     with pytest.raises(ValueError):
         sign_recognition(**kwargs)
+
+
+@pytest.mark.parametrize("liveness", ["", "failed", "spoof", "PASSED", None])
+def test_signing_requires_a_known_liveness_attestation(liveness):
+    with pytest.raises(ValueError):
+        sign_recognition(
+            session_id="sess_1", identity="student1", confidence=0.9, key=KEY, liveness=liveness
+        )
+
+
+def test_a_result_cannot_be_signed_without_stating_liveness():
+    with pytest.raises(TypeError):
+        sign_recognition(session_id="sess_1", identity="student1", confidence=0.9, key=KEY)
+
+
+def test_signed_result_carries_the_liveness_attestation():
+    for attestation in ("passed", "unchecked"):
+        token = sign_recognition(
+            session_id="sess_1", identity="student1", confidence=0.9, key=KEY, liveness=attestation
+        )
+        assert token["liveness"] == attestation
+        assert token["signature"] == _expected_signature(token)
 
 
 # ------------------------------------------------------------------------------

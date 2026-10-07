@@ -1,6 +1,7 @@
 import csv
 import io
 import logging
+import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -23,6 +24,7 @@ from app.schemas.attendance_response import (
     AttendanceSessionResponse,
     AttendanceSummaryItem,
 )
+from app.services.audit_service import record_audit_event
 from app.services.recognition_service import verify_and_mark
 from app.services.vision_client import VisionServiceUnavailable, forward_frame_to_vision
 
@@ -237,6 +239,55 @@ def _public_face(face: dict) -> dict:
     return {k: v for k, v in face.items() if k != "recognition"}
 
 
+# Statuses the vision service gives a recognized face it refused to sign.
+LIVENESS_BLOCKED_STATUSES = {"spoof", "liveness_unavailable"}
+# A spoof held in front of the camera is seen on every frame; one audit event
+# per student per session in this window is enough.
+SPOOF_AUDIT_INTERVAL_SECONDS = 30.0
+_last_spoof_audit: dict[tuple[str, str], float] = {}
+
+
+async def _audit_spoof_attempt(session_id: str, teacher_id: str, face: dict) -> None:
+    """Record a spoof attempt: identifiers and the score only, never image data."""
+    identity = str(face.get("identity") or "UNKNOWN")
+    key = (session_id, identity)
+    now = time.monotonic()
+    last = _last_spoof_audit.get(key)
+    if last is not None and now - last < SPOOF_AUDIT_INTERVAL_SECONDS:
+        return
+    _last_spoof_audit[key] = now
+    if len(_last_spoof_audit) > 5000:
+        for stale in [
+            k for k, t in _last_spoof_audit.items() if now - t > SPOOF_AUDIT_INTERVAL_SECONDS
+        ]:
+            _last_spoof_audit.pop(stale, None)
+
+    liveness = face.get("liveness") if isinstance(face.get("liveness"), dict) else {}
+    logger.warning(
+        "Spoof attempt blocked in session %s: presented identity %s (liveness score %s)",
+        session_id,
+        identity,
+        liveness.get("score"),
+    )
+    try:
+        await record_audit_event(
+            actor_user_id="vision-service",
+            actor_role="SYSTEM",
+            action="SPOOF_ATTEMPT",
+            resource_type="SESSION",
+            resource_id=session_id,
+            metadata={
+                "presented_identity": identity,
+                "liveness_score": liveness.get("score"),
+                "session_teacher_id": teacher_id,
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Could not record the spoof attempt audit event for session %s", session_id
+        )
+
+
 @router.post(
     "/{session_id}/process-frame",
     summary="Recognize faces in one camera frame and mark verified students present",
@@ -315,6 +366,11 @@ async def process_attendance_frame(
                     face["identity"] = None
                     face["student_id"] = None
                     face["name"] = "UNKNOWN"
+        elif raw_face.get("status") in LIVENESS_BLOCKED_STATUSES:
+            # The vision service did not sign this face, so nobody is marked.
+            face["mark_status"] = "blocked"
+            if raw_face.get("status") == "spoof":
+                await _audit_spoof_attempt(session_id, current_user["user_id"], raw_face)
         faces.append(face)
 
     accepted = [f for f in faces if f.get("mark_status") in {"marked", "already_present"}]

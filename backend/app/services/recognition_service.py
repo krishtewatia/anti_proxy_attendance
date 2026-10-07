@@ -35,8 +35,14 @@ REQUIRED_FIELDS = (
     "issued_at",
     "expires_at",
     "nonce",
+    "liveness",
     "signature",
 )
+# What the vision service attests about liveness: "passed" (checked and judged
+# live) or "unchecked" (it is running in observe mode).
+LIVENESS_PASSED = "passed"
+LIVENESS_UNCHECKED = "unchecked"
+LIVENESS_ATTESTATIONS = (LIVENESS_PASSED, LIVENESS_UNCHECKED)
 
 
 class RecognitionRejected(Exception):
@@ -54,6 +60,7 @@ class VerifiedRecognition:
     confidence: float
     nonce: str
     expires_at: int
+    liveness: str
 
 
 @dataclass(frozen=True)
@@ -75,17 +82,19 @@ def canonical_message(
     issued_at: int,
     expires_at: int,
     nonce: str,
+    liveness: str,
 ) -> bytes:
     """Byte string covered by the signature. Must match the vision service signer exactly."""
     return "|".join(
         [
-            "v1",
+            "v2",
             session_id,
             identity,
             f"{confidence:.4f}",
             str(issued_at),
             str(expires_at),
             nonce,
+            liveness,
         ]
     ).encode("utf-8")
 
@@ -98,10 +107,11 @@ def compute_signature(
     issued_at: int,
     expires_at: int,
     nonce: str,
+    liveness: str,
 ) -> str:
     return hmac.new(
         key.encode("utf-8"),
-        canonical_message(session_id, identity, confidence, issued_at, expires_at, nonce),
+        canonical_message(session_id, identity, confidence, issued_at, expires_at, nonce, liveness),
         hashlib.sha256,
     ).hexdigest()
 
@@ -128,15 +138,23 @@ def verify_recognition(
         issued_at = int(token["issued_at"])
         expires_at = int(token["expires_at"])
         nonce = str(token["nonce"])
+        liveness = str(token["liveness"])
         signature = str(token["signature"])
     except (TypeError, ValueError):
         raise RecognitionRejected("malformed")
 
     expected = compute_signature(
-        key, token_session, identity, confidence, issued_at, expires_at, nonce
+        key, token_session, identity, confidence, issued_at, expires_at, nonce, liveness
     )
     if not hmac.compare_digest(expected, signature):
         raise RecognitionRejected("bad_signature")
+
+    # The attestation is covered by the signature, so it cannot be upgraded in
+    # transit. In enforce mode only a face that passed liveness may be marked.
+    if liveness not in LIVENESS_ATTESTATIONS:
+        raise RecognitionRejected("malformed")
+    if settings.LIVENESS_MODE == "enforce" and liveness != LIVENESS_PASSED:
+        raise RecognitionRejected("liveness_not_passed")
 
     current = time.time() if now is None else now
     skew = settings.RECOGNITION_MAX_CLOCK_SKEW_SECONDS
@@ -156,6 +174,7 @@ def verify_recognition(
         confidence=confidence,
         nonce=nonce,
         expires_at=expires_at,
+        liveness=liveness,
     )
 
 

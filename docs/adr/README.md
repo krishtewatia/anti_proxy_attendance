@@ -18,6 +18,7 @@ This directory maintains the immutable log of architectural decisions for the **
 | [**ADR-008**](file:///docs/adr/ADR-008-anti-spoofing-liveness-strategy.md) | Anti-Spoofing & Liveness Strategy for Local MVP | 2026-10 | **Accepted** | Postponed heavy neural anti-spoofing classifiers to protect CPU frame rates; relied on 4 structural mitigations (kinematic boundary crossing trajectory, 3-vote voting, continuous presence accumulation, teacher review). |
 | [**ADR-009**](file:///docs/adr/ADR-009-camera-registry-and-multi-camera-architecture.md) | Camera Registry, Multi-Camera & RTSP Ingestion | 2026-10 | **Accepted** | Introduced a MongoDB-backed camera registry with role enforcement (`ENTRY`, `EXIT`, `BOTH`), secret URL masking, RTSP automatic reconnection with exponential backoff, and outbox persistence. |
 | [**ADR-010**](file:///docs/adr/ADR-010-drop-webrtc-phone-ingest.md) | Drop Phone WebRTC Ingest for USB Webcam via Browser | 2026-10 | **Accepted** | Removed phone WebRTC ingest and its dependencies. A phone is used as a USB webcam through the browser camera selector; the vision service is an internal API only; doorway mode is offline-tested with no live ingest. Supersedes the WebRTC option of ADR-001. |
+| [**ADR-011**](file:///docs/adr/ADR-011-passive-liveness-gate.md) | Passive Liveness Gate on the Browser-Webcam Marking Path | 2026-10 | **Accepted** | MiniFASNet (Apache-2.0, ONNX) checks every recognized face before its result is signed; liveness is attested inside the signature and the backend can require it. Ships in observe mode until the threshold is calibrated. Supersedes the postponement in ADR-008 for the browser flow. |
 
 ---
 
@@ -33,4 +34,5 @@ flowchart TD
     ADR004["ADR-004: Biometric Storage<br>(512-d Vectors, No Photos)"] --> ADR007["ADR-007: Threshold Policy<br>(θ = 0.50, Margin 0.15, 3 Votes)"]
     ADR005["ADR-005: CV Track Fusion<br>(SCRFD + ByteTrack)"] --> ADR007
     ADR007 --> ADR008["ADR-008: Liveness Strategy<br>(Kinematic Mitigations)"]
+    ADR008 --> ADR011["ADR-011: Passive Liveness Gate<br>(MiniFASNet, Browser Flow)"]
 ```

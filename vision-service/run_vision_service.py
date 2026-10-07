@@ -19,6 +19,7 @@ SERVICE_ROOT = Path(__file__).resolve().parent
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
+from camera.liveness import load_liveness_checker, resolve_liveness_mode  # noqa: E402
 from camera.recognition_signing import validate_signing_key  # noqa: E402
 
 logger = logging.getLogger("vision_service")
@@ -102,6 +103,14 @@ def main() -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
+    # Fail closed: in enforce mode the service does not start without the model.
+    try:
+        liveness_mode = resolve_liveness_mode()
+        liveness_checker = load_liveness_checker(liveness_mode)
+    except RuntimeError as exc:
+        print(f"[FATAL] {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
     from camera.vision_api import VisionApiServer
 
     server = VisionApiServer(
@@ -110,11 +119,16 @@ def main() -> None:
         backend_url=args.backend_url,
         similarity_threshold=args.similarity_threshold,
         min_margin=args.min_margin,
+        liveness_mode=liveness_mode,
+        liveness_checker=liveness_checker,
     )
     # Listen first so the health check answers while the models load.
     server.start_background()
     logger.info(
-        "Vision API started on %s:%d (internal, service key required)", args.host, args.port
+        "Vision API started on %s:%d (internal, service key required, liveness=%s)",
+        args.host,
+        args.port,
+        liveness_mode,
     )
 
     if not args.no_preload:

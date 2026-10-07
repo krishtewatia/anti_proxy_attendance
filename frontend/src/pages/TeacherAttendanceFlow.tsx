@@ -6,6 +6,7 @@ import type {
   TeacherSessionSummaryItem,
   UserResponse,
 } from "../types";
+import { getFaceOverlayStyle, hasSpoof } from "../utils/faceOverlay";
 import "./teacher-attendance-flow.css";
 
 interface TeacherAttendanceFlowProps {
@@ -49,6 +50,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     name: "Ready",
     status: "IDLE",
   });
+  const [spoofDetected, setSpoofDetected] = useState(false);
   const [cameraOnline, setCameraOnline] = useState<boolean>(false);
   const [cameraStatus, setCameraStatus] = useState<
     "FREE" | "REQUESTING_CAMERA" | "CAMERA_READY" | "ATTENDANCE_ACTIVE" | "STOPPING_CAMERA" | "PERMISSION_DENIED" | "UNAVAILABLE"
@@ -338,16 +340,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       const w = Math.min(displayW - x, (x2 - x1) * scaleX);
       const h = Math.min(displayH - y, (y2 - y1) * scaleY);
 
-      const isRecognized = face.status === "recognized" && face.name && face.name !== "UNKNOWN";
-      const studentName = isRecognized ? face.name! : "UNKNOWN";
-      const pct = face.confidence_percent != null
-        ? `${face.confidence_percent.toFixed(1)}%`
-        : face.similarity != null
-        ? `${(face.similarity * 100).toFixed(1)}%`
-        : "";
-
-      const strokeColor = isRecognized ? "#10b981" : "#f59e0b";
-      const bgColor = isRecognized ? "rgba(16, 185, 129, 0.92)" : "rgba(245, 158, 11, 0.92)";
+      // Recognized (green), unknown (amber) or blocked by the liveness check (red)
+      const { label: labelText, strokeColor, bgColor } = getFaceOverlayStyle(face);
 
       // Draw bounding box rectangle
       ctx.strokeStyle = strokeColor;
@@ -355,7 +349,6 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       ctx.strokeRect(x, y, w, h);
 
       // Label text
-      const labelText = `${studentName} ${pct ? `(${pct})` : ""}`;
       ctx.font = "bold 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
       const textMetrics = ctx.measureText(labelText);
       const badgeW = textMetrics.width + 16;
@@ -437,6 +430,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
             if (res && res.ok) {
               const data = await res.json();
+              setSpoofDetected(hasSpoof(data.faces));
               if (data.faces && Array.isArray(data.faces) && data.faces.length > 0) {
                 drawRecognitionOverlay(data.faces, data.frame_width || targetW, data.frame_height || targetH);
                 const recognizedStudents = data.faces.filter(
@@ -616,6 +610,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     setSessionId(null);
     setRecords([]);
     setCallout({ name: "Ready", status: "IDLE" });
+    setSpoofDetected(false);
     fetchTeacherData();
   };
 
@@ -906,6 +901,13 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                         ? "Connecting to physical webcam device..."
                         : cameraErrorMessage || (cameraStatus === "PERMISSION_DENIED" ? "Please allow camera access in your browser settings." : "Please check that your webcam is connected.")}
                     </div>
+                  </div>
+                )}
+
+                {/* A face in view was blocked by the liveness check; nobody is marked for it */}
+                {spoofDetected && (
+                  <div className="erp-spoof-callout" role="alert">
+                    Spoof detected: a photo or screen was shown to the camera. No attendance was marked for it.
                   </div>
                 )}
 

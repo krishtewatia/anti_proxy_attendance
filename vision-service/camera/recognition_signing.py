@@ -15,6 +15,9 @@ import time
 from typing import Any, Optional
 
 RECOGNITION_TTL_SECONDS = 30
+# What the vision service attests about liveness for a signed result:
+# "passed" (checked and judged live) or "unchecked" (observe mode).
+LIVENESS_ATTESTATIONS = ("passed", "unchecked")
 SIGNING_KEY_MIN_LENGTH = 32
 PLACEHOLDER_KEY_PREFIX = "replace_with"
 
@@ -54,17 +57,19 @@ def canonical_message(
     issued_at: int,
     expires_at: int,
     nonce: str,
+    liveness: str,
 ) -> bytes:
     """Byte string covered by the signature. Must match the backend verifier exactly."""
     return "|".join(
         [
-            "v1",
+            "v2",
             session_id,
             identity,
             f"{confidence:.4f}",
             str(issued_at),
             str(expires_at),
             nonce,
+            liveness,
         ]
     ).encode("utf-8")
 
@@ -75,6 +80,7 @@ def sign_recognition(
     identity: str,
     confidence: float,
     key: str,
+    liveness: str,
     ttl_seconds: int = RECOGNITION_TTL_SECONDS,
     now: Optional[float] = None,
 ) -> dict[str, Any]:
@@ -83,6 +89,8 @@ def sign_recognition(
         raise ValueError("A signing key is required to sign recognition results")
     if not session_id or not identity:
         raise ValueError("session_id and identity are required to sign a recognition result")
+    if liveness not in LIVENESS_ATTESTATIONS:
+        raise ValueError("liveness must be 'passed' or 'unchecked' to sign a recognition result")
 
     issued_at = int(now if now is not None else time.time())
     expires_at = issued_at + int(ttl_seconds)
@@ -91,7 +99,7 @@ def sign_recognition(
 
     signature = hmac.new(
         key.encode("utf-8"),
-        canonical_message(session_id, identity, confidence, issued_at, expires_at, nonce),
+        canonical_message(session_id, identity, confidence, issued_at, expires_at, nonce, liveness),
         hashlib.sha256,
     ).hexdigest()
 
@@ -102,5 +110,6 @@ def sign_recognition(
         "issued_at": issued_at,
         "expires_at": expires_at,
         "nonce": nonce,
+        "liveness": liveness,
         "signature": signature,
     }

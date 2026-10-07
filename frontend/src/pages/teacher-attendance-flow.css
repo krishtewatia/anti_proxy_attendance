@@ -430,3 +430,19 @@
   gap: 1rem;
   margin-top: 1.5rem;
 }
+
+/* Liveness check blocked a face in view */
+.erp-spoof-callout {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(220, 38, 38, 0.94);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  z-index: 5;
+}
