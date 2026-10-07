@@ -43,7 +43,7 @@ def register_test_camera(monkeypatch):
                 "camera_id": camera_id,
                 "classroom_id": classroom_id,
                 "role": "BOTH",
-                "source_type": "WEBRTC",
+                "source_type": "PHONE",
                 "enabled": True,
             },
             db=db,

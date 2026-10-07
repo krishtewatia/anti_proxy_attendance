@@ -3,7 +3,7 @@
 Verifies the complete scenario required by Step 2E.14 Task 2:
 1. Teacher logs in, creates session for CS-101 in ROOM_101.
 2. Roster is set with enrolled students [Alice (student_01), Bob (student_02), Charlie (student_03)].
-3. Phone/WebRTC camera connects and transmits telemetry (state: CONNECTED, fps: 15.0).
+3. Phone camera connects and transmits telemetry (state: CONNECTED, fps: 15.0).
 4. Alice enters and stays inside (accumulating continuous presence).
 5. Bob enters and exits after a short interval (state transitions INSIDE -> OUTSIDE).
 6. Charlie is never seen (state remains NOT_SEEN).
@@ -102,14 +102,14 @@ async def test_full_demo3_acceptance_and_rehearsal_walkthrough(
     })
 
     # -------------------------------------------------------------------------
-    # 3. Camera Connects (WebRTC Phone Streamer on CAM_ROOM_101_DOOR)
+    # 3. Camera Connects (phone camera on CAM_ROOM_101_DOOR)
     # -------------------------------------------------------------------------
     camera_id = "CAM_ROOM_101_DOOR"
     await rehearsal_db["cameras"].insert_one({
         "camera_id": camera_id,
         "classroom_id": "ROOM_101",
         "role": "BOTH",
-        "source_type": "WEBRTC",
+        "source_type": "PHONE",
         "enabled": True,
         "status": "DISCONNECTED",
         "fps": 0.0,

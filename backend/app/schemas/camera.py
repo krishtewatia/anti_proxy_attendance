@@ -8,7 +8,7 @@ import re
 from typing import Any, Optional
 import urllib.parse
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CameraRole(str, Enum):
@@ -23,7 +23,6 @@ class CameraSourceType(str, Enum):
     """Supported ingestion source modalities."""
 
     RTSP = "RTSP"
-    WEBRTC = "WEBRTC"
     PHONE = "PHONE"
     FILE = "FILE"
 
@@ -126,6 +125,13 @@ class CameraResponse(BaseModel):
     role: CameraRole
     source_type: CameraSourceType
     rtsp_url_masked: Optional[str] = None
+
+    @field_validator("source_type", mode="before")
+    @classmethod
+    def _read_legacy_webrtc_as_phone(cls, value: Any) -> Any:
+        """Cameras registered before WebRTC ingest was removed (ADR-010) still read back."""
+        return CameraSourceType.PHONE.value if value == "WEBRTC" else value
+
     secret_reference: Optional[str] = None
     enabled: bool
     boundary_config: Optional[dict[str, Any]] = None

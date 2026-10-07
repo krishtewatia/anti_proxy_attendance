@@ -193,13 +193,13 @@ class TestPipelineKinematicPolicies(unittest.TestCase):
         # Frame 1: cy = 352 (Side A)
         box1 = np.array([[200.0, 302.0, 300.0, 402.0, 0.95]], dtype=np.float32)
         det_mock.detect.return_value = (box1, None)
-        f1 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc), frame_index=1, source_id="CAM_1", source_type=VideoSourceType.WEBRTC)
+        f1 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc), frame_index=1, source_id="CAM_1", source_type=VideoSourceType.PHONE)
         pipeline.process_frame(f1)
 
         # Frame 2: cy = 368 (Side B, displacement = 16px < min 30px)
         box2 = np.array([[200.0, 318.0, 300.0, 418.0, 0.95]], dtype=np.float32)
         det_mock.detect.return_value = (box2, None)
-        f2 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 1, tzinfo=timezone.utc), frame_index=2, source_id="CAM_1", source_type=VideoSourceType.WEBRTC)
+        f2 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 1, tzinfo=timezone.utc), frame_index=2, source_id="CAM_1", source_type=VideoSourceType.PHONE)
         res2 = pipeline.process_frame(f2)
 
         # Should emit 1 event with kinematic_status FLAGGED_STATIONARY
@@ -218,13 +218,13 @@ class TestPipelineKinematicPolicies(unittest.TestCase):
         # Frame 1: cy = 352
         box1 = np.array([[200.0, 302.0, 300.0, 402.0, 0.95]], dtype=np.float32)
         det_mock.detect.return_value = (box1, None)
-        f1 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc), frame_index=1, source_id="CAM_1", source_type=VideoSourceType.WEBRTC)
+        f1 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc), frame_index=1, source_id="CAM_1", source_type=VideoSourceType.PHONE)
         pipeline.process_frame(f1)
 
         # Frame 2: cy = 368 (insufficient displacement)
         box2 = np.array([[200.0, 318.0, 300.0, 418.0, 0.95]], dtype=np.float32)
         det_mock.detect.return_value = (box2, None)
-        f2 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 1, tzinfo=timezone.utc), frame_index=2, source_id="CAM_1", source_type=VideoSourceType.WEBRTC)
+        f2 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 1, tzinfo=timezone.utc), frame_index=2, source_id="CAM_1", source_type=VideoSourceType.PHONE)
         res2 = pipeline.process_frame(f2)
 
         # In REJECT mode: Event is suppressed!
@@ -239,13 +239,13 @@ class TestPipelineKinematicPolicies(unittest.TestCase):
         # Frame 1: cy = 352
         box1 = np.array([[200.0, 302.0, 300.0, 402.0, 0.95]], dtype=np.float32)
         det_mock.detect.return_value = (box1, None)
-        f1 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc), frame_index=1, source_id="CAM_1", source_type=VideoSourceType.WEBRTC)
+        f1 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc), frame_index=1, source_id="CAM_1", source_type=VideoSourceType.PHONE)
         pipeline.process_frame(f1)
 
         # Frame 2: cy = 368
         box2 = np.array([[200.0, 318.0, 300.0, 418.0, 0.95]], dtype=np.float32)
         det_mock.detect.return_value = (box2, None)
-        f2 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 1, tzinfo=timezone.utc), frame_index=2, source_id="CAM_1", source_type=VideoSourceType.WEBRTC)
+        f2 = VideoFrame(frame=test_img, timestamp=datetime(2026, 10, 20, 10, 0, 1, tzinfo=timezone.utc), frame_index=2, source_id="CAM_1", source_type=VideoSourceType.PHONE)
         res2 = pipeline.process_frame(f2)
 
         # Emits despite anomaly because check is disabled

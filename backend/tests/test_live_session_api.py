@@ -169,7 +169,7 @@ async def test_live_snapshot_student_states_and_camera_health(
             "camera_id": "CAM_ROOM_101_BACKUP",
             "classroom_id": "ROOM_101",
             "role": "ENTRY",
-            "source_type": "WEBRTC",
+            "source_type": "PHONE",
             "enabled": True,
             "status": "DEGRADED",
             "fps": 4.2,

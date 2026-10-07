@@ -2,18 +2,15 @@
 # Anti-Proxy Attendance System - Development Startup Script
 # Architecture:
 #   - MongoDB on 27017, FastAPI Backend on 8000, React Frontend on 3000
-#   - Vision Inference Server on port 8088 (SCRFD + ArcFace)
+#   - Vision service (SCRFD + ArcFace) inside the Compose network only; it has
+#     no published port and is called by the backend
 #   - Browser directly owns physical PC / USB webcam via getUserMedia()
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts/start_dev.ps1
 # ==============================================================================
 
-param(
-    [string]$CameraIndex = "auto",
-    [switch]$NoVision,
-    [switch]$ForegroundVision
-)
+param()
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -27,7 +24,7 @@ Write-Host "  Architecture: Browser-Owned Webcam + SCRFD/ArcFace Bridge" -Foregr
 Write-Host "============================================================" -ForegroundColor Cyan
 
 # 1. Ensure Docker is running
-Write-Host "`n[1/4] Starting Docker Compose services (MongoDB, Backend, Frontend)..." -ForegroundColor Yellow
+Write-Host "`n[1/3] Starting Docker Compose services (MongoDB, Backend, Vision, Frontend)..." -ForegroundColor Yellow
 try {
     docker info > $null 2>&1
 } catch {
@@ -35,15 +32,16 @@ try {
     exit 1
 }
 
-docker compose up -d mongodb backend frontend
+docker compose up -d
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to start Docker Compose services." -ForegroundColor Red
+    Write-Host "       If the message mentions RECOGNITION_SIGNING_KEY, set a real value in .env (see README)." -ForegroundColor Red
     exit 1
 }
-Write-Host "  ✓ Docker containers running." -ForegroundColor Green
+Write-Host "  [OK] Docker containers running." -ForegroundColor Green
 
 # 2. Wait for backend health
-Write-Host "`n[2/4] Verifying Backend API health (http://localhost:8000/health)..." -ForegroundColor Yellow
+Write-Host "`n[2/3] Verifying Backend API health (http://localhost:8000/health)..." -ForegroundColor Yellow
 $backendHealthy = $false
 for ($i = 0; $i -lt 15; $i++) {
     try {
@@ -57,48 +55,22 @@ for ($i = 0; $i -lt 15; $i++) {
 }
 
 if ($backendHealthy) {
-    Write-Host "  ✓ Backend API is healthy." -ForegroundColor Green
+    Write-Host "  [OK] Backend API is healthy." -ForegroundColor Green
 } else {
     Write-Host "  ! Warning: Backend healthcheck timed out. Proceeding..." -ForegroundColor DarkYellow
 }
 
-# 3. Start Vision Inference Server
-if (-not $NoVision) {
-    Write-Host "`n[3/4] Checking AI Vision Inference Server (port 8088)..." -ForegroundColor Yellow
-    $portActive = Get-NetTCPConnection -LocalPort 8088 -ErrorAction SilentlyContinue
-
-    if ($portActive) {
-        Write-Host "  ✓ Vision Server is ALREADY running on port 8088." -ForegroundColor Green
-    } else {
-        $pythonExe = Join-Path $ProjectRoot "vision-service\.venv\Scripts\python.exe"
-        if (-not (Test-Path $pythonExe)) {
-            $pythonExe = "python"
-        }
-        $visionScript = Join-Path $ProjectRoot "vision-service\run_local_webcam.py"
-
-        if ($ForegroundVision) {
-            Write-Host "  Starting Vision Server in foreground..." -ForegroundColor Cyan
-            & $pythonExe $visionScript
-        } else {
-            Write-Host "  Starting Vision Server in background..." -ForegroundColor Cyan
-            Start-Process -FilePath $pythonExe -ArgumentList "$visionScript" -WindowStyle Hidden
-            Start-Sleep -Seconds 3
-            Write-Host "  ✓ Vision Server launched on port 8088." -ForegroundColor Green
-        }
-    }
-}
-
-Write-Host "`n[4/4] Verifying Camera Connection Architecture..." -ForegroundColor Yellow
-Write-Host "  ✓ Browser owns physical webcam directly via navigator.mediaDevices.getUserMedia()" -ForegroundColor Green
-Write-Host "  ✓ Zero camera conflicts: Native Python never locks Windows video devices" -ForegroundColor Green
-Write-Host "  ✓ Built-in PC webcam and USB webcams supported natively in browser" -ForegroundColor Green
+Write-Host "`n[3/3] Camera architecture" -ForegroundColor Yellow
+Write-Host "  [OK] Browser owns physical webcam directly via navigator.mediaDevices.getUserMedia()" -ForegroundColor Green
+Write-Host "  [OK] Zero camera conflicts: Native Python never locks Windows video devices" -ForegroundColor Green
+Write-Host "  [OK] Built-in PC webcam and USB webcams supported natively in browser" -ForegroundColor Green
 
 Write-Host "`n============================================================" -ForegroundColor Green
 Write-Host "  SYSTEM READY FOR ATTENDANCE" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host "  Teacher ERP Portal : http://localhost:3000" -ForegroundColor White
 Write-Host "  FastAPI Backend    : http://localhost:8000" -ForegroundColor White
-Write-Host "  Vision AI API      : http://localhost:8088" -ForegroundColor White
+Write-Host "  Vision service     : internal only (no published port)" -ForegroundColor White
 Write-Host "  Camera Mode        : BROWSER-OWNED (Activates on 'Take Attendance')" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Workflow:" -ForegroundColor Yellow

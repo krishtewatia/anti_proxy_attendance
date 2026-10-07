@@ -109,7 +109,7 @@ async def test_demo3_full_live_attendance_walkthrough(
         "camera_id": camera_id,
         "classroom_id": "ROOM_101",
         "role": "BOTH",
-        "source_type": "WEBRTC",
+        "source_type": "PHONE",
         "enabled": True,
         "status": "DISCONNECTED",
         "fps": 0.0,

@@ -3,7 +3,7 @@
 Replaces rigid per-track direction state with identity-aware crossing detection:
 1. Pending crossings: unconfirmed tracks hold crossings for up to pending_ttl seconds.
    When the track confirms, events are emitted with original crossing timestamps.
-2. Identity-keyed side memory: tracks lost across WebRTC frame drops that reappear
+2. Identity-keyed side memory: tracks lost across frame drops that reappear
    as a confirmed identity on the opposite side within infer_window have crossings inferred.
 3. Normalized coordinates & deadband: robust to portrait/landscape phone orientations.
 4. Cooldown: prevents duplicate consecutive bursts for the same identity and direction.
@@ -184,7 +184,7 @@ class IdentityBoundary:
                     self.crossings_discarded_unconfirmed += 1
             t.pending.clear()
 
-            # 2. Infer crossing lost to track-ID churn (WebRTC jitter / ByteTrack reset)
+            # 2. Infer crossing lost to track-ID churn (stream jitter / ByteTrack reset)
             prev = self.identity_side.get(confirmed_id)
             if side != 0:
                 if prev and prev[0] != side and (now - prev[1] <= self.infer_window) and not out:
