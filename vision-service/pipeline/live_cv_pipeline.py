@@ -80,12 +80,9 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / denom)
 
 
-DEFAULT_IDENTITY_MAP: dict[str, str] = {
-    "person_01": "student1",
-    "person_02": "student2",
-    "person_03": "student3",
-    "person_04": "student4",
-}
+# No built-in mapping from fixture folder names to accounts. Callers that want
+# to rename gallery labels pass their own identity_map.
+DEFAULT_IDENTITY_MAP: dict[str, str] = {}
 
 
 @dataclass
@@ -158,7 +155,7 @@ def load_gallery(
 
     If enable_quality_gates is True, per-image quality gates and quality-weighted
     mean fusion are applied. Otherwise, standard detection and arithmetic mean are used.
-    Applies identity_map (or DEFAULT_IDENTITY_MAP) to map person_01..04 -> student1..04.
+    Gallery labels are the folder names unless an identity_map renames them.
     """
     id_map = identity_map if identity_map is not None else DEFAULT_IDENTITY_MAP
     gallery: dict[str, np.ndarray] = {}

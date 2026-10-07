@@ -31,7 +31,7 @@ python scripts/seed_demo.py --non-interactive
   - **Email**: `teacher@demo.edu`
   - **Password**: `TeacherSecurePass123!`
 - **Presenter Dialogue**:
-  > *"Welcome everyone. I'm logged in as Professor Sharma on the Anti-Proxy Attendance portal. Let's look at today's lecture: Computer Science 101, scheduled in Lecture Hall LH-101. The university policy requires students to be physically present for at least 75% of class time to receive credit."*
+  > *"Welcome everyone. I'm logged in as Professor Example on the Anti-Proxy Attendance portal. Let's look at today's lecture: Computer Science 101, scheduled in Lecture Hall LH-101. The university policy requires students to be physically present for at least 75% of class time to receive credit."*
 - **Action**: Click into **CS-101 Session Details**.
 - **Visual on Screen**: Roster table displays enrolled students (e.g., Alice and Bob) in gray badges: `State: NOT_SEEN`, `Presence: 0 min (0%)`, `Projected: ABSENT`.
 

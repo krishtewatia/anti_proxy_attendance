@@ -167,7 +167,7 @@ During an active session, the camera feed renders live visual feedback directly 
 |                                                           |
 |       +-------------------+                               |
 |       |  [0.92]           |                               |
-|       |  Rahul Sharma     | <--- Green Box (Recognized)   |
+|       |  Alex Example     | <--- Green Box (Recognized)   |
 |       |  92.3%            |                               |
 |       +-------------------+                               |
 |                                     +---------------+     |
@@ -181,7 +181,7 @@ During an active session, the camera feed renders live visual feedback directly 
 +-----------------------------------------------------------+
 ```
 
-- **Recognized Students**: Drawn with green bounding boxes displaying the student name and confidence percentage (e.g., `Rahul Sharma (92.3%)`).
+- **Recognized Students**: Drawn with green bounding boxes displaying the student name and confidence percentage (e.g., `Alex Example (92.3%)`).
 - **Unknown Faces**: Drawn with red bounding boxes displaying `UNKNOWN` when similarity falls below the threshold ($< 0.50$) or margin is insufficient ($< 0.15$).
 - **Multi-Face Tracking**: Multiple students in frame are detected, bounded, and labeled simultaneously.
 
@@ -429,14 +429,6 @@ Student photos are stored under `backend/uploads/student_profiles/` and embeddin
 
 ### 5. Other Endpoints
 - **FastAPI OpenAPI Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-
---- | :--- | :--- | :--- |
-| **Admin** | `admin@system.local` | `AdminDevPass123!` | System Administration & Directory |
-| **Teacher** | `teacher@demo.edu` | `TeacherDevPass123!` | Classes: `DS-B`, `DS-C` |
-| **Student** | `rahul@demo.edu` | `StudentDevPass123!` | Class: `DS-B` (ID: `DS202601`) |
-| **Student** | `aman@demo.edu` | `StudentDevPass123!` | Class: `DS-B` (ID: `DS202602`) |
-| **Student** | `priya@demo.edu` | `StudentDevPass123!` | Class: `DS-B` (ID: `DS202603`) |
-| **Student** | `krish@demo.edu` | `StudentDevPass123!` | Class: `DS-B` (ID: `DS202604`) |
 
 ---
 

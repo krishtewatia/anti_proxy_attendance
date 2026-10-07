@@ -187,7 +187,7 @@ async def test_valid_signed_recognition_marks_present_once(teacher_headers, visi
 
     async with _client() as client:
         vision_frames.faces = [
-            vision_frames.recognized(SESSION_ID, "student1", name="Rahul Sharma"),
+            vision_frames.recognized(SESSION_ID, "student1", name="Alex Example"),
             vision_frames.unknown(),
         ]
         first = await client.post(FRAME_URL, headers=teacher_headers, content=FRAME_BYTES)
@@ -199,7 +199,7 @@ async def test_valid_signed_recognition_marks_present_once(teacher_headers, visi
     assert first.status_code == 200
     body = first.json()
     assert body["recognized"] is True
-    assert body["student_name"] == "Rahul Sharma"
+    assert body["student_name"] == "Alex Example"
     assert body["detected_faces"] == 2
     assert body["faces"][0]["mark_status"] == "marked"
     assert body["faces"][1]["status"] == "unknown"

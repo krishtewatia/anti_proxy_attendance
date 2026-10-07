@@ -47,7 +47,7 @@ DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "AdminDevPass123!")
 
 TEACHER_EMAIL = "teacher@demo.edu"
 TEACHER_USER_ID = "user_teacher_demo"
-TEACHER_NAME = "Dr. Sharma"
+TEACHER_NAME = "Dr. Example"
 DEFAULT_TEACHER_PASSWORD = os.getenv("TEACHER_PASSWORD", "TeacherDevPass123!")
 
 DEFAULT_STUDENT_PASSWORD = os.getenv("STUDENT_PASSWORD", "StudentDevPass123!")
@@ -55,7 +55,7 @@ DEFAULT_STUDENT_PASSWORD = os.getenv("STUDENT_PASSWORD", "StudentDevPass123!")
 STUDENT_SPECS = [
     {
         "index": 1,
-        "name": "Rahul Sharma",
+        "name": "Alex Example",
         "email": "student1@demo.edu",
         "user_id": "user_student_001",
         "student_id": "DS202601",
@@ -69,7 +69,7 @@ STUDENT_SPECS = [
     },
     {
         "index": 2,
-        "name": "Aman Kumar",
+        "name": "Blake Sample",
         "email": "student2@demo.edu",
         "user_id": "user_student_002",
         "student_id": "DS202602",
@@ -83,7 +83,7 @@ STUDENT_SPECS = [
     },
     {
         "index": 3,
-        "name": "Priya Singh",
+        "name": "Casey Placeholder",
         "email": "student3@demo.edu",
         "user_id": "user_student_003",
         "student_id": "DS202603",
@@ -97,7 +97,7 @@ STUDENT_SPECS = [
     },
     {
         "index": 4,
-        "name": "Krish Tewatia",
+        "name": "Devon Demo",
         "email": "student4@demo.edu",
         "user_id": "user_student_004",
         "student_id": "DS202604",

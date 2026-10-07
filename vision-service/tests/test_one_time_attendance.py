@@ -23,8 +23,8 @@ class TestOneTimeAttendance(unittest.TestCase):
         self.mock_app.det_model = self.mock_det
         self.mock_dispatcher = MagicMock()
         self.gallery = {
-            "student_rahul": np.random.randn(512).astype(np.float32),
-            "student_aman": np.random.randn(512).astype(np.float32),
+            "student_alex": np.random.randn(512).astype(np.float32),
+            "student_blake": np.random.randn(512).astype(np.float32),
         }
         # Normalize gallery
         for k in self.gallery:
@@ -32,7 +32,7 @@ class TestOneTimeAttendance(unittest.TestCase):
 
         self.mock_rec = MagicMock()
         def mock_rec_get(frame, face):
-            face.embedding = self.gallery["student_rahul"]
+            face.embedding = self.gallery["student_alex"]
         self.mock_rec.get.side_effect = mock_rec_get
         self.mock_app.models = {"detection": self.mock_det, "recognition": self.mock_rec}
 
@@ -47,14 +47,14 @@ class TestOneTimeAttendance(unittest.TestCase):
 
     def test_one_time_attendance_marking_and_deduplication(self):
         """Student is marked present on first confirmation, ignored on subsequent appearances."""
-        # 1. Simulate track for student_rahul confirmed
+        # 1. Simulate track for student_alex confirmed
         track = TrackEvidence(
             track_id=1,
             first_seen=datetime.now(timezone.utc),
             last_seen=datetime.now(timezone.utc),
             total_frames=3,
             supporting_frames=2,
-            assigned_identity="student_rahul",
+            assigned_identity="student_alex",
             assigned_confidence=0.85,
             is_confirmed=True,
             recognition_attempts=3,
@@ -82,8 +82,8 @@ class TestOneTimeAttendance(unittest.TestCase):
         # Process frame 1 -> Should mark PRESENT and dispatch 1 event
         res1 = self.pipeline.process_frame(frame)
         self.assertEqual(len(res1.emitted_events), 1)
-        self.assertEqual(res1.emitted_events[0]["identity"], "student_rahul")
-        self.assertIn("student_rahul", self.pipeline.session_marked_students)
+        self.assertEqual(res1.emitted_events[0]["identity"], "student_alex")
+        self.assertIn("student_alex", self.pipeline.session_marked_students)
         self.assertEqual(self.mock_dispatcher.send_event.call_count, 1)
 
         # Process frame 2 -> Same student, already marked present -> Should NOT dispatch duplicate event

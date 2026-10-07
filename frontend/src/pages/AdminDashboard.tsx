@@ -785,7 +785,7 @@ export const AdminDashboard: React.FC<Props> = ({
                       <tr key={sess.session_id}>
                         <td style={{ fontWeight: 600 }}>{sess.course_name}</td>
                         <td>{sess.class_code || "DS-B"}</td>
-                        <td>Dr. Sharma</td>
+                        <td>{String(sessAny.teacher_name ?? sessAny.created_by ?? "—")}</td>
                         <td>{totalStu}</td>
                         <td style={{ color: "#15803d", fontWeight: 600 }}>{presCount}</td>
                         <td style={{ color: "#b91c1c", fontWeight: 600 }}>{absCount}</td>

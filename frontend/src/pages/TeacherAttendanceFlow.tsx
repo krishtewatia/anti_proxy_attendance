@@ -622,7 +622,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   const hasActiveSession = Boolean(dashboardData?.active_session);
   const activeSess = dashboardData?.active_session;
   const previousSessions = dashboardData?.previous_sessions ?? [];
-  const teacherName = dashboardData?.teacher.name || "Dr. Sharma";
+  const teacherName = dashboardData?.teacher.name || "Teacher";
 
   // Tab 1: Teacher Dashboard
   const renderDashboardView = () => (
