@@ -395,6 +395,8 @@ All four containers should report `healthy` or `Up`:
 - `anti-proxy-frontend` (`localhost:3000`)
 - `anti-proxy-vision-service` (internal only: it has no published port and is called by the backend)
 
+The vision service and the frontend run only what their images contain, so after pulling new commits or switching branches start the stack with `--build` again. If `anti-proxy-vision-service` shows `Restarting`, its image is older than the code: rebuild it.
+
 ### 3. Create the Admin and Teacher Accounts
 Admin accounts cannot be created from the web portal, so bootstrap them once with the seed script. It needs `pymongo` and `bcrypt` on the machine you run it from:
 
@@ -488,7 +490,7 @@ docker exec anti-proxy-backend pytest -v
 Tests marked `@pytest.mark.integration` (`test_one_time_demo_e2e.py`, `test_phase2_multi_role_e2e.py`) log in with the seeded demo accounts and call the vision service, so CI excludes them with `-m "not integration and not slow and not needs_models"`. To run them locally:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 ```bash

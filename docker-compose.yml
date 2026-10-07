@@ -101,9 +101,9 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    volumes:
-      - ./frontend/dist:/usr/share/nginx/html:ro
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    # No bind mounts: the image already holds the built bundle and nginx.conf.
+    # Mounting ./frontend/dist over it served an empty directory (403) on a
+    # fresh clone and a stale local build otherwise.
     ports:
       - "3000:8080"
     healthcheck:
@@ -137,8 +137,10 @@ services:
       ALLOW_INSECURE_RECOGNITION_KEY: ${ALLOW_INSECURE_RECOGNITION_KEY:-false}
       INSIGHTFACE_HOME: /home/visionuser/.insightface
       OUTBOX_DIR: /app/data
+    # Named volumes only. The source is never bind-mounted: mounting ./camera
+    # over an image built before a refactor pairs the old entry point with the
+    # new package and the service crash-loops. Rebuild to pick up changes.
     volumes:
-      - ./vision-service/camera:/app/camera:ro
       - model_cache:/home/visionuser/.insightface
       - vision_outbox:/app/data
     # No published port: the vision service is reachable only from the backend
