@@ -10,7 +10,7 @@ Required Scenarios Tested:
 3. Unknown person safety gate (unconfirmed/unknown tracks crossing boundary emit zero events).
 4. Non-roster known person isolation (person_01 / person_03 event accepted by FastAPI, but excluded from session attendance).
 5. Roster student never seen (person_04 on roster with zero events -> marked ABSENT, 0.0s, 0.0%).
-6. Missing EXIT finalization behavior (person_01 enters, never exits -> unclosed interval, marked ABSENT, 0.0s).
+6. Missing EXIT finalization behavior (recording stops after person_01 enters -> unclosed interval, marked ABSENT, 0.0s).
 7. Full composite classroom session E2E (comprehensive integration of all rules simultaneously).
 
 Requirements & Constraints:
@@ -61,6 +61,11 @@ ENROLLMENT_DIR = Path(os.environ.get("VISION_FIXTURES_DIR") or "vision-fixtures-
 SCRFD_MODEL_PATH = SERVICE_ROOT / "models" / "scrfd_500m_bnkps_shape640x640.onnx"
 
 CLIPS_AVAILABLE = CLIP_ENTRY_EXIT.exists() and ENROLLMENT_DIR.exists()
+
+# In entry_exit_simultaneous.mp4 both people cross into the room at about
+# 3.6-3.8 s, are out of the camera's view until about 7.0 s, and cross back out
+# at about 7.4-7.6 s. Stopping here gives a recording with an ENTRY and no EXIT.
+MISSING_EXIT_CUTOFF_SECONDS = 5.5
 
 
 @pytest.mark.e2e
@@ -249,8 +254,14 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
         start_time: datetime,
         boundary_line: tuple[tuple[float, float], tuple[float, float]] = ((0.0, 575.0), (1152.0, 640.0)),
         target_fps: float = 5.0,
+        stop_after_seconds: float | None = None,
     ) -> LiveCVPipeline:
-        """Run LiveCVPipeline over real video clip and dispatch events."""
+        """Run LiveCVPipeline over real video clip and dispatch events.
+
+        ``stop_after_seconds`` ends the run that many seconds into the clip, as
+        if the camera had stopped recording there. Frames before that point are
+        processed exactly as in a full run.
+        """
         STrack.reset_counter()
         if self.dispatcher is not None:
             self.dispatcher.reset()
@@ -278,6 +289,11 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
             while True:
                 frame = source.read()
                 if frame is None:
+                    break
+                if (
+                    stop_after_seconds is not None
+                    and (frame.timestamp - start_time).total_seconds() > stop_after_seconds
+                ):
                     break
                 pipeline.process_frame(frame)
         finally:
@@ -492,6 +508,11 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
     def test_scenario_06_missing_exit_finalization_behavior(self):
         """Scenario 6: Student enters room but never exits before session ends.
 
+        In the full clip both people walk in at about 3.6-3.8 s and walk back
+        out at about 7.4-7.6 s, so the full clip has no missing EXIT. The run
+        stops at 5.5 s, between the two crossings, which is what a camera that
+        stopped recording after the entry would have produced.
+
         Verifies:
         - person_01 crosses boundary into room (ENTRY), but no EXIT is recorded.
         - Session is finalized with unclosed ENTRY.
@@ -506,13 +527,15 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
         self._enroll_roster(session_id, ["person_01"])
 
         start_time = datetime(2026, 10, 20, 13, 0, 0, tzinfo=timezone.utc)
-        pipeline = self._run_pipeline_on_clip(CLIP_ENTRY_EXIT, start_time)
+        pipeline = self._run_pipeline_on_clip(
+            CLIP_ENTRY_EXIT, start_time, stop_after_seconds=MISSING_EXIT_CUTOFF_SECONDS
+        )
 
         # Verify only ENTRY was emitted for person_01
         p1_events = [e for e in pipeline.dispatched_events if e["identity"] == "person_01"]
         p1_dirs = [e["direction"] for e in p1_events]
         self.assertIn("ENTRY", p1_dirs)
-        self.assertNotIn("EXIT", p1_dirs, "person_01 should not have an EXIT in this clip")
+        self.assertNotIn("EXIT", p1_dirs, "person_01 must not have an EXIT before the cutoff")
 
         # Finalize and verify unclosed interval behavior
         fin_records = self._finalize_session(session_id)
@@ -532,13 +555,15 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
         """Scenario 7: Full representative classroom session combining all rules.
 
         ROOM_101, 14:00:00 to 14:00:10 UTC (10s session window).
-        Roster: person_01, person_02, person_04.
+        Roster: person_01, person_02, person_04, person_05.
         Non-roster: person_03.
         Real video input: entry_exit_simultaneous.mp4 (start_time: 14:00:00 UTC).
 
         Validates simultaneously:
-        - person_02: ENTRY + EXIT -> Completed interval, duration ~3.79s -> ~37.9% >= 30.0% -> PRESENT.
-        - person_01: ENTRY only (missing EXIT) -> unclosed interval, ABSENT.
+        - person_02: ENTRY + EXIT -> Completed interval, duration ~4.0s -> ~40% >= 30.0% -> PRESENT.
+        - person_01: ENTRY + EXIT -> Completed interval, duration ~3.6s -> ~36% >= 30.0% -> PRESENT.
+          (Both people walk in and back out in this clip; the pipeline reports both exits.)
+        - person_05: ENTRY only (missing EXIT, posted as a sensor event) -> unclosed interval, ABSENT.
         - person_04: Enrolled, zero events -> ABSENT.
         - person_03: Non-roster known person -> Excluded from attendance.
         - Unknown persons -> Zero events, excluded from attendance.
@@ -548,10 +573,39 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
             end_time="2026-10-20T14:00:10Z",
             required_presence_percentage=30.0,
         )
-        self._enroll_roster(session_id, ["person_01", "person_02", "person_04"])
+        self._enroll_roster(session_id, ["person_01", "person_02", "person_04", "person_05"])
 
         start_time = datetime(2026, 10, 20, 14, 0, 0, tzinfo=timezone.utc)
         pipeline = self._run_pipeline_on_clip(CLIP_ENTRY_EXIT, start_time)
+
+        # The clip shows both people entering and leaving
+        for identity in ("person_01", "person_02"):
+            directions = [e["direction"] for e in pipeline.dispatched_events if e["identity"] == identity]
+            self.assertEqual(sorted(directions), ["ENTRY", "EXIT"], f"{identity} events: {directions}")
+
+        # Roster student with an ENTRY and no EXIT (missing-EXIT rule inside the composite session)
+        evt_p5 = {
+            "event_id": f"evt_p5_entry_only_{time.time_ns()}",
+            "camera_id": "CAM_ROOM_101_DOOR",
+            "track_id": 77,
+            "identity": "person_05",
+            "direction": "ENTRY",
+            "timestamp": "2026-10-20T14:00:02Z",
+            "evidence": {
+                "peak_similarity": 0.57,
+                "mean_similarity": 0.55,
+                "supporting_frames": 3,
+                "total_frames": 3,
+                "consistency_pct": 100.0,
+            },
+        }
+        resp_p5 = requests.post(
+            f"{BACKEND_URL}/api/v1/events",
+            json=evt_p5,
+            headers={"X-API-Key": "test-real-cv-api-key-2026"},
+            timeout=3.0,
+        )
+        self.assertEqual(resp_p5.status_code, 201)
 
         # Dispatch non-roster known person event
         evt_p3 = {
@@ -581,18 +635,25 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
         records = self._get_attendance(session_id)
 
         # Assert total records count equals roster length
-        self.assertEqual(len(records), 3)
+        self.assertEqual(len(records), 4)
 
-        # person_02: Present for ~3.79 seconds in 10s session = ~37.9% >= 30.0% -> PRESENT
+        # person_02: Present for ~4.0 seconds in 10s session = ~40% >= 30.0% -> PRESENT
         p2 = records["person_02"]
         self.assertEqual(p2["status"], "PRESENT")
         self.assertGreater(p2["presence_duration_seconds"], 2.5)
         self.assertEqual(len(fin_records["person_02"]["presence_intervals"]), 1)
 
-        # person_01: Missing EXIT -> ABSENT
+        # person_01: Present for ~3.6 seconds in 10s session = ~36% >= 30.0% -> PRESENT
         p1 = records["person_01"]
-        self.assertEqual(p1["status"], "ABSENT")
-        self.assertEqual(p1["presence_duration_seconds"], 0.0)
+        self.assertEqual(p1["status"], "PRESENT")
+        self.assertGreater(p1["presence_duration_seconds"], 2.5)
+        self.assertEqual(len(fin_records["person_01"]["presence_intervals"]), 1)
+
+        # person_05: Missing EXIT -> ABSENT
+        p5 = records["person_05"]
+        self.assertEqual(p5["status"], "ABSENT")
+        self.assertEqual(p5["presence_duration_seconds"], 0.0)
+        self.assertEqual(fin_records["person_05"]["presence_intervals"], [])
 
         # person_04: Never seen -> ABSENT
         p4 = records["person_04"]
