@@ -19,6 +19,13 @@ from typing import Any, Optional
 from aiohttp import web
 import numpy as np
 
+from camera.liveness import (
+    DEFAULT_LIVENESS_MODE,
+    STATUS_LIVE,
+    STATUS_SPOOF,
+    LivenessChecker,
+    evaluate_liveness_gate,
+)
 from camera.recognition_signing import sign_recognition
 
 logger = logging.getLogger(__name__)
@@ -68,12 +75,17 @@ class VisionApiServer:
         backend_url: Optional[str] = None,
         similarity_threshold: float = 0.50,
         min_margin: float = 0.15,
+        liveness_mode: str = DEFAULT_LIVENESS_MODE,
+        liveness_checker: Optional[LivenessChecker] = None,
     ) -> None:
         self.host = host
         self.port = port
         self.backend_url = backend_url
         self.similarity_threshold = similarity_threshold
         self.min_margin = min_margin
+        # Liveness gate: runs on a recognized face before its result is signed.
+        self.liveness_mode = liveness_mode
+        self.liveness_checker = liveness_checker
 
         self._face_app: Optional[Any] = None
         self.latest_frame_time: float = 0.0
@@ -535,6 +547,53 @@ class VisionApiServer:
                 student_id = self.student_ids.get(best_ident, best_ident)
                 self.last_recognized_student = student_name
 
+                conf_pct = round(best_score * 100, 1)
+
+                # Liveness gate, before anything is signed. A face that fails it
+                # in enforce mode never produces a signed result.
+                decision = evaluate_liveness_gate(
+                    self.liveness_mode, self.liveness_checker, img_bgr, face.bbox
+                )
+                liveness = decision.result
+                liveness_info = {
+                    "status": liveness.status,
+                    "score": round(liveness.score, 3) if liveness.score is not None else None,
+                    "mode": self.liveness_mode,
+                }
+                if liveness.status != STATUS_LIVE:
+                    # Identifiers and the score only: never image data or embeddings.
+                    logger.warning(
+                        "Liveness %s: session=%s identity=%s score=%s reason=%s mode=%s signed=%s",
+                        liveness.status,
+                        target_sess,
+                        best_ident,
+                        liveness_info["score"],
+                        liveness.reason,
+                        self.liveness_mode,
+                        decision.allow_signing,
+                    )
+
+                if not decision.allow_signing:
+                    faces_output.append(
+                        {
+                            "bbox": [bx1, by1, bx2, by2],
+                            "identity": best_ident,
+                            "student_id": student_id,
+                            "name": student_name,
+                            "similarity": round(best_score, 4),
+                            "confidence_percent": conf_pct,
+                            "det_score": round(det_score, 3),
+                            "status": (
+                                "spoof"
+                                if liveness.status == STATUS_SPOOF
+                                else "liveness_unavailable"
+                            ),
+                            "already_marked": False,
+                            "liveness": liveness_info,
+                        }
+                    )
+                    continue
+
                 # This service never marks attendance. It returns a signed result
                 # bound to the session; the backend verifies it and decides.
                 recognition = None
@@ -544,9 +603,9 @@ class VisionApiServer:
                         identity=best_ident,
                         confidence=best_score,
                         key=signing_key,
+                        liveness=decision.attestation,
                     )
 
-                conf_pct = round(best_score * 100, 1)
                 faces_output.append(
                     {
                         "bbox": [bx1, by1, bx2, by2],
@@ -558,6 +617,7 @@ class VisionApiServer:
                         "det_score": round(det_score, 3),
                         "status": "recognized",
                         "already_marked": False,
+                        "liveness": liveness_info,
                         "recognition": recognition,
                     }
                 )
@@ -630,6 +690,8 @@ class VisionApiServer:
                 "active_session_id": self.active_session_id,
                 "gallery_size": len(self.gallery),
                 "models_loaded": self._face_app is not None,
+                "liveness_mode": self.liveness_mode,
+                "liveness_model_loaded": self.liveness_checker is not None,
                 "last_recognized_student": self.last_recognized_student,
                 "last_frame_age_seconds": (
                     round(time.time() - self.latest_frame_time, 2)

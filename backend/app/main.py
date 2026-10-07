@@ -29,6 +29,7 @@ from app.security.config import (
     JWT_SECRET_KEY,
     is_insecure_recognition_key_allowed,
     validate_jwt_secret_strength,
+    validate_liveness_mode,
     validate_recognition_signing_key,
 )
 
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI):
         settings.RECOGNITION_SIGNING_KEY,
         allow_insecure=is_insecure_recognition_key_allowed(),
     )
+    validate_liveness_mode(settings.LIVENESS_MODE)
     setup_security_logging()
 
     # Startup: ensure database indexes are initialized

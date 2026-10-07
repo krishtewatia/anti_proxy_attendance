@@ -25,6 +25,7 @@ AuditAction = Literal[
     "CAMERA_CREATED",
     "CAMERA_UPDATED",
     "CAMERA_DELETED",
+    "SPOOF_ATTEMPT",
 ]
 
 AuditResourceType = Literal[

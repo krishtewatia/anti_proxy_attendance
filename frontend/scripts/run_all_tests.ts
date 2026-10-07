@@ -11,6 +11,7 @@ const testSuites: TestSuite[] = [
   { name: "Auth Client State & Storage", file: "test_auth_client.ts", category: "Unit" },
   { name: "Protected Routing & RBAC Guards", file: "test_routing.ts", category: "Unit" },
   { name: "Attendance Formatting & Calculation Helpers", file: "test_session_attendance.ts", category: "Unit" },
+  { name: "Camera Overlay: Recognized / Unknown / Spoof", file: "test_face_overlay.ts", category: "Unit" },
   { name: "Create Session Form Validation & Lifecycle", file: "test_create_session.ts", category: "Unit" },
   { name: "Attendance Correction Validation & Audit History", file: "test_attendance_correction.ts", category: "Unit" },
   { name: "Audit Trail Contracts & Verification", file: "test_audit_logs.ts", category: "Contract" },
@@ -23,7 +24,7 @@ const testSuites: TestSuite[] = [
 ];
 
 console.log("================================================================================");
-console.log("             RUNNING FRONTEND TEST CONSOLIDATION SUITE (12 MODULES)             ");
+console.log("             RUNNING FRONTEND TEST CONSOLIDATION SUITE (13 MODULES)             ");
 console.log("================================================================================");
 
 let passed = 0;

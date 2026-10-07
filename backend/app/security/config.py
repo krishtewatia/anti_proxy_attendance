@@ -72,3 +72,14 @@ def validate_recognition_signing_key(key: str | None, *, allow_insecure: bool = 
             f"RECOGNITION_SIGNING_KEY must be at least {RECOGNITION_KEY_MIN_LENGTH} characters "
             f"long (found {len(cleaned)})."
         )
+
+
+LIVENESS_MODES = ("observe", "enforce")
+
+
+def validate_liveness_mode(mode: str) -> None:
+    """Refuse to start with an unknown liveness mode rather than guess one."""
+    if mode not in LIVENESS_MODES:
+        raise RuntimeError(
+            f"LIVENESS_MODE must be one of {', '.join(LIVENESS_MODES)} (found '{mode}')."
+        )

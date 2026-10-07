@@ -36,6 +36,7 @@ services:
       VISION_SERVICE_API_KEY: ${SMOKE_VISION_SERVICE_API_KEY:?set by scripts/smoke_e2e.py}
       RECOGNITION_SIGNING_KEY: ${SMOKE_RECOGNITION_SIGNING_KEY:?set by scripts/smoke_e2e.py}
       REQUIRE_CAMERA_AUTH: "true"
+      LIVENESS_MODE: ${SMOKE_LIVENESS_MODE:-observe}
       VISION_SERVICE_URL: http://vision-service:8088
     ports:
       # Loopback only, on a host port chosen by Docker.
@@ -57,6 +58,8 @@ services:
       BACKEND_URL: http://backend:8000
       VISION_SERVICE_API_KEY: ${SMOKE_VISION_SERVICE_API_KEY:?set by scripts/smoke_e2e.py}
       RECOGNITION_SIGNING_KEY: ${SMOKE_RECOGNITION_SIGNING_KEY:?set by scripts/smoke_e2e.py}
+      LIVENESS_MODE: ${SMOKE_LIVENESS_MODE:-observe}
+      LIVENESS_THRESHOLD: ${SMOKE_LIVENESS_THRESHOLD:-0.5}
       INSIGHTFACE_HOME: /home/visionuser/.insightface
       OUTBOX_DIR: /app/data
     volumes:

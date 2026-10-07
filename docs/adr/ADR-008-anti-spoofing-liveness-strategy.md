@@ -1,7 +1,7 @@
 # ADR-008: Anti-Spoofing & Liveness Strategy for Local MVP
 
 ## Status
-Accepted
+Accepted for the doorway pipeline. **Superseded for the browser-webcam flow by [ADR-011](ADR-011-passive-liveness-gate.md)**, which adds a passive liveness model there: that flow runs at 2 to 3 frames per second, so the 15 FPS budget that led to the postponement below does not apply to it.
 
 ## Context
 The Anti-Proxy Attendance System verifies student identities using InsightFace (SCRFD detection + ArcFace embedding matching) and ByteTrack trajectory tracking across doorway transit boundaries.

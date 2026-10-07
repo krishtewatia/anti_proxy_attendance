@@ -30,6 +30,7 @@ A modern, privacy-conscious classroom attendance ERP powered by client-side brow
 - [CI/CD Security Gates](#cicd-security-gates)
 - [Security & Reliability](#security--reliability)
 - [Doorway Mode Status](#doorway-mode-status)
+- [Liveness (Anti-Spoofing)](#liveness-anti-spoofing)
 - [Known Limitations](#known-limitations)
 - [Future Improvements](#future-improvements)
 
@@ -602,9 +603,25 @@ The repository also contains a doorway (entry/exit) pipeline: SCRFD detection, B
 
 ---
 
+## Liveness (Anti-Spoofing)
+
+Every face that is recognized as a student is checked by a passive liveness model before the vision service signs the result, so that a printed photo or a face on a screen is not marked. The model is the MiniFASNet ensemble from [Silent-Face-Anti-Spoofing](https://github.com/minivision-ai/Silent-Face-Anti-Spoofing) (Apache-2.0), converted to ONNX; it adds about 6 ms per recognized face on CPU. See [ADR-011](docs/adr/ADR-011-passive-liveness-gate.md) for the design, the threat model and how the model files were produced.
+
+`LIVENESS_MODE` in `.env` controls it, for the backend and the vision service together:
+
+| Mode | What happens |
+|---|---|
+| `observe` (current default) | Faces are checked and the outcome is logged. Nothing is blocked. |
+| `enforce` | A face that fails is never marked. The teacher sees a red "Spoof detected" box, the attempt is written to the audit log, and the backend accepts only results signed as "liveness passed". |
+
+The default stays `observe` until the threshold has been calibrated on a measured attack set. To capture that set and measure false accepts and false rejects, follow [docs/evaluation/liveness_capture_guide.md](docs/evaluation/liveness_capture_guide.md). The measurement so far covers one person and one camera; it is not a general accuracy claim.
+
+---
+
 ## Known Limitations
 
 - **Single Active Session per Teacher**: Teachers are restricted to one active attendance session at a time.
+- **Liveness is not yet enforced by default**: the gate runs in observe mode until its threshold is calibrated, so a held-up photo is logged but still marked unless `LIVENESS_MODE=enforce` is set. It has been measured on one person and one camera only.
 - **2D Facial Recognition**: The standard ArcFace pipeline uses 2D RGB frames without depth-sensing hardware; extreme angles or severe lighting variations can reduce match confidence.
 - **Client Processing**: Browser frame extraction frequency depends on the client machine's processing power.
 
@@ -613,6 +630,6 @@ The repository also contains a doorway (entry/exit) pipeline: SCRFD detection, B
 ## Future Improvements
 
 - **Cloud Object Storage**: Transition from local volume mounts to S3/GCS object storage for student photographs.
-- **Passive Liveness Detection**: Integrate anti-spoofing models (e.g., MiniFASNet) to counter printed photo or video replay presentation attacks.
+- **Liveness in enforce mode by default**: calibrate the threshold on the measured attack set and switch the default from observe to enforce (ADR-011). Later: an active challenge for faces in an uncertain score band, and a liveness check at enrollment.
 - **Distributed Inference**: Scale vision processing across a worker queue (e.g., Celery / Redis) for university-wide simultaneous multi-classroom deployments.
 - **Automated CI/CD**: Implement automated build pipelines with GPU runner acceleration for ONNX inference benchmarking.

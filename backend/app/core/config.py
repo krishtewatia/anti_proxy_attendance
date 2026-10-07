@@ -41,6 +41,10 @@ class Settings:
     # Signed recognition results: shared HMAC key and freshness limits
     RECOGNITION_SIGNING_KEY: str = os.getenv("RECOGNITION_SIGNING_KEY", "")
     RECOGNITION_MAX_TTL_SECONDS: int = int(os.getenv("RECOGNITION_MAX_TTL_SECONDS", "30"))
+    # Liveness: "observe" accepts results the vision service signed without a
+    # liveness verdict; "enforce" accepts only results signed as liveness passed.
+    # Must be the same value as the vision service's LIVENESS_MODE.
+    LIVENESS_MODE: str = os.getenv("LIVENESS_MODE", "observe").strip().lower() or "observe"
     RECOGNITION_MAX_CLOCK_SKEW_SECONDS: int = int(
         os.getenv("RECOGNITION_MAX_CLOCK_SKEW_SECONDS", "5")
     )

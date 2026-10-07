@@ -600,8 +600,9 @@ def test_signature_matches_the_shared_test_vector():
         1790000000,
         1790000030,
         "0123456789abcdef0123456789abcdef",
+        "passed",
     )
-    assert signature == "f7c62bfa88f268a5dc4513f9c588139877106aa1c35b615a427d37d24796cfbe"
+    assert signature == "0939e8cfc0928551c44c41ef5ad0bd9985d649a2bbb1a8930fd9696e29a24e12"
 
 
 def test_verify_recognition_accepts_a_fresh_result_and_rejects_non_dicts(sign_recognition):

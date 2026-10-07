@@ -32,6 +32,13 @@ class and an environment where that is acceptable, and keep using the same
 photos: a face that is already enrolled under another ID would be recognized
 as that ID.
 
+Liveness: ``--liveness-mode enforce`` starts the throwaway stack with the
+liveness gate enforcing (default: observe). With ``--spoof-photos`` (a folder
+of photos of a printed or on-screen face; default
+``$VISION_FIXTURES_DIR/liveness/print/attempt_01`` if it exists) the run also
+checks that a spoof is blocked and nobody is marked for it. That check is
+skipped unless the stack enforces liveness.
+
 Only statuses and identifiers are printed, never image or embedding data.
 Exit code 0 means every check passed. Standard library only.
 """
@@ -202,6 +209,8 @@ def run_flow(
     student_prefix: str,
     fresh_database: bool,
     model_wait_seconds: int,
+    liveness_enforced: bool,
+    spoof_photos: list[bytes],
 ) -> None:
     for _ in range(60):
         if api.call("GET", "/health", timeout=5)[0] == 200:
@@ -351,6 +360,30 @@ def run_flow(
             "a person who is not enrolled is not marked", "needs a third person in --photos"
         )
 
+    # ---- liveness: a photo of a photo must not mark anyone
+    spoof_check = "a spoof photo is blocked and marks nobody"
+    if not spoof_photos:
+        checks.skip(spoof_check, "no spoof photos available (--spoof-photos)")
+    elif not liveness_enforced:
+        checks.skip(spoof_check, "the stack is not enforcing liveness (--liveness-mode enforce)")
+    else:
+        blocked = 0
+        marked_from_spoof = 0
+        for photo in spoof_photos:
+            status, body = api.call(
+                "POST", frame_path, photo, {"Content-Type": "image/jpeg", **auth}, 120
+            )
+            for face in body.get("faces", []) if status == 200 else []:
+                if face.get("status") == "spoof" and face.get("mark_status") == "blocked":
+                    blocked += 1
+                if face.get("identity") == students[1] and face.get("mark_status") == "marked":
+                    marked_from_spoof += 1
+        checks.check(
+            spoof_check,
+            blocked > 0 and marked_from_spoof == 0,
+            {"frames": len(spoof_photos), "blocked": blocked, "marked": marked_from_spoof},
+        )
+
     status, attendance = api.call("GET", f"/api/v1/attendance/{session_id}", headers=auth)
     by_identity = {
         r["identity"]: r["status"]
@@ -490,6 +523,21 @@ def main() -> int:
         help="Prefix of the two smoke-test student IDs (default: SMOKE, giving SMOKEA and SMOKEB)",
     )
     parser.add_argument(
+        "--liveness-mode",
+        choices=["observe", "enforce"],
+        default="observe",
+        help="Throwaway stack: liveness mode to start with. With --base-url: the mode the deployment runs in",
+    )
+    parser.add_argument(
+        "--liveness-threshold",
+        help="Throwaway stack: liveness threshold to start with (default 0.5)",
+    )
+    parser.add_argument(
+        "--spoof-photos",
+        help="Folder of photos of a printed or on-screen face of the SECOND person in --photos "
+        "(default: $VISION_FIXTURES_DIR/liveness/print/attempt_01 if it exists)",
+    )
+    parser.add_argument(
         "--no-build", action="store_true", help="Throwaway stack: reuse existing images"
     )
     parser.add_argument(
@@ -514,6 +562,17 @@ def main() -> int:
         print("ERROR: --photos needs at least two people with three photos each.", file=sys.stderr)
         return 2
 
+    spoof_dir = args.spoof_photos
+    if not spoof_dir and os.environ.get("VISION_FIXTURES_DIR"):
+        candidate = Path(os.environ["VISION_FIXTURES_DIR"]) / "liveness" / "print" / "attempt_01"
+        spoof_dir = str(candidate) if candidate.is_dir() else None
+    spoof_photos: list[bytes] = []
+    if spoof_dir and Path(spoof_dir).is_dir():
+        spoof_files = sorted(
+            f for f in Path(spoof_dir).iterdir() if f.suffix.lower() in IMAGE_SUFFIXES
+        )
+        spoof_photos = [f.read_bytes() for f in spoof_files[:6]]
+
     checks = Checks()
     flow_args = {
         "class_code": args.class_code,
@@ -521,6 +580,8 @@ def main() -> int:
         "section": args.section,
         "student_prefix": args.student_prefix,
         "model_wait_seconds": args.model_wait,
+        "liveness_enforced": args.liveness_mode == "enforce",
+        "spoof_photos": spoof_photos,
     }
 
     if args.base_url:
@@ -547,7 +608,10 @@ def main() -> int:
             "SMOKE_JWT_SECRET_KEY": secrets.token_hex(32),
             "SMOKE_VISION_SERVICE_API_KEY": service_key,
             "SMOKE_RECOGNITION_SIGNING_KEY": secrets.token_hex(32),
+            "SMOKE_LIVENESS_MODE": args.liveness_mode,
         }
+        if args.liveness_threshold:
+            env["SMOKE_LIVENESS_THRESHOLD"] = args.liveness_threshold
         try:
             base_url = start_throwaway_stack(project, env, build=not args.no_build)
             run_flow(
