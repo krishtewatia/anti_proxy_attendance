@@ -56,6 +56,9 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      # Uploaded student photos: a named volume outside the source tree, so
+      # they never appear under ./backend on the host.
+      - uploads_data:/data/uploads
     environment:
       APP_NAME: ${APP_NAME:-Anti-Proxy Attendance System}
       APP_ENV: ${APP_ENV:-production}
@@ -80,6 +83,7 @@ services:
       EVENT_TIMESTAMP_VALIDATION_ENABLED: ${EVENT_TIMESTAMP_VALIDATION_ENABLED:-true}
       DEMO_MODE: ${DEMO_MODE:-false}
       DEMO_CAMERA_ID: ${DEMO_CAMERA_ID:-CAM_ROOM_101_DOOR}
+      UPLOADS_DIR: /data/uploads
     ports:
       - "8000:8000"
     healthcheck:
@@ -185,6 +189,8 @@ volumes:
     name: anti_proxy_model_cache
   vision_outbox:
     name: anti_proxy_vision_outbox
+  uploads_data:
+    name: anti_proxy_uploads
 
 # ------------------------------------------------------------------------------
 # Isolated Bridge Network

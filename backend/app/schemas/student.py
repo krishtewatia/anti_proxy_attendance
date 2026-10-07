@@ -30,7 +30,12 @@ class StudentRegisterRequest(BaseModel):
     name: str = Field(min_length=2, max_length=128)
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=6, max_length=128)
-    student_id: str = Field(min_length=2, max_length=64, description="College ID e.g. DS20260125")
+    student_id: str = Field(
+        min_length=2,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.\-]*$",
+        description="College ID e.g. DS20260125 (letters, digits, '.', '_' and '-')",
+    )
     roll_number: str = Field(
         min_length=2, max_length=64, description="ERP / Roll number e.g. 20261234"
     )

@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 VISION_VENV_PYTHON = PROJECT_ROOT / "vision-service" / ".venv" / "Scripts" / "python.exe"
 VISION_EXTRACT_SCRIPT = PROJECT_ROOT / "vision-service" / "extract_photo_embedding.py"
 
-from app.core.config import UPLOADS_DIR
+from app.core.uploads import student_photo_path
 
 
 def get_vision_service_urls() -> list[str]:
@@ -56,8 +56,12 @@ async def extract_and_register_student_photo(
 
     # 1. Persist original student photograph to persistent local storage
     try:
-        UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-        photo_path = UPLOADS_DIR / f"{identity}.jpg"
+        photo_path = student_photo_path(identity)
+    except ValueError:
+        # The ID would not stay inside the uploads directory as a file name.
+        return False, "Student ID may contain only letters, digits, '.', '_' and '-'."
+    try:
+        photo_path.parent.mkdir(parents=True, exist_ok=True)
         photo_path.write_bytes(img_bytes)
         logger.info("Persisted profile photo for student '%s' to %s", identity, photo_path)
     except Exception as io_err:

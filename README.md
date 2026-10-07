@@ -243,7 +243,7 @@ graph TD
 2. Backend receives multipart/JSON request
                     │
                     ▼
-3. Photo bytes persisted to disk: backend/uploads/student_profiles/{id}.jpg
+3. Photo bytes persisted to the uploads volume: /data/uploads/student_profiles/{id}.jpg
                     │
                     ▼
 4. POST /extract-embedding to Vision Service (timeout: 25s)
@@ -317,7 +317,6 @@ anti_proxy_project/
 │   │   ├── services/               # Biometrics, student registration, attendance logic
 │   │   └── main.py                 # FastAPI application factory & static mounts
 │   ├── tests/                      # Pytest unit and integration test suites
-│   ├── uploads/student_profiles/   # Persistent storage for student profile photographs
 │   ├── Dockerfile                  # Production FastAPI container specification
 │   └── requirements.txt            # Python dependencies for backend service
 ├── frontend/
@@ -429,7 +428,19 @@ The repository ships with **no face photos, no embeddings and no student records
 3. **A teacher** opens the attendance flow, picks an assigned class and subject, selects a camera (a laptop webcam, a USB webcam, or a phone connected as a USB webcam), and starts the session. Recognized students on the class roster are marked present once.
 4. **The teacher** ends the session and downloads the CSV. A teacher can correct any record by hand; corrections are audited and are never overwritten by the camera.
 
-Student photos are stored under `backend/uploads/student_profiles/` and embeddings in MongoDB. Both stay on your machine and are excluded from git and from the Docker images.
+Student photos are stored on a named Docker volume (`anti_proxy_uploads`, mounted in the backend container at `/data/uploads`) and embeddings in MongoDB. Both stay on your machine. The photos are deliberately kept outside the source tree: nothing is written under `./backend`, so they cannot end up in git or in a Docker image, and the backend refuses to start if `UPLOADS_DIR` points inside the repository. When the backend is run without Docker, photos go to `~/.anti_proxy_attendance/uploads` unless `UPLOADS_DIR` is set.
+
+To see or remove the stored photos:
+
+```bash
+docker run --rm -v anti_proxy_uploads:/data alpine ls -l /data/student_profiles
+```
+
+```bash
+docker volume rm anti_proxy_uploads
+```
+
+The second command deletes every stored photo; stop the stack first. A photo that is missing from the volume is restored from the student record the next time it is requested.
 
 ### 5. Other Endpoints
 - **FastAPI OpenAPI Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
@@ -485,6 +496,8 @@ The vision service has no published port. Only the backend calls it, over the in
 ```bash
 docker exec anti-proxy-backend pytest -v
 ```
+
+The suite sends every upload it makes to a temporary directory, so running it inside the container does not touch the uploads volume or the source tree.
 
 ### Run Backend Integration Tests (Demo Data + Vision Service)
 

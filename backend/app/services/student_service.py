@@ -167,13 +167,14 @@ async def get_student_profile_response(user_id: str) -> StudentProfileResponse |
     stu_id = doc.get("student_id") or doc.get("identity") or user_id
     photo_url = doc.get("photo_url")
     if not photo_url:
-        from app.core.config import UPLOADS_DIR
+        from app.core.uploads import student_photo_path
 
-        if (
-            (UPLOADS_DIR / f"{stu_id}.jpg").exists()
-            or doc.get("photo_base64")
-            or doc.get("has_biometric")
-        ):
+        try:
+            photo_on_disk = student_photo_path(str(stu_id)).exists()
+        except ValueError:
+            photo_on_disk = False
+
+        if photo_on_disk or doc.get("photo_base64") or doc.get("has_biometric"):
             photo_url = f"/api/v1/students/{stu_id}/photo"
 
     return StudentProfileResponse(

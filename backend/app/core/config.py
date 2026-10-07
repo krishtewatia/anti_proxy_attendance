@@ -7,12 +7,6 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 env_path = BACKEND_DIR / ".env"
 load_dotenv(dotenv_path=env_path)
 
-UPLOADS_DIR = (
-    Path("/app/uploads/student_profiles")
-    if Path("/app/uploads").exists()
-    else (BACKEND_DIR / "uploads" / "student_profiles")
-)
-
 
 class Settings:
     PROJECT_NAME: str = os.getenv("APP_NAME", "Anti-Proxy Attendance System")

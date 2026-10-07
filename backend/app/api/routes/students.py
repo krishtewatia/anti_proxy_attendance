@@ -110,9 +110,12 @@ async def get_student_photo_endpoint(student_id: str):
     import base64
     from fastapi.responses import Response
 
-    from app.core.config import UPLOADS_DIR
+    from app.core.uploads import student_photo_path
 
-    file_path = UPLOADS_DIR / f"{student_id}.jpg"
+    try:
+        file_path = student_photo_path(student_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
 
     if file_path.exists():
         content = file_path.read_bytes()
@@ -139,7 +142,7 @@ async def get_student_photo_endpoint(student_id: str):
             raw_b64 = raw_b64.split(",", 1)[1]
         try:
             content = base64.b64decode(raw_b64)
-            UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+            file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_bytes(content)
             return Response(
                 content=content,
