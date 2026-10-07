@@ -32,7 +32,9 @@ try {
     exit 1
 }
 
-docker compose up -d
+# --build keeps the images in step with the checked-out code; an image left
+# over from an older commit can start a service that no longer exists.
+docker compose up -d --build
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to start Docker Compose services." -ForegroundColor Red
     Write-Host "       If the message mentions RECOGNITION_SIGNING_KEY, set a real value in .env (see README)." -ForegroundColor Red
