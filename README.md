@@ -29,6 +29,7 @@ A modern, privacy-conscious classroom attendance ERP powered by client-side brow
 - [Automated Testing & Verification](#automated-testing--verification)
 - [CI/CD Security Gates](#cicd-security-gates)
 - [Security & Reliability](#security--reliability)
+- [Doorway Mode Status](#doorway-mode-status)
 - [Known Limitations](#known-limitations)
 - [Future Improvements](#future-improvements)
 
@@ -330,7 +331,7 @@ anti_proxy_project/
 │   └── package.json                # Frontend dependencies & test scripts
 ├── vision-service/
 │   ├── camera/
-│   │   └── webrtc_receiver.py      # HTTP frame ingestion, SCRFD/ArcFace pipeline, gallery
+│   │   └── vision_api.py           # Internal key-protected API: frame recognition, embeddings, gallery sync
 │   ├── detection/                  # SCRFD ONNX model wrappers
 │   ├── recognition/                # ArcFace embedding extraction & similarity matching
 │   ├── tests/                      # Vision unit tests (biometric fixtures live outside the repo)
@@ -577,6 +578,12 @@ Supporting controls:
 - **Payload Limits**: Vision service and backend middleware reject oversized payloads to mitigate memory exhaustion.
 - **Ambiguity Guard**: Recognition enforces both a minimum similarity threshold ($S \ge 0.50$) and a runner-up margin ($S_1 - S_2 \ge 0.15$), preventing false positives when multiple students share similar facial features.
 - **Data Protection**: User profile photos and raw biometric vectors are stored locally on persistent Docker volumes and excluded from Git version control.
+
+---
+
+## Doorway Mode Status
+
+The repository also contains a doorway (entry/exit) pipeline: SCRFD detection, ByteTrack tracking, boundary-crossing direction logic, and a presence engine that turns entry and exit events into time-in-room. **Doorway mode is offline-tested and has no live ingest.** It is exercised by recorded-video tests, and its events API and presence engine are covered by the backend suite, but no camera feeds it live. Phone WebRTC ingest was removed; see [ADR-010](docs/adr/ADR-010-drop-webrtc-phone-ingest.md). To use a phone as the attendance camera, connect it by USB in webcam mode and pick it in the camera dropdown.
 
 ---
 

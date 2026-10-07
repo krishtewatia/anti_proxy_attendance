@@ -24,7 +24,6 @@ from camera import (
     VideoFrame,
     VideoSource,
     VideoSourceType,
-    WebRTCVideoSource,
     create_video_source,
 )
 
@@ -150,7 +149,7 @@ class TestFileVideoSource(unittest.TestCase):
 
 
 class TestPhoneVideoSource(unittest.TestCase):
-    """Test PhoneVideoSource / WebRTCVideoSource live streaming adapter."""
+    """Test the PhoneVideoSource push-style streaming adapter."""
 
     def test_push_and_read_frame(self):
         source = PhoneVideoSource(source_id="PHONE_ROOM_101", read_timeout=0.1)
@@ -205,11 +204,6 @@ class TestPhoneVideoSource(unittest.TestCase):
             self.assertIsNone(vf)
         finally:
             source.release()
-
-    def test_webrtc_alias_interchangeable(self):
-        """WebRTCVideoSource is fully compatible alias for PhoneVideoSource."""
-        source = WebRTCVideoSource(source_id="WEBRTC_FEED")
-        self.assertIsInstance(source, PhoneVideoSource)
 
     def test_concurrent_producer_consumer(self):
         """Verify thread-safety when phone client streams while CV pipeline processes."""

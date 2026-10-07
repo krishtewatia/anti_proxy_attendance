@@ -1,5 +1,8 @@
 # Final Local Milestone Acceptance & AWS Readiness Sign-off
 
+> [!NOTE]
+> **Historical context.** This document was written when a phone could stream to the vision service over WebRTC on port 8088. That path has been removed (see [ADR-010](adr/ADR-010-drop-webrtc-phone-ingest.md)). Frames now go from the browser to the backend, the vision service is internal only, and doorway mode is offline-tested with no live ingest. Passages below that describe WebRTC, the phone camera page or port 8088 as a public endpoint no longer apply.
+
 **Milestone:** Step 2E.14 — Final Local Acceptance and Demo Rehearsal
 **Execution Date:** 2026-10-03
 **Evaluator:** DeepMind Antigravity AI Engineering Suite & DevSecOps Platform

@@ -146,7 +146,7 @@ def test_generated_key_is_accepted_and_dev_override_skips_the_check():
     "key", [None, "replace_with_secure_random_recognition_signing_key_here"]
 )
 def test_runner_exits_before_serving_when_the_key_is_not_real(key):
-    """run_webrtc_camera.py must stop at startup, with a clear message and exit code 1."""
+    """run_vision_service.py must stop at startup, with a clear message and exit code 1."""
     import os
     import subprocess
 
@@ -157,7 +157,7 @@ def test_runner_exits_before_serving_when_the_key_is_not_real(key):
         env["RECOGNITION_SIGNING_KEY"] = key
 
     proc = subprocess.run(
-        [sys.executable, "run_webrtc_camera.py", "--port", "0"],
+        [sys.executable, "run_vision_service.py", "--port", "0"],
         cwd=str(SERVICE_ROOT),
         env=env,
         capture_output=True,

@@ -1,5 +1,8 @@
 # Project: Anti-Proxy Real-Time Mobile Attendance Tracking Demo
 
+> [!NOTE]
+> **Historical context.** This document was written when a phone could stream to the vision service over WebRTC on port 8088. That path has been removed (see [ADR-010](docs/adr/ADR-010-drop-webrtc-phone-ingest.md)). Frames now go from the browser to the backend, the vision service is internal only, and doorway mode is offline-tested with no live ingest. Passages below that describe WebRTC, the phone camera page or port 8088 as a public endpoint no longer apply.
+
 ## Architecture
 - **Data Layer (MongoDB)**: Port 27017 (`anti_proxy_attendance`). Authenticated connection (`antiproxy_user` / `admin`). Stores `users`, `student_profiles`, `biometric_profiles`, `session_rosters`, `sessions`, `cameras`, `attendance_events`, `attendance_records`.
 - **Backend API (FastAPI)**: Port 8000. Provides authentication (`/api/v1/auth/login`), event ingestion (`/api/v1/events`), and live attendance snapshots (`/api/v1/sessions/{id}/live-snapshot`).

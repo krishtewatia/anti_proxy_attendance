@@ -1,23 +1,21 @@
 """The vision service must start with an empty gallery.
 
-Biometric embeddings are loaded from the backend at runtime. Nothing may be
-picked up implicitly from a gallery file that happens to sit in the image or
-the working directory.
+Biometric embeddings are loaded only from the backend at runtime. Nothing may
+be picked up from a gallery file in the image or the working directory, and
+embeddings are never written to disk.
 """
 
 from pathlib import Path
 import sys
 
 import numpy as np
-import pytest
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
-from camera import PhoneVideoSource  # noqa: E402
-from camera import webrtc_receiver  # noqa: E402
-from camera.webrtc_receiver import WebRTCSignalingServer  # noqa: E402
+from camera import vision_api  # noqa: E402
+from camera.vision_api import VisionApiServer  # noqa: E402
 
 
 def _write_npz(path: Path, label: str) -> None:
@@ -26,65 +24,45 @@ def _write_npz(path: Path, label: str) -> None:
     np.savez(path, labels=np.array([label]), embeddings=vec)
 
 
-@pytest.fixture
-def isolated_server_factory(tmp_path, monkeypatch):
-    """Build signaling servers whose enrolled-gallery cache lives in an empty temp dir."""
-    monkeypatch.setattr(
-        WebRTCSignalingServer,
-        "_get_enrolled_gallery_path",
-        lambda self: tmp_path / "enrolled_gallery.json",
-    )
-
-    def _make() -> WebRTCSignalingServer:
-        return WebRTCSignalingServer(video_source=PhoneVideoSource(source_id="test-gallery-startup"))
-
-    return _make
-
-
-def test_gallery_is_empty_at_startup(isolated_server_factory, tmp_path, monkeypatch):
+def test_gallery_is_empty_at_startup(tmp_path, monkeypatch):
     monkeypatch.delenv("GALLERY_NPZ_PATH", raising=False)
 
     # A gallery file lying around in the working directory must be ignored
     _write_npz(tmp_path / "gallery.npz", "stray_identity")
     monkeypatch.chdir(tmp_path)
 
-    server = isolated_server_factory()
+    server = VisionApiServer()
 
     assert server.gallery == {}
     assert server._get_gallery() == {}
+    assert server.student_names == {}
+    assert server.student_ids == {}
 
 
-def test_no_implicit_gallery_path_in_receiver_source():
-    """The receiver must not reference a baked-in gallery file path."""
-    source = Path(webrtc_receiver.__file__).read_text(encoding="utf-8")
-    assert "/app/gallery.npz" not in source
-
-
-def test_gallery_file_is_never_loaded_even_when_a_path_is_configured(
-    isolated_server_factory, tmp_path, monkeypatch
-):
+def test_gallery_file_is_never_loaded_even_when_a_path_is_configured(tmp_path, monkeypatch):
     """The backend is the only source of embeddings; no file path can override that."""
     npz_path = tmp_path / "dev_gallery.npz"
     _write_npz(npz_path, "dev_identity")
     monkeypatch.setenv("GALLERY_NPZ_PATH", str(npz_path))
 
-    server = isolated_server_factory()
+    server = VisionApiServer()
 
     assert server.gallery == {}
 
 
-def test_gallery_cache_file_is_never_read_or_written(isolated_server_factory, tmp_path):
-    """Embeddings are not persisted to, or restored from, a cache file on disk."""
-    cache_path = tmp_path / "enrolled_gallery.json"
-    cache_path.write_text(
-        '{"cached_identity": {"name": "x", "student_id": "x", "embedding": [1.0, 0.0]}}',
-        encoding="utf-8",
-    )
-    before = cache_path.read_text(encoding="utf-8")
+def test_api_module_has_no_gallery_file_access():
+    """The API module must not read or write gallery / embedding files at all."""
+    source = Path(vision_api.__file__).read_text(encoding="utf-8")
 
-    server = isolated_server_factory()
-    assert server.gallery == {}
+    for forbidden in ("gallery.npz", ".npz", "np.load", "np.save", "enrolled_gallery", "write_text"):
+        assert forbidden not in source, forbidden
 
+
+def test_nothing_is_written_to_disk_when_the_gallery_changes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    server = VisionApiServer()
     server.gallery["someone"] = np.ones(512, dtype=np.float32)
-    server._save_enrolled_gallery_file()
-    assert cache_path.read_text(encoding="utf-8") == before
+    server.student_names["someone"] = "Someone"
+
+    assert list(tmp_path.iterdir()) == []

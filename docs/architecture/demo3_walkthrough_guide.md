@@ -1,5 +1,8 @@
 # Demo 3: Live Attendance Dashboard & System Status Runbook
 
+> [!NOTE]
+> **Historical context.** This document was written when a phone could stream to the vision service over WebRTC on port 8088. That path has been removed (see [ADR-010](../adr/ADR-010-drop-webrtc-phone-ingest.md)). Frames now go from the browser to the backend, the vision service is internal only, and doorway mode is offline-tested with no live ingest. Passages below that describe WebRTC, the phone camera page or port 8088 as a public endpoint no longer apply.
+
 ## Overview
 Demo 3 demonstrates real-time optical attendance tracking in a browser-based dashboard. A teacher starts a classroom session, connects a camera (WebRTC phone camera or RTSP stream), students transit across the boundary into and out of the classroom, and the live dashboard updates automatically without manual page reloading.
 

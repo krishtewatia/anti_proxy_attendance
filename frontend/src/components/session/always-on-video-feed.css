@@ -281,26 +281,6 @@
   cursor: pointer;
 }
 
-/* 2. Phone Streamer Viewport */
-.phone-streamer-viewport {
-  width: 100%;
-  padding: 3rem 2rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-
-.phone-radar-container {
-  position: relative;
-  width: 90px;
-  height: 90px;
-  margin-bottom: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .radar-circle {
   position: absolute;
   inset: 0;
@@ -336,90 +316,6 @@
   color: #a5b4fc;
 }
 
-.phone-instructions-box {
-  max-width: 600px;
-}
-
-.phone-stream-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #f8fafc;
-  margin-bottom: 0.5rem;
-}
-
-.phone-stream-desc {
-  font-size: 0.9rem;
-  color: #94a3b8;
-  line-height: 1.5;
-  margin-bottom: 1.25rem;
-}
-
-.phone-connect-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1.5rem;
-  margin-bottom: 1.5rem;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  border-radius: 14px;
-  padding: 1.25rem;
-}
-
-.phone-qr-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
-  background: #ffffff;
-  padding: 0.5rem;
-  border-radius: 10px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-}
-
-.phone-qr-img {
-  display: block;
-  border-radius: 4px;
-}
-
-.phone-qr-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.phone-url-column {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  align-items: flex-start;
-  flex: 1;
-}
-
-.phone-url-display {
-  display: flex;
-  align-items: center;
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(99, 102, 241, 0.35);
-  padding: 0.6rem 1rem;
-  border-radius: 8px;
-  width: 100%;
-}
-
-.phone-url-text {
-  font-family: monospace;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: #818cf8;
-  word-break: break-all;
-}
-
-.phone-btn-actions {
-  display: flex;
-  gap: 0.75rem;
-  width: 100%;
-}
-
 .btn-copy-stream-url {
   flex: 1;
   background: #6366f1;
@@ -453,18 +349,6 @@
 .btn-open-stream-tab:hover {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.35);
-}
-
-.phone-tips-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  background: rgba(234, 179, 8, 0.1);
-  border: 1px solid rgba(234, 179, 8, 0.25);
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  text-align: left;
 }
 
 .tip-badge {

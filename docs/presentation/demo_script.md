@@ -1,5 +1,8 @@
 # Live Demonstration Script: Step-by-Step Walkthrough
 
+> [!NOTE]
+> **Historical context.** This document was written when a phone could stream to the vision service over WebRTC on port 8088. That path has been removed (see [ADR-010](../adr/ADR-010-drop-webrtc-phone-ingest.md)). Frames now go from the browser to the backend, the vision service is internal only, and doorway mode is offline-tested with no live ingest. Passages below that describe WebRTC, the phone camera page or port 8088 as a public endpoint no longer apply.
+
 **Demo Duration**: ~5–7 minutes
 **Target Audience**: Project Reviewers, Faculty Evaluators, Department Leadership
 **Core Objective**: Demonstrate the complete lifecycle of anti-proxy attendance tracking—from session creation and edge camera ingestion to live presence state transitions and finalized audit reports.
