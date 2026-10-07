@@ -1,0 +1,90 @@
+# ==============================================================================
+# Throwaway stack for scripts/smoke_e2e.py
+#
+# Started under a random Compose project name and removed afterwards, so it
+# never touches the development stack: no fixed container names, no fixed host
+# ports, and the database lives in memory. Every secret is generated per run by
+# the script and passed in through the environment.
+#
+# The images are built from the working tree, without bind mounts, so the run
+# exercises what the Dockerfiles actually produce.
+# ==============================================================================
+
+services:
+  mongodb:
+    image: mongo:7.0
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  backend:
+    build:
+      context: ../backend
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      MONGODB_URL: mongodb://mongodb:27017
+      DATABASE_NAME: smoke_e2e
+      JWT_SECRET_KEY: ${SMOKE_JWT_SECRET_KEY:?set by scripts/smoke_e2e.py}
+      VISION_SERVICE_API_KEY: ${SMOKE_VISION_SERVICE_API_KEY:?set by scripts/smoke_e2e.py}
+      RECOGNITION_SIGNING_KEY: ${SMOKE_RECOGNITION_SIGNING_KEY:?set by scripts/smoke_e2e.py}
+      REQUIRE_CAMERA_AUTH: "true"
+      VISION_SERVICE_URL: http://vision-service:8088
+    ports:
+      # Loopback only, on a host port chosen by Docker.
+      - "127.0.0.1::8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\" || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  vision-service:
+    build:
+      context: ../vision-service
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_URL: http://backend:8000
+      VISION_SERVICE_API_KEY: ${SMOKE_VISION_SERVICE_API_KEY:?set by scripts/smoke_e2e.py}
+      RECOGNITION_SIGNING_KEY: ${SMOKE_RECOGNITION_SIGNING_KEY:?set by scripts/smoke_e2e.py}
+      INSIGHTFACE_HOME: /home/visionuser/.insightface
+      OUTBOX_DIR: /app/data
+    volumes:
+      # Shared with the development stack so the face models are downloaded
+      # once. It is external, so tearing this stack down never removes it.
+      - model_cache:/home/visionuser/.insightface
+    tmpfs:
+      - /app/data
+    # No published port, as in the real stack.
+    expose:
+      - "8088"
+    # Healthy only once the face models are loaded, so the run does not start
+    # while enrollment would still fail.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import json, os, sys, urllib.request
+          req = urllib.request.Request("http://127.0.0.1:8088/status", headers={"X-API-Key": os.environ["VISION_SERVICE_API_KEY"]})
+          sys.exit(0 if json.load(urllib.request.urlopen(req, timeout=4)).get("models_loaded") else 1)
+      interval: 5s
+      timeout: 6s
+      retries: 60
+      start_period: 10s
+
+volumes:
+  model_cache:
+    name: anti_proxy_model_cache
+    external: true

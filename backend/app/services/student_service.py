@@ -93,20 +93,12 @@ async def register_student_account(
     if existing_profile is not None:
         raise DuplicateStudentProfileError(f"Student ID '{req.student_id}' is already registered")
 
-    # 3. Create User account
-    user_id = f"user_{uuid4().hex}"
-    pw_hash = hash_password(req.password)
-    await create_user(
-        user_id=user_id,
-        email=req.email,
-        password_hash=pw_hash,
-        role="STUDENT",
-    )
-
-    # 4. Compute class code
+    # 3. Compute class code
     class_code = normalize_class_code(req.branch, req.section)
 
-    # 5. Extract and store biometric embedding if photo provided
+    # 4. Extract and store the biometric embedding if a photo was provided. This
+    #    runs before the account is created: if no face is found the request
+    #    fails without leaving an account that blocks a retry with a better photo.
     has_biometric = False
     photo_url = None
     if req.photo_base64:
@@ -123,6 +115,16 @@ async def register_student_account(
         has_biometric = True
         photo_url = f"/api/v1/students/{req.student_id}/photo"
         logger.info("Biometric registration for %s: %s", req.student_id, msg)
+
+    # 5. Create User account
+    user_id = f"user_{uuid4().hex}"
+    pw_hash = hash_password(req.password)
+    await create_user(
+        user_id=user_id,
+        email=req.email,
+        password_hash=pw_hash,
+        role="STUDENT",
+    )
 
     # 6. Upsert student profile
     profile_doc = await upsert_student_profile(
