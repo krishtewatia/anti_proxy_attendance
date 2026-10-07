@@ -539,6 +539,24 @@ Run the fixture-dependent vision tests locally (they need the InsightFace models
 VISION_FIXTURES_DIR=/path/to/fixtures pytest -m "needs_models or slow" tests/test_real_cv_attendance_e2e.py
 ```
 
+### Run the End-to-End Smoke Test
+
+One script runs the whole secured flow over HTTP: register two students with a photo, create and start a session, send camera frames with the teacher's token, apply a manual correction, finalize, and export the CSV. It also checks that frames without a token, the removed `/mark` routes and the vision service port are all refused.
+
+```bash
+python scripts/smoke_e2e.py --photos /path/to/photos
+```
+
+By default it builds the images, starts a throwaway stack under a random Compose project name with generated secrets and an in-memory database, runs the checks, and removes the stack again. It does not touch the development stack. `--photos` needs one folder per person with at least three face photos each; if it is omitted, `$VISION_FIXTURES_DIR/recognition_benchmark` is used. Photos are never read from the repository.
+
+To check a running deployment instead (for example after a deploy):
+
+```bash
+SMOKE_TEACHER_EMAIL=... SMOKE_TEACHER_PASSWORD=... python scripts/smoke_e2e.py --base-url https://your-host --photos /path/to/photos
+```
+
+In that mode the script registers two smoke-test students once (`SMOKEA` and `SMOKEB`), reuses them on later runs, and creates one new session per run. Nothing is deleted. The exit code is 0 only if every check passes.
+
 ---
 
 ## CI/CD Security Gates

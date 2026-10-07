@@ -185,3 +185,39 @@ async def test_unauthenticated_request_rejected(client):
 
     res_get = client.get("/api/v1/students/profile")
     assert res_get.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.anyio
+async def test_failed_photo_enrollment_leaves_no_account_and_can_be_retried(client, monkeypatch):
+    """A registration rejected for its photo must not keep the email or student ID taken."""
+    from app.services import student_service
+
+    outcomes = [(False, "Could not extract face embedding from uploaded photo."), (True, "enrolled")]
+
+    async def fake_enrollment(**kwargs):
+        return outcomes.pop(0)
+
+    monkeypatch.setattr(student_service, "extract_and_register_student_photo", fake_enrollment)
+
+    payload = {
+        "name": "Retry Student",
+        "email": "retry.student@test.edu",
+        "password": "StudentSecurePass123!",
+        "student_id": "RETRY001",
+        "roll_number": "20269999",
+        "branch": "Data Science",
+        "section": "B",
+        "photo_base64": "cGxhY2Vob2xkZXI=",
+    }
+
+    first = client.post("/api/v1/students/register", json=payload)
+    assert first.status_code == status.HTTP_400_BAD_REQUEST
+
+    db = mongodb.get_database()
+    assert await db["users"].find_one({"email": payload["email"]}) is None
+    assert await db["student_profiles"].find_one({"student_id": payload["student_id"]}) is None
+
+    second = client.post("/api/v1/students/register", json=payload)
+    assert second.status_code == status.HTTP_201_CREATED, second.text
+    assert second.json()["has_biometric"] is True
+    assert await db["users"].count_documents({"email": payload["email"]}) == 1
