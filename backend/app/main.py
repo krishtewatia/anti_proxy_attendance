@@ -25,6 +25,7 @@ from app.database.academic import seed_academic_data_if_empty
 
 from app.core.config import settings
 from app.core.logging_security import setup_security_logging
+from app.core.uploads import resolve_uploads_root
 from app.security.config import (
     JWT_SECRET_KEY,
     is_insecure_recognition_key_allowed,
@@ -43,6 +44,8 @@ async def lifespan(app: FastAPI):
         allow_insecure=is_insecure_recognition_key_allowed(),
     )
     validate_liveness_mode(settings.LIVENESS_MODE)
+    # Refuse to start if uploaded photos would be written inside the source tree.
+    resolve_uploads_root()
     setup_security_logging()
 
     # Startup: ensure database indexes are initialized
@@ -123,13 +126,8 @@ app.include_router(admin_router)
 app.include_router(academic_router)
 app.include_router(teachers_router)
 
-# Mount uploads directory for static file serving
-from pathlib import Path
-from fastapi.staticfiles import StaticFiles
-
-uploads_dir = Path("/app/uploads") if Path("/app/uploads").exists() else Path("uploads")
-uploads_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+# Uploaded photos are not served as static files: they are read only through
+# the student photo route, from a directory outside the source tree.
 
 
 @app.get("/")

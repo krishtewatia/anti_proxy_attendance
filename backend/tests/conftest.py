@@ -18,6 +18,16 @@ TEST_SERVICE_KEY = "test-internal-service-key-2026"
 FRAME_BYTES = b"placeholder frame bytes; the vision service call is stubbed in tests"
 
 
+@pytest.fixture(autouse=True)
+def uploads_in_a_temporary_directory(tmp_path_factory, monkeypatch):
+    """Send every upload made by a test to a throwaway directory.
+
+    Tests must never write photos into the repository, nor into the real
+    uploads volume when the suite is run inside the backend container.
+    """
+    monkeypatch.setenv("UPLOADS_DIR", str(tmp_path_factory.mktemp("uploads")))
+
+
 @pytest.fixture
 def register_test_camera(monkeypatch):
     """Register cameras in the real camera registry and return their auth headers.

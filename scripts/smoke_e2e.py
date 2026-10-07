@@ -301,7 +301,14 @@ def run_flow(
 
     def frame(person: int, photo: int, headers: dict | None = None):
         merged = {"Content-Type": "image/jpeg", **(auth if headers is None else headers)}
-        return api.call("POST", frame_path, people[person][photo], merged, 120)
+        # The backend answers 503 when the vision service is briefly busy; that is
+        # a retry, not a verdict. Every other status is returned as it is.
+        for attempt in range(3):
+            status, body = api.call("POST", frame_path, people[person][photo], merged, 120)
+            if status not in (None, 502, 503, 504):
+                break
+            time.sleep(3 * (attempt + 1))
+        return status, body
 
     def summarize(body: dict) -> list[tuple]:
         return [

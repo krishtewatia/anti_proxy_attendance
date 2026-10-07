@@ -40,6 +40,15 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.t
 # Copy application source code
 COPY app ./app
 
+# Uploaded student photos live outside the source tree, on a named volume
+# mounted here (see docker-compose.yml). Created and owned by the service user
+# so a fresh volume is initialised with the right ownership.
+RUN mkdir -p /data/uploads/student_profiles && \
+    chown -R appuser:appgroup /data/uploads && \
+    chmod -R 0750 /data/uploads
+
+ENV UPLOADS_DIR=/data/uploads
+
 # Set least-privilege permissions
 RUN chown -R appuser:appgroup /app
 
