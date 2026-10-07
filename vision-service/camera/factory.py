@@ -20,7 +20,7 @@ def create_video_source(
     """Factory helper to construct the appropriate VideoSource adapter.
 
     Args:
-        source_type: Modality ("FILE", "RTSP", "PHONE", "WEBRTC").
+        source_type: Modality ("FILE", "RTSP", "PHONE", "WEBCAM").
         source_uri: Path to video file (if FILE) or RTSP URL (if RTSP).
         source_id: Identifier for camera or stream (e.g. "CAM_DOOR_01", "PHONE_01").
         target_fps: Desired sampling rate in FPS (default: 5.0).
@@ -58,14 +58,6 @@ def create_video_source(
         return PhoneVideoSource(
             source_id=source_id or "PHONE_CAM_01",
             source_type=VideoSourceType.PHONE,
-            target_fps=target_fps,
-            **kwargs,
-        )
-
-    elif normalized_type == VideoSourceType.WEBRTC.value:
-        return PhoneVideoSource(
-            source_id=source_id or "PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
             target_fps=target_fps,
             **kwargs,
         )

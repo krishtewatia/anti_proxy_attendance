@@ -308,7 +308,7 @@ class TestFactoryAndPolymorphism(unittest.TestCase):
         require_clip(self, self.video_path)
         """Demonstrate that downstream CV pipeline code functions identically
 
-        regardless of whether frames arrive from Phone/WebRTC or Recorded File.
+        regardless of whether frames arrive from a phone source or a recorded file.
         """
 
         def mock_vision_pipeline(source: VideoSource, max_frames: int = 3) -> list[dict]:

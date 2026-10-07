@@ -237,7 +237,7 @@ class TestLiveCVPipelineEventIntegration(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 5, 0, tzinfo=timezone.utc),
             frame_index=1,
             source_id="PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         res1 = pipeline.process_frame(frame1)
         self.assertEqual(len(res1.emitted_events), 0)
@@ -250,7 +250,7 @@ class TestLiveCVPipelineEventIntegration(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 5, 1, tzinfo=timezone.utc),
             frame_index=2,
             source_id="PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         res2 = pipeline.process_frame(frame2)
         self.assertEqual(len(res2.emitted_events), 0)
@@ -268,7 +268,7 @@ class TestLiveCVPipelineEventIntegration(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 5, 2, tzinfo=timezone.utc),
             frame_index=3,
             source_id="PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         res3 = pipeline.process_frame(frame3)
         self.assertEqual(len(res3.emitted_events), 0)
@@ -281,7 +281,7 @@ class TestLiveCVPipelineEventIntegration(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 5, 3, tzinfo=timezone.utc),
             frame_index=4,
             source_id="PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         res4 = pipeline.process_frame(frame4)
 
@@ -313,7 +313,7 @@ class TestLiveCVPipelineEventIntegration(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 5, 4, tzinfo=timezone.utc),
             frame_index=5,
             source_id="PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         res5 = pipeline.process_frame(frame5)
         self.assertEqual(len(res5.emitted_events), 0)

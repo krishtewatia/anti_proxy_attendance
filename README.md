@@ -539,11 +539,6 @@ Run the fixture-dependent vision tests locally (they need the InsightFace models
 VISION_FIXTURES_DIR=/path/to/fixtures pytest -m "needs_models or slow" tests/test_real_cv_attendance_e2e.py
 ```
 
-### Run Full-Stack End-to-End Verification
-```bash
-python scripts/verify_full_browser_webcam_e2e.py
-```
-
 ---
 
 ## CI/CD Security Gates

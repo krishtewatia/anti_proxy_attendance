@@ -671,7 +671,7 @@ class FrameCVResult:
 
 
 class LiveCVPipeline:
-    """Connects incoming VideoFrames (e.g. from WebRTC Phone) to InsightFace + ByteTrack."""
+    """Connects incoming VideoFrames (from any video source) to InsightFace + ByteTrack."""
 
     def __init__(
         self,
@@ -1396,13 +1396,13 @@ class LiveCVPipeline:
         input_fps: float = 30.0,
         dropped_frames: int = 0,
     ) -> str:
-        """Format the exact WebRTC CV Benchmark summary requested in Step 2D.3."""
+        """Format the exact CV Benchmark summary requested in Step 2D.3."""
         telemetry = self.get_benchmark_telemetry(dropped_frames=dropped_frames)
 
         proc_res = self.processing_resolution or resolution
         lines = [
             "============================================================",
-            "WebRTC CV Benchmark",
+            "CV Benchmark",
             "------------------------------------------------------------",
             f"Source: {telemetry['source_id']}",
             f"Camera Input Res : {resolution[0]}x{resolution[1]}",

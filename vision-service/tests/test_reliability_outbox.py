@@ -249,7 +249,7 @@ class TestDurableOutboxAndReliability(unittest.TestCase):
 
     def test_camera_disconnect_marks_source_and_emits_no_fabricated_exit(self):
         """When a video source disconnects, it is marked DEGRADED/DISCONNECTED and emits 0 EXIT events."""
-        # 1. Phone / WebRTC source disconnect
+        # 1. Phone source disconnect
         phone = PhoneVideoSource(source_id="PHONE_TEST", max_buffer_size=5)
         phone.open()
         self.assertEqual(phone.status, "CONNECTED")

@@ -278,3 +278,58 @@ async def test_dynamic_camera_classroom_resolution(mock_db, api_client, admin_au
     # Dynamic resolver finds it in db and caches it
     resolved = await resolve_classroom_for_camera_db("CUSTOM_GATEWAY_SPECIAL_99", db=mock_db)
     assert resolved == "LECTURE_HALL_7"
+
+
+@pytest.mark.anyio
+async def test_webrtc_source_type_is_no_longer_accepted(mock_db, api_client, admin_auth):
+    """WebRTC ingest was removed (ADR-010): a camera cannot be registered or updated as WEBRTC."""
+    payload = {
+        "camera_id": "CAM_ROOM_401_DOOR",
+        "classroom_id": "ROOM_401",
+        "role": "BOTH",
+        "source_type": "WEBRTC",
+        "enabled": True,
+    }
+    res = await api_client.post("/api/v1/cameras", json=payload, headers=admin_auth["headers"])
+    assert res.status_code == 422
+    assert await mock_db["cameras"].count_documents({}) == 0
+
+    res = await api_client.post(
+        "/api/v1/cameras", json={**payload, "source_type": "PHONE"}, headers=admin_auth["headers"]
+    )
+    assert res.status_code == 201
+
+    res = await api_client.patch(
+        "/api/v1/cameras/CAM_ROOM_401_DOOR",
+        json={"source_type": "WEBRTC"},
+        headers=admin_auth["headers"],
+    )
+    assert res.status_code == 422
+    assert "WEBRTC" not in [member.value for member in CameraSourceType]
+
+
+@pytest.mark.anyio
+async def test_camera_stored_as_webrtc_before_removal_reads_back_as_phone(mock_db, api_client, admin_auth):
+    """A camera document saved while WEBRTC was a valid type still lists and reads, as PHONE."""
+    now = datetime.now(timezone.utc)
+    await mock_db["cameras"].insert_one(
+        {
+            "camera_id": "CAM_LEGACY_WEBRTC",
+            "classroom_id": "ROOM_402",
+            "role": "BOTH",
+            "source_type": "WEBRTC",
+            "enabled": True,
+            "status": "UNKNOWN",
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+
+    res = await api_client.get("/api/v1/cameras", headers=admin_auth["headers"])
+    assert res.status_code == 200
+    listed = {c["camera_id"]: c for c in res.json()}
+    assert listed["CAM_LEGACY_WEBRTC"]["source_type"] == "PHONE"
+
+    res = await api_client.get("/api/v1/cameras/CAM_LEGACY_WEBRTC", headers=admin_auth["headers"])
+    assert res.status_code == 200
+    assert res.json()["source_type"] == "PHONE"

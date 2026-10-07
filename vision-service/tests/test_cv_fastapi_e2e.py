@@ -1,5 +1,5 @@
 """End-to-End Integration Test for Step 2D.5:
-WebRTC Live CV Pipeline -> EventDispatcher -> FastAPI Backend -> MongoDB -> Attendance Records.
+Live CV Pipeline -> EventDispatcher -> FastAPI Backend -> MongoDB -> Attendance Records.
 
 Proves the complete loop:
 1. Spawns backend FastAPI service with MongoDB database.
@@ -23,6 +23,7 @@ Proves the complete loop:
 from datetime import datetime, timezone
 import os
 from pathlib import Path
+import secrets
 import subprocess
 import sys
 import time
@@ -51,10 +52,14 @@ from pipeline.live_cv_pipeline import (
 )
 
 
+# Generated per run so no key literal lives in the repository.
+TEST_SERVICE_KEY = secrets.token_hex(16)
+
+
 @pytest.mark.e2e
 @pytest.mark.slow
 @pytest.mark.needs_models
-class TestWebRTCCVFastAPIE2E(unittest.TestCase):
+class TestCVFastAPIE2E(unittest.TestCase):
     """End-to-End integration test proving the entire attendance loop."""
 
     backend_proc = None
@@ -69,7 +74,7 @@ class TestWebRTCCVFastAPIE2E(unittest.TestCase):
         env["MONGODB_URL"] = ""  # Forces in-memory AsyncMongoMockClient
         env["PORT"] = "8123"
         env["PYTHONPATH"] = str(BACKEND_ROOT)
-        env["VISION_SERVICE_API_KEY"] = "test-webrtc-cv-api-key-2026"
+        env["VISION_SERVICE_API_KEY"] = TEST_SERVICE_KEY
 
         cmd = [
             str(BACKEND_VENV_PYTHON),
@@ -172,7 +177,7 @@ class TestWebRTCCVFastAPIE2E(unittest.TestCase):
                 cls.backend_proc.stderr.close()
             cls.backend_proc = None
 
-    def test_complete_webrtc_cv_to_fastapi_attendance_loop(self):
+    def test_complete_cv_to_fastapi_attendance_loop(self):
         """Full Loop: VideoFrame -> LiveCVPipeline -> EventDispatcher -> FastAPI -> Attendance Records."""
         from unittest.mock import MagicMock
         from insightface.app import FaceAnalysis
@@ -182,7 +187,7 @@ class TestWebRTCCVFastAPIE2E(unittest.TestCase):
             backend_url=self.backend_url,
             timeout=3.0,
             raise_on_failure=True,
-            api_key="test-webrtc-cv-api-key-2026",
+            api_key=TEST_SERVICE_KEY,
         )
 
         # Mock app for fast, deterministic inference
@@ -233,7 +238,7 @@ class TestWebRTCCVFastAPIE2E(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 5, 0, tzinfo=timezone.utc),
             frame_index=1,
             source_id="PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         res1 = pipeline.process_frame(frame1)
         self.assertEqual(len(res1.emitted_events), 0)
@@ -246,7 +251,7 @@ class TestWebRTCCVFastAPIE2E(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 5, 1, tzinfo=timezone.utc),
             frame_index=2,
             source_id="PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         from tracking.bytetrack import STrack
         STrack.reset_counter()
@@ -265,7 +270,7 @@ class TestWebRTCCVFastAPIE2E(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 5, 2, tzinfo=timezone.utc),
             frame_index=3,
             source_id="PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         res3 = pipeline.process_frame(frame3)
         self.assertEqual(len(res3.emitted_events), 0)
@@ -278,7 +283,7 @@ class TestWebRTCCVFastAPIE2E(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 5, 3, tzinfo=timezone.utc),
             frame_index=4,
             source_id="PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         res4 = pipeline.process_frame(frame4)
 
@@ -303,7 +308,7 @@ class TestWebRTCCVFastAPIE2E(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 55, 0, tzinfo=timezone.utc),
             frame_index=5,
             source_id="PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         res5 = pipeline.process_frame(frame5)
         self.assertEqual(len(res5.emitted_events), 0)
@@ -316,7 +321,7 @@ class TestWebRTCCVFastAPIE2E(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 55, 1, tzinfo=timezone.utc),
             frame_index=6,
             source_id="PHONE_CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         res6 = pipeline.process_frame(frame6)
 
@@ -374,7 +379,7 @@ class TestWebRTCCVFastAPIE2E(unittest.TestCase):
         print(f"[E2E] VERIFIED: person_04 status={p4['status']} presence={p4['presence_percentage']:.2f}%")
 
         print("\n" + "=" * 75)
-        print("STEP 2D.5 E2E COMPLETE: WebRTC CV -> FastAPI -> MongoDB -> Attendance Record")
+        print("STEP 2D.5 E2E COMPLETE: CV -> FastAPI -> MongoDB -> Attendance Record")
         print("=" * 75 + "\n")
 
 

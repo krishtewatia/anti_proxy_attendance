@@ -147,9 +147,8 @@ def main() -> None:
     for cam in cameras:
         print(f"  [{cam['index']}] {cam['name']} ({cam['width']}x{cam['height']} via {cam['backend']})")
 
-    print("\nTo start attendance with a specific camera:")
-    default_idx = cameras[0]["index"]
-    print(f"  python vision-service/run_local_webcam.py --camera-index {default_idx}\n")
+    print("\nTo use one of these for attendance, pick it in the camera dropdown")
+    print("of the teacher portal. The browser opens the camera; no script is needed.\n")
     print("=" * 60 + "\n")
 
 

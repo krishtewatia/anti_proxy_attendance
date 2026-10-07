@@ -28,7 +28,7 @@
 > **VERDICT: SYNTHETIC / MOCKED ONLY.**
 > Automated end-to-end verification of real human facial recognition through the complete pipeline into MongoDB attendance records **has not been proven**.
 >
-> In the primary E2E integration test ([`test_webrtc_cv_fastapi_e2e.py`](file:///c:/Users/hp/Downloads/anti_proxy_project/vision-service/tests/test_webrtc_cv_fastapi_e2e.py#L182-L201)):
+> In the primary E2E integration test ([`test_cv_fastapi_e2e.py`](file:///c:/Users/hp/Downloads/anti_proxy_project/vision-service/tests/test_cv_fastapi_e2e.py#L182-L201)):
 > 1. `mock_app = MagicMock(spec=FaceAnalysis)`: Both SCRFD detection and ArcFace recognition are completely mocked via `unittest.mock.MagicMock`.
 > 2. `test_img = np.zeros((720, 640, 3), dtype=np.uint8)`: Incoming video frames are synthetic black matrices with zero texture.
 > 3. Bounding boxes (`box1`, `box2`, `box3`, `box4`) are hardcoded coordinate arrays fed directly to the tracker.
@@ -90,7 +90,7 @@ Notion claimed: *"21 vision tests"*.
 - The **21 tests** in Notion refer strictly to the **Step 2D.5 Boundary, Dispatcher, and E2E loop suite**:
   1. [`vision-service/tests/test_cv_event_pipeline.py`](file:///c:/Users/hp/Downloads/anti_proxy_project/vision-service/tests/test_cv_event_pipeline.py): 6 tests
   2. [`vision-service/tests/test_event_dispatcher.py`](file:///c:/Users/hp/Downloads/anti_proxy_project/vision-service/tests/test_event_dispatcher.py): 14 tests
-  3. [`vision-service/tests/test_webrtc_cv_fastapi_e2e.py`](file:///c:/Users/hp/Downloads/anti_proxy_project/vision-service/tests/test_webrtc_cv_fastapi_e2e.py): 1 test
+  3. [`vision-service/tests/test_cv_fastapi_e2e.py`](file:///c:/Users/hp/Downloads/anti_proxy_project/vision-service/tests/test_cv_fastapi_e2e.py): 1 test
   **Subsystem Sum: 6 + 14 + 1 = EXACTLY 21 tests.**
 - The **50 tests** represent the **complete pytest test suite** in `vision-service/tests`, which also includes:
   - Video Source Polymorphism & Buffering (`test_video_source.py`): 18 tests

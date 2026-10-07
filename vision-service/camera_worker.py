@@ -38,7 +38,7 @@ class CameraConfig:
     camera_id: str
     classroom_id: str
     role: str = "BOTH"  # "ENTRY", "EXIT", "BOTH"
-    source_type: str = "RTSP"  # "RTSP", "FILE", "WEBRTC", "PHONE"
+    source_type: str = "RTSP"  # "RTSP", "FILE", "PHONE", "WEBCAM"
     source_uri: str = ""
     boundary_line: Optional[tuple[tuple[float, float], tuple[float, float]]] = None
     entry_side: str = "SIDE_A"

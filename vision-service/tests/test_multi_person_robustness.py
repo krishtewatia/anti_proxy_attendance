@@ -521,7 +521,7 @@ class TestPipelineIDSwapGuardIntegration(unittest.TestCase):
                 timestamp=datetime(2026, 10, 20, 10, 0, i, tzinfo=timezone.utc),
                 frame_index=i + 1,
                 source_id="CAM_01",
-                source_type=VideoSourceType.WEBRTC,
+                source_type=VideoSourceType.PHONE,
             )
             pipeline.process_frame(frame)
 
@@ -539,7 +539,7 @@ class TestPipelineIDSwapGuardIntegration(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 0, 2, tzinfo=timezone.utc),
             frame_index=3,
             source_id="CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         pipeline.process_frame(frame3)
         calls_after_frame3 = rec_mock.get.call_count
@@ -553,7 +553,7 @@ class TestPipelineIDSwapGuardIntegration(unittest.TestCase):
             timestamp=datetime(2026, 10, 20, 10, 0, 7, tzinfo=timezone.utc),
             frame_index=4,
             source_id="CAM_01",
-            source_type=VideoSourceType.WEBRTC,
+            source_type=VideoSourceType.PHONE,
         )
         pipeline.process_frame(frame4)
         # ArcFace should have been called again for reverification

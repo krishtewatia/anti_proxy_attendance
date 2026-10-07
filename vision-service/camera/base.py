@@ -14,7 +14,6 @@ class VideoSourceType(str, Enum):
     FILE = "FILE"
     RTSP = "RTSP"
     PHONE = "PHONE"
-    WEBRTC = "WEBRTC"
     WEBCAM = "WEBCAM"
 
 
@@ -51,7 +50,7 @@ class VideoFrame:
 class VideoSource(ABC):
     """Abstract base class for all video input adapters.
 
-    All video input sources (Phone/WebRTC, CCTV/RTSP, local MP4 file) must implement
+    All video input sources (phone, CCTV/RTSP, local MP4 file) must implement
     this interface to supply frames seamlessly into the unified vision pipeline.
     """
 
