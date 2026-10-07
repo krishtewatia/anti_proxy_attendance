@@ -1,4 +1,4 @@
-"""The vision service is an internal API: service key on every route, no WebRTC routes."""
+"""The vision service is an internal API: service key on every route, no browser-facing routes."""
 
 import asyncio
 from pathlib import Path
@@ -11,8 +11,8 @@ SERVICE_ROOT = Path(__file__).resolve().parent.parent
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
-from camera import PhoneVideoSource  # noqa: E402
-from camera.webrtc_receiver import WebRTCSignalingServer  # noqa: E402
+
+from camera.vision_api import VisionApiServer  # noqa: E402
 
 SERVICE_KEY = "vision-internal-test-key"
 AUTH = {"X-API-Key": SERVICE_KEY}
@@ -37,7 +37,7 @@ def _run(coro_factory, monkeypatch, *, key=SERVICE_KEY):
         monkeypatch.setenv("VISION_SERVICE_API_KEY", key)
 
     async def _main():
-        server = WebRTCSignalingServer(video_source=PhoneVideoSource(source_id="test-service-auth"))
+        server = VisionApiServer()
         async with TestClient(TestServer(server.app)) as client:
             return await coro_factory(client)
 
@@ -109,7 +109,7 @@ def test_correct_key_reaches_the_handlers_and_no_cors_headers_are_sent(monkeypat
 
 
 @pytest.mark.parametrize("method,path", REMOVED_ROUTES)
-def test_webrtc_and_preview_routes_are_not_registered(monkeypatch, method, path):
+def test_browser_facing_routes_do_not_exist(monkeypatch, method, path):
     async def body(client):
         without_key = await client.request(method, path)
         with_key = await client.request(method, path, headers=AUTH)

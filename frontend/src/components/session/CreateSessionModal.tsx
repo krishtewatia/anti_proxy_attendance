@@ -44,7 +44,7 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
 
   // Video Source Configuration
-  const [videoSource, setVideoSource] = useState<"WEBCAM" | "PHONE" | "SIMULATOR">("WEBCAM");
+  const [videoSource, setVideoSource] = useState<"WEBCAM" | "SIMULATOR">("WEBCAM");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -407,20 +407,6 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
                   <div className="option-content">
                     <span className="option-title">💻 Laptop Webcam</span>
                     <span className="option-sub">Direct in-browser camera</span>
-                  </div>
-                </label>
-
-                <label className={`video-source-option ${videoSource === "PHONE" ? "selected" : ""}`}>
-                  <input
-                    type="radio"
-                    name="videoSource"
-                    value="PHONE"
-                    checked={videoSource === "PHONE"}
-                    onChange={() => setVideoSource("PHONE")}
-                  />
-                  <div className="option-content">
-                    <span className="option-title">📱 Mobile Phone (8088)</span>
-                    <span className="option-sub">Stream from phone on LAN</span>
                   </div>
                 </label>
 

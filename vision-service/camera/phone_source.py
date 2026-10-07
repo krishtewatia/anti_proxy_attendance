@@ -10,9 +10,9 @@ from camera.base import VideoFrame, VideoSource, VideoSourceType
 
 
 class PhoneVideoSource(VideoSource):
-    """Video source adapter for Phone cameras & WebRTC live streams.
+    """Push-style video source: frames are handed in by the caller as they arrive.
 
-    Accepts live frames pushed from browser/phone WebRTC receivers or WebSocket
+    Accepts frames pushed by any in-process producer (tests, recorded replays, or a
     transports and buffers them in a thread-safe queue with a drop-oldest policy
     to ensure zero-latency real-time vision processing.
     """
@@ -64,7 +64,7 @@ class PhoneVideoSource(VideoSource):
         frame: np.ndarray,
         timestamp: Optional[datetime] = None,
     ) -> bool:
-        """Push a newly received camera frame from Phone / WebRTC transport.
+        """Push a newly received camera frame.
 
         If the buffer is full, drops the oldest frame in FIFO order to prevent
         pipeline latency accumulation.
@@ -149,7 +149,3 @@ class PhoneVideoSource(VideoSource):
                     self._queue.get_nowait()
                 except queue.Empty:
                     break
-
-
-# Alias for explicit WebRTC nomenclature
-WebRTCVideoSource = PhoneVideoSource

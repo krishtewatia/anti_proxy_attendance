@@ -496,7 +496,7 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({
         <div className="attendance-empty-container">
           <h3 className="attendance-empty-title">Waiting for Student Detections</h3>
           <p className="attendance-empty-desc">
-            Use the Video Feed above (Webcam, Mobile Phone, or Simulator) to start streaming entrance events. Students will appear in this ledger in real-time.
+            Use the Video Feed above (Webcam or Simulator) to start streaming entrance events. Students will appear in this ledger in real-time.
           </p>
         </div>
       )}

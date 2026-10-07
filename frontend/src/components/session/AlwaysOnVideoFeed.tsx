@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { api } from "../../services";
 import "./always-on-video-feed.css";
 
-export type VideoSourceType = "WEBCAM" | "PHONE" | "SIMULATOR";
+export type VideoSourceType = "WEBCAM" | "SIMULATOR";
 
 export interface AlwaysOnVideoFeedProps {
   sessionId: string;
@@ -22,16 +22,10 @@ export const AlwaysOnVideoFeed: React.FC<AlwaysOnVideoFeedProps> = ({
   const [source, setSource] = useState<VideoSourceType>(initialSource);
   const [webcamError, setWebcamError] = useState<string | null>(null);
   const [simulating, setSimulating] = useState<string | null>(null);
-  const [copiedUrl, setCopiedUrl] = useState(false);
   const [simLog, setSimLog] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-
-  const phoneStreamerUrl =
-    typeof window !== "undefined"
-      ? `http://${window.location.hostname}:8088`
-      : "http://localhost:8088";
 
   // Start webcam if source is WEBCAM
   const startWebcam = async () => {
@@ -76,18 +70,6 @@ export const AlwaysOnVideoFeed: React.FC<AlwaysOnVideoFeedProps> = ({
     };
   }, [source]);
 
-  const handleCopyPhoneUrl = async () => {
-    try {
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(phoneStreamerUrl);
-        setCopiedUrl(true);
-        setTimeout(() => setCopiedUrl(false), 2500);
-      }
-    } catch {
-      // fallback
-    }
-  };
-
   const handleTriggerTransit = async (identity: string, direction: "ENTRY" | "EXIT") => {
     setSimulating(`${identity}_${direction}`);
     setSimLog(null);
@@ -131,19 +113,6 @@ export const AlwaysOnVideoFeed: React.FC<AlwaysOnVideoFeedProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
             </svg>
             <span>💻 Laptop Webcam</span>
-          </button>
-
-          <button
-            type="button"
-            className={`source-tab-btn ${source === "PHONE" ? "active" : ""}`}
-            onClick={() => setSource("PHONE")}
-            role="tab"
-            aria-selected={source === "PHONE"}
-          >
-            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
-            </svg>
-            <span>📱 Mobile Phone</span>
           </button>
 
           <button
@@ -206,73 +175,7 @@ export const AlwaysOnVideoFeed: React.FC<AlwaysOnVideoFeedProps> = ({
           </div>
         )}
 
-        {/* Source 2: Mobile Phone WebRTC Node */}
-        {source === "PHONE" && (
-          <div className="phone-streamer-viewport">
-            <div className="phone-radar-container">
-              <div className="radar-circle radar-pulse" />
-              <div className="radar-circle" />
-              <div className="radar-center-icon">
-                <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
-                </svg>
-              </div>
-            </div>
-
-            <div className="phone-instructions-box">
-              <h3 className="phone-stream-title">Connect Mobile Phone as Entrance Scanner</h3>
-              <p className="phone-stream-desc">
-                Open this URL on your phone or scan the QR code to stream directly to <strong>CS-101 (Room 101)</strong>:
-              </p>
-
-              <div className="phone-connect-row">
-                <div className="phone-qr-card">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=4&data=${encodeURIComponent(phoneStreamerUrl)}`}
-                    alt="Scan with mobile camera"
-                    className="phone-qr-img"
-                    width="130"
-                    height="130"
-                  />
-                  <span className="phone-qr-label">📷 Scan with Phone</span>
-                </div>
-
-                <div className="phone-url-column">
-                  <div className="phone-url-display">
-                    <code className="phone-url-text">{phoneStreamerUrl}</code>
-                  </div>
-                  <div className="phone-btn-actions">
-                    <button
-                      type="button"
-                      className="btn-copy-stream-url"
-                      onClick={handleCopyPhoneUrl}
-                      title="Copy mobile link"
-                    >
-                      {copiedUrl ? "✓ Copied!" : "📋 Copy Link"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-open-stream-tab"
-                      onClick={() => window.open(phoneStreamerUrl, "_blank")}
-                      title="Open in new browser tab"
-                    >
-                      🔗 Open in Tab
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="phone-tips-row">
-                <span className="tip-badge">💡 Note for Android Chrome:</span>
-                <span className="tip-text">
-                  If prompted for camera permission on HTTP, enable <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code> and add <code>{phoneStreamerUrl}</code>.
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Source 3: Optical Transit Simulator */}
+        {/* Source 2: Optical Transit Simulator */}
         {source === "SIMULATOR" && (
           <div className="simulator-viewport">
             <div className="simulator-header-text">
@@ -333,7 +236,7 @@ export const AlwaysOnVideoFeed: React.FC<AlwaysOnVideoFeedProps> = ({
         <div className="telemetry-item">
           <span className="telemetry-indicator online" />
           <span className="telemetry-label">Continuous Connection:</span>
-          <span className="telemetry-val">ACTIVE (PORT 8088 / WEBCAM)</span>
+          <span className="telemetry-val">ACTIVE (BROWSER WEBCAM)</span>
         </div>
 
         <div className="telemetry-item">

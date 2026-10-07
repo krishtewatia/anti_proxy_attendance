@@ -70,4 +70,4 @@ EXPOSE 8088
 HEALTHCHECK --interval=20s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import socket; s = socket.socket(); s.connect(('127.0.0.1', 8088)); s.close()" || exit 1
 
-CMD ["python", "run_webrtc_camera.py", "--host", "0.0.0.0", "--port", "8088", "--backend-url", "http://backend:8000", "--camera-id", "CAM_ROOM_101_DOOR", "--cv", "--dispatch"]
+CMD ["python", "run_vision_service.py", "--host", "0.0.0.0", "--port", "8088", "--backend-url", "http://backend:8000"]

@@ -17,6 +17,7 @@ This directory maintains the immutable log of architectural decisions for the **
 | [**ADR-007**](file:///docs/adr/ADR-007-recognition-similarity-threshold.md) | Similarity Threshold Selection & Multi-Frame Confirmation | 2026-10 | **Accepted** | Replaced arbitrary thresholds with an empirically validated baseline $\theta = 0.50$, relative separation margin $\Delta \ge 0.15$, and a 3-vote temporal confirmation rule ($P_{\text{False Confirm}} < 10^{-6}$). |
 | [**ADR-008**](file:///docs/adr/ADR-008-anti-spoofing-liveness-strategy.md) | Anti-Spoofing & Liveness Strategy for Local MVP | 2026-10 | **Accepted** | Postponed heavy neural anti-spoofing classifiers to protect CPU frame rates; relied on 4 structural mitigations (kinematic boundary crossing trajectory, 3-vote voting, continuous presence accumulation, teacher review). |
 | [**ADR-009**](file:///docs/adr/ADR-009-camera-registry-and-multi-camera-architecture.md) | Camera Registry, Multi-Camera & RTSP Ingestion | 2026-10 | **Accepted** | Introduced a MongoDB-backed camera registry with role enforcement (`ENTRY`, `EXIT`, `BOTH`), secret URL masking, RTSP automatic reconnection with exponential backoff, and outbox persistence. |
+| [**ADR-010**](file:///docs/adr/ADR-010-drop-webrtc-phone-ingest.md) | Drop Phone WebRTC Ingest for USB Webcam via Browser | 2026-10 | **Accepted** | Removed phone WebRTC ingest and its dependencies. A phone is used as a USB webcam through the browser camera selector; the vision service is an internal API only; doorway mode is offline-tested with no live ingest. Supersedes the WebRTC option of ADR-001. |
 
 ---
 
@@ -24,7 +25,8 @@ This directory maintains the immutable log of architectural decisions for the **
 
 ```mermaid
 flowchart TD
-    ADR001["ADR-001: Camera Sources<br>(WebRTC / RTSP / File)"] --> ADR002["ADR-002: Service Separation<br>(Edge Vision <-> FastAPI)"]
+    ADR001["ADR-001: Camera Sources<br>(WebRTC / RTSP / File)"] --> ADR010["ADR-010: WebRTC Dropped<br>(USB Webcam via Browser)"]
+    ADR001 --> ADR002["ADR-002: Service Separation<br>(Edge Vision <-> FastAPI)"]
     ADR002 --> ADR003["ADR-003: Continuous Presence<br>(>= 75% Duration Rule)"]
     ADR002 --> ADR006["ADR-006: Service Auth<br>(HMAC / X-Camera-Token)"]
     ADR001 --> ADR009["ADR-009: Camera Registry<br>(Roles & Multi-Camera)"]

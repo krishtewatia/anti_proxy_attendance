@@ -39,11 +39,6 @@ updates:
         patterns:
           - "*"
     ignore:
-      # aiortc requires av<18, so pip cannot resolve the requirements with a
-      # newer av. Remove this once aiortc supports av 18 or later.
-      - dependency-name: "av"
-        versions:
-          - ">=18"
       # The vision service runs on Python 3.11. numpy 2.5+ and scipy 1.18+ have
       # no Python 3.11 release, so a PR raising those floors can never install.
       # Remove both rules when the vision service moves to Python 3.12.

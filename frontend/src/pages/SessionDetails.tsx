@@ -418,7 +418,7 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
         </div>
       </article>
 
-      {/* Always-On Optical Video Feed (Laptop Webcam / Mobile Phone / Simulator) */}
+      {/* Always-On Optical Video Feed (Laptop Webcam / Simulator) */}
       <AlwaysOnVideoFeed
         sessionId={session.session_id}
         classroomId={session.classroom_id}
