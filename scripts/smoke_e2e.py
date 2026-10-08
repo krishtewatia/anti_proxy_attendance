@@ -174,6 +174,29 @@ def start_throwaway_stack(project: str, env: dict[str, str], build: bool) -> str
     return f"http://127.0.0.1:{host_port}"
 
 
+def check_liveness_model_in_image(project: str, env: dict[str, str], checks: Checks) -> None:
+    """The vision image must be able to read its own liveness model files."""
+    probe = (
+        "import json, os, urllib.request;"
+        "r = urllib.request.Request('http://127.0.0.1:8088/status',"
+        " headers={'X-API-Key': os.environ['VISION_SERVICE_API_KEY']});"
+        "d = json.load(urllib.request.urlopen(r, timeout=5));"
+        "print(json.dumps({k: d.get(k) for k in ('liveness_mode', 'liveness_model_loaded')}))"
+    )
+    result = compose(
+        project, env, "exec", "-T", "vision-service", "python", "-c", probe, capture=True
+    )
+    try:
+        state = json.loads((result.stdout or "").strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        state = {}
+    checks.check(
+        "the vision image loaded its liveness model",
+        result.returncode == 0 and state.get("liveness_model_loaded") is True,
+        state or {"exit": result.returncode},
+    )
+
+
 def stop_throwaway_stack(project: str, env: dict[str, str], show_logs: bool) -> None:
     if show_logs:
         logs = compose(
@@ -621,6 +644,7 @@ def main() -> int:
             env["SMOKE_LIVENESS_THRESHOLD"] = args.liveness_threshold
         try:
             base_url = start_throwaway_stack(project, env, build=not args.no_build)
+            check_liveness_model_in_image(project, env, checks)
             run_flow(
                 Api(base_url),
                 checks,

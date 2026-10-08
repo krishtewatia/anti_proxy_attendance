@@ -14,6 +14,11 @@ tests/video_test/*.avi
 data/
 *.log
 
+# Model files come only from the pinned, checksum-verified download in the
+# Dockerfile, never from whatever happens to be in the working tree.
+models/
+*.onnx
+
 # Biometric data never goes into the image: embeddings, galleries, and the
 # test suite (which contains volunteer face photos and video clips).
 *.npz

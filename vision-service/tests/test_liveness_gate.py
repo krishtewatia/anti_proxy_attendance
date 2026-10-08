@@ -310,8 +310,37 @@ def test_enforce_refuses_to_start_without_the_model(tmp_path):
         load_liveness_checker(MODE_ENFORCE, model_dir=tmp_path)
 
 
-def test_observe_starts_without_the_model(tmp_path):
-    assert load_liveness_checker(MODE_OBSERVE, model_dir=tmp_path) is None
+def test_observe_starts_without_the_model_only_when_no_model_directory_is_configured(
+    tmp_path, monkeypatch
+):
+    """A development run: nothing configured, nothing in the default location."""
+    monkeypatch.delenv("LIVENESS_MODEL_DIR", raising=False)
+    monkeypatch.setattr(liveness_module, "DEFAULT_MODEL_DIR", tmp_path)
+    assert load_liveness_checker(MODE_OBSERVE) is None
+
+
+def test_a_configured_model_directory_must_load_even_in_observe_mode(tmp_path, monkeypatch):
+    """In the image LIVENESS_MODEL_DIR is set: a model that cannot be read is a broken build."""
+    monkeypatch.setenv("LIVENESS_MODEL_DIR", str(tmp_path))
+    with pytest.raises(RuntimeError, match="LIVENESS_MODEL_DIR"):
+        load_liveness_checker(MODE_OBSERVE)
+    with pytest.raises(RuntimeError, match="LIVENESS_MODEL_DIR"):
+        load_liveness_checker(MODE_OBSERVE, model_dir=tmp_path)
+
+
+def test_image_copies_the_model_files_into_a_traversable_directory():
+    """Copying the directory itself with --chmod=0444 made it unreadable for the service user."""
+    dockerfile = (SERVICE_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    dockerignore = (SERVICE_ROOT / ".dockerignore").read_text(encoding="utf-8")
+
+    assert "--chmod=0444 /liveness/ /app/models/liveness/" not in dockerfile
+    assert "mkdir -p /app/models/liveness" in dockerfile
+    for spec in liveness_module.MODEL_SPECS:
+        assert f"/liveness/{spec.filename}" in dockerfile
+        assert f"sha256:{spec.sha256}" in dockerfile
+        assert f"test -r /app/models/liveness/{spec.filename}" in dockerfile
+    # Local model files must not reach the image through the build context.
+    assert "models/" in dockerignore.splitlines()
 
 
 def test_a_model_file_with_the_wrong_hash_is_refused(tmp_path):
