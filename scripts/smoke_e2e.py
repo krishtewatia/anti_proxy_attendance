@@ -486,6 +486,19 @@ def run_flow(
         {"http": status, "rows": len(rows), "smoke_rows": len(own_rows)},
     )
 
+    # ---- student photos are biometric data: token and a reason to see them
+    photo_path = f"/api/v1/students/{students[0]}/photo"
+    status, _ = api.call("GET", photo_path, raw=True)
+    checks.check("student photo without a token is rejected (401)", status == 401, status)
+    status, photo = api.call("GET", photo_path, headers=auth, raw=True)
+    checks.check(
+        "the session's teacher can load a rostered student's photo",
+        status == 200 and isinstance(photo, bytes) and len(photo) > 0,
+        status,
+    )
+    status, _ = api.call("GET", "/uploads/student_profiles/" + students[0] + ".jpg", raw=True)
+    checks.check("photos are not served as static files (404)", status == 404, status)
+
     # ---- exposure
     host = urllib.parse.urlsplit(api.base_url).hostname or "127.0.0.1"
     sock = socket.socket()
