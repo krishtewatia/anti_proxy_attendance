@@ -72,6 +72,7 @@ class Checks:
         self.passed = 0
         self.failed = 0
         self.skipped = 0
+        self.retries = 0
 
     def check(self, name: str, ok: bool, detail: object = "") -> bool:
         if ok:
@@ -85,6 +86,43 @@ class Checks:
     def skip(self, name: str, reason: str) -> None:
         self.skipped += 1
         print(f"SKIP - {name} | {reason}", flush=True)
+
+    def retry(self, name: str, attempt: int, status: object, body: object = None) -> None:
+        """Record that a request made for check ``name`` is being retried, and why."""
+        self.retries += 1
+        print(
+            f"RETRY - {name} | attempt {attempt} got {describe_response(status, body)}", flush=True
+        )
+
+
+RETRYABLE_STATUSES = (None, 502, 503, 504)
+
+
+def describe_response(status: object, body: object = None) -> str:
+    """Short, loggable description of a response: the HTTP status and the server's reason."""
+    info = body if isinstance(body, dict) else {}
+    if status is None:
+        return f"no HTTP response ({info.get('error', 'connection failed')})"
+    reason = info.get("detail") or info.get("message") or info.get("error")
+    text = f"HTTP {status}"
+    return f"{text} ({str(reason)[:120]})" if reason else text
+
+
+def call_with_retry(send, checks: Checks, name: str, attempts: int = 3, pause: float = 3.0):
+    """Call ``send()`` and retry while the server is briefly unavailable.
+
+    A 502/503/504 or a dropped connection is a retry, not a verdict; every
+    retry is logged with the check it belongs to and the status that caused
+    it. Any other status is returned as it is. ``send`` returns (status, body).
+    """
+    status, body = send()
+    for attempt in range(1, attempts):
+        if status not in RETRYABLE_STATUSES:
+            break
+        checks.retry(name, attempt, status, body)
+        time.sleep(pause * attempt)
+        status, body = send()
+    return status, body
 
 
 class Api:
@@ -270,6 +308,7 @@ def run_flow(
     enroll_deadline = time.time() + model_wait_seconds
     for index, label in enumerate(("A", "B")):
         student_id = f"{student_prefix}{label}"
+        enroll_attempt = 0
         while True:
             status, profile = api.post_json(
                 "/api/v1/students/register",
@@ -286,6 +325,13 @@ def run_flow(
             )
             if status not in (400, 502, 503, None) or time.time() > enroll_deadline:
                 break
+            enroll_attempt += 1
+            checks.retry(
+                f"student {label} registered with a photo and enrolled",
+                enroll_attempt,
+                status,
+                profile,
+            )
             time.sleep(5)
         students.append(student_id)
         if status == 409 and not fresh_database:
@@ -322,16 +368,21 @@ def run_flow(
         return
     frame_path = f"/api/v1/attendance/{session_id}/process-frame"
 
-    def frame(person: int, photo: int, headers: dict | None = None):
+    def frame(person: int, photo: int, check: str, headers: dict | None = None):
+        """Send one frame for the named check. The backend answers 503 when the
+        vision service is briefly busy; that is retried and logged."""
         merged = {"Content-Type": "image/jpeg", **(auth if headers is None else headers)}
-        # The backend answers 503 when the vision service is briefly busy; that is
-        # a retry, not a verdict. Every other status is returned as it is.
-        for attempt in range(3):
-            status, body = api.call("POST", frame_path, people[person][photo], merged, 120)
-            if status not in (None, 502, 503, 504):
-                break
-            time.sleep(3 * (attempt + 1))
-        return status, body
+        return call_with_retry(
+            lambda: api.call("POST", frame_path, people[person][photo], merged, 120), checks, check
+        )
+
+    def outcome(status, body: dict) -> dict:
+        """What a frame check reports: always the HTTP status, so a failure shows its cause."""
+        report = {"http": status, "faces": summarize(body)}
+        reason = body.get("detail") or body.get("error")
+        if reason:
+            report["reason"] = str(reason)[:120]
+        return report
 
     def summarize(body: dict) -> list[tuple]:
         return [
@@ -340,50 +391,57 @@ def run_flow(
             if isinstance(f, dict)
         ]
 
-    status, _ = frame(0, 1)
-    checks.check("frame before the session is started is rejected (409)", status == 409, status)
+    name = "frame before the session is started is rejected (409)"
+    status, body = frame(0, 1, name)
+    checks.check(name, status == 409, describe_response(status, body))
     status, _ = api.call("POST", f"/api/v1/sessions/{session_id}/start", headers=auth)
     checks.check("session started", status == 200, status)
-    status, _ = frame(0, 1, headers={})
-    checks.check("frame without a teacher token is rejected (401)", status == 401, status)
+    name = "frame without a teacher token is rejected (401)"
+    status, body = frame(0, 1, name, headers={})
+    checks.check(name, status == 401, describe_response(status, body))
 
     # ---- recognition and marking (the vision service may still be loading models)
     marked: list[tuple] = []
     body: dict = {}
     deadline = time.time() + model_wait_seconds
+    name = "student A recognized from a different photo and marked by the backend"
+    waits = 0
     while time.time() < deadline:
-        status, body = frame(0, 1)
+        status, body = frame(0, 1, name)
         faces = summarize(body)
         if status == 200 and any(f[2] in ("marked", "already_present") for f in faces):
             marked = faces
             break
+        # Not marked yet (models still loading, or the gallery not synced): say what came back.
+        waits += 1
+        checks.retry(
+            name, waits, status, {**body, "detail": f"faces={faces}"} if status == 200 else body
+        )
         time.sleep(4)
-    checks.check(
-        "student A recognized from a different photo and marked by the backend",
-        bool(marked) and marked[0][1] == students[0],
-        marked or {"http": status, "detail": body.get("detail")},
-    )
+    checks.check(name, bool(marked) and marked[0][1] == students[0], outcome(status, body))
     serialized = json.dumps(body)
     checks.check(
         "the signed result is not returned to the browser",
         '"recognition"' not in serialized and "signature" not in serialized,
     )
 
-    status, body = frame(0, 2)
+    name = "student A in a third photo is already_present (no duplicate)"
+    status, body = frame(0, 2, name)
     faces = summarize(body)
     checks.check(
-        "student A in a third photo is already_present (no duplicate)",
+        name,
         status == 200 and any(f[1] == students[0] and f[2] == "already_present" for f in faces),
-        faces,
+        outcome(status, body),
     )
 
     if len(people) >= 3:
-        status, body = frame(2, 0)
+        name = "a person who is not enrolled is not marked"
+        status, body = frame(2, 0, name)
         faces = summarize(body)
         checks.check(
-            "a person who is not enrolled is not marked",
+            name,
             status == 200 and not any(f[2] in ("marked", "already_present") for f in faces),
-            faces,
+            outcome(status, body),
         )
     else:
         checks.skip(
@@ -400,8 +458,12 @@ def run_flow(
         blocked = 0
         marked_from_spoof = 0
         for photo in spoof_photos:
-            status, body = api.call(
-                "POST", frame_path, photo, {"Content-Type": "image/jpeg", **auth}, 120
+            status, body = call_with_retry(
+                lambda photo=photo: api.call(
+                    "POST", frame_path, photo, {"Content-Type": "image/jpeg", **auth}, 120
+                ),
+                checks,
+                spoof_check,
             )
             for face in body.get("faces", []) if status == 200 else []:
                 if face.get("status") == "spoof" and face.get("mark_status") == "blocked":
@@ -426,12 +488,13 @@ def run_flow(
         by_identity,
     )
 
-    status, body = frame(1, 1)
+    name = "student B recognized and marked"
+    status, body = frame(1, 1, name)
     faces = summarize(body)
     checks.check(
-        "student B recognized and marked",
+        name,
         status == 200 and any(f[1] == students[1] and f[2] == "marked" for f in faces),
-        faces,
+        outcome(status, body),
     )
 
     # ---- a manual correction wins over a later recognition
@@ -449,12 +512,13 @@ def run_flow(
         {"Content-Type": "application/json", **auth},
     )
     checks.check("teacher corrects B to ABSENT", status == 200, status)
-    status, body = frame(1, 2)
+    name = "a later recognition of B is blocked by the correction (locked)"
+    status, body = frame(1, 2, name)
     faces = summarize(body)
     checks.check(
-        "a later recognition of B is blocked by the correction (locked)",
+        name,
         status == 200 and any(f[1] == students[1] and f[2] == "locked" for f in faces),
-        faces,
+        outcome(status, body),
     )
 
     # ---- finalize and export
@@ -469,8 +533,9 @@ def run_flow(
         and final_by.get(students[1]) == "ABSENT",
         final_by or status,
     )
-    status, _ = frame(0, 1)
-    checks.check("frame after finalization is rejected (409)", status == 409, status)
+    name = "frame after finalization is rejected (409)"
+    status, body = frame(0, 1, name)
+    checks.check(name, status == 409, describe_response(status, body))
 
     status, csv_bytes = api.call(
         "GET", f"/api/v1/attendance/{session_id}/export", headers=auth, raw=True
@@ -677,7 +742,12 @@ def main() -> int:
             else:
                 stop_throwaway_stack(project, env, show_logs=checks.failed > 0)
 
-    print(f"\n{checks.passed} passed, {checks.failed} failed, {checks.skipped} skipped")
+    retried = (
+        f", {checks.retries} retried request(s), see the RETRY lines above"
+        if checks.retries
+        else ""
+    )
+    print(f"\n{checks.passed} passed, {checks.failed} failed, {checks.skipped} skipped{retried}")
     return 0 if checks.failed == 0 and checks.passed > 0 else 1
 
 

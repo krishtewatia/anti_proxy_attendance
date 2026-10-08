@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timedelta, timezone
+import http.client
 import json
 import os
 from pathlib import Path
@@ -28,8 +29,6 @@ import sys
 import time
 from typing import Any, Optional
 import urllib.parse
-import urllib.request
-import urllib.error
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_API_KEY = "test_vision_api_key_for_smoke_test_12345"
@@ -53,7 +52,7 @@ def http_request(
     data: Optional[dict[str, Any]] = None,
     timeout: float = 10.0,
 ) -> tuple[int, dict[str, Any]]:
-    """Helper to perform HTTP requests using standard library urllib."""
+    """Helper to perform HTTP requests with the standard library."""
     req_headers = {"User-Agent": "AntiProxySmokeTest/1.0"}
     if headers:
         req_headers.update(headers)
@@ -68,28 +67,30 @@ def http_request(
     if parsed_url.scheme not in ("http", "https") or parsed_url.hostname not in LOOPBACK_HOSTS:
         raise ValueError(f"Smoke test only calls loopback http(s) URLs, got: {url}")
 
-    req = urllib.request.Request(url, data=body_bytes, headers=req_headers, method=method)
+    # http.client speaks only HTTP(S) to the host checked above; unlike urllib
+    # it has no file:// or other scheme handlers.
+    connection_type = (
+        http.client.HTTPSConnection if parsed_url.scheme == "https" else http.client.HTTPConnection
+    )
+    connection = connection_type(parsed_url.hostname, parsed_url.port, timeout=timeout)
+    target = parsed_url.path or "/"
+    if parsed_url.query:
+        target += f"?{parsed_url.query}"
     try:
-        # The URL is restricted to loopback hosts and http(s) just above, so it
-        # cannot be steered to file:// or to another machine.
-        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            status_code = resp.status
-            content = resp.read().decode("utf-8")
-            try:
-                parsed = json.loads(content) if content else {}
-            except json.JSONDecodeError:
-                parsed = {"raw": content}
-            return status_code, parsed
-    except urllib.error.HTTPError as exc:
-        err_content = exc.read().decode("utf-8")
-        try:
-            parsed = json.loads(err_content) if err_content else {}
-        except json.JSONDecodeError:
-            parsed = {"raw": err_content}
-        return exc.code, parsed
+        connection.request(method, target, body=body_bytes, headers=req_headers)
+        response = connection.getresponse()
+        status_code = response.status
+        content = response.read().decode("utf-8")
     except Exception as exc:
         raise SmokeTestFailure(f"Request to {url} failed: {exc}") from exc
+    finally:
+        connection.close()
+
+    try:
+        parsed = json.loads(content) if content else {}
+    except json.JSONDecodeError:
+        parsed = {"raw": content}
+    return status_code, parsed
 
 
 def wait_for_health(backend_url: str, timeout_seconds: int = 60) -> None:
