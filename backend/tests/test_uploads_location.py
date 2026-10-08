@@ -25,7 +25,10 @@ from app.core.uploads import (
 )
 from app.database import mongodb
 from app.database.mongodb import init_indexes
+from app.database.users import create_user
 from app.main import app
+from app.security.jwt import create_access_token
+from app.security.passwords import hash_password
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = BACKEND_DIR.parent
@@ -59,6 +62,17 @@ async def fresh_db():
     await init_indexes(mongodb.get_database())
     yield
     mongodb._client = AsyncMongoMockClient()
+
+
+async def _admin_headers() -> dict[str, str]:
+    """The photo route requires a token; these tests are about where files are stored."""
+    await create_user(
+        user_id="uploads_admin",
+        email="uploads_admin@uploads.test",
+        password_hash=hash_password("Password123!"),
+        role="ADMIN",
+    )
+    return {"Authorization": f"Bearer {create_access_token(user_id='uploads_admin', role='ADMIN')}"}
 
 
 def _registration(student_id: str) -> dict:
@@ -155,7 +169,7 @@ async def test_uploaded_photo_is_written_outside_the_repository(
     client = TestClient(app)
     resp = client.post("/api/v1/students/register", json=_registration("UPLOC001"))
     assert resp.status_code == 201, resp.text
-    photo = client.get("/api/v1/students/UPLOC001/photo")
+    photo = client.get("/api/v1/students/UPLOC001/photo", headers=await _admin_headers())
 
     stored = target / "student_profiles" / "UPLOC001.jpg"
     assert stored.is_file(), "the photo was not written to the configured uploads directory"
@@ -178,7 +192,7 @@ async def test_photo_restored_from_the_database_is_also_written_outside_the_repo
     )
     before = _files_in_source_tree()
 
-    photo = TestClient(app).get("/api/v1/students/UPLOC002/photo")
+    photo = TestClient(app).get("/api/v1/students/UPLOC002/photo", headers=await _admin_headers())
 
     assert photo.status_code == 200
     assert (target / "student_profiles" / "UPLOC002.jpg").is_file()
@@ -262,13 +276,16 @@ async def test_enrollment_refuses_an_unsafe_identity_even_if_validation_is_bypas
     assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
 
 
-def test_photo_route_does_not_resolve_path_like_ids(tmp_path, monkeypatch):
+@pytest.mark.anyio
+async def test_photo_route_does_not_resolve_path_like_ids(fresh_db, tmp_path, monkeypatch):
     monkeypatch.setenv("UPLOADS_DIR", str(tmp_path / "uploads-volume"))
     (tmp_path / "secret.jpg").write_bytes(b"not a student photo")
+    headers = await _admin_headers()  # an admin passes the access check and reaches the path handling
 
     client = TestClient(app)
     for student_id in ("..%2Fsecret", "..secret", ".secret"):
-        assert client.get(f"/api/v1/students/{student_id}/photo").status_code == 404, student_id
+        response = client.get(f"/api/v1/students/{student_id}/photo", headers=headers)
+        assert response.status_code == 404, student_id
 
 
 # ------------------------------------------------------------------------------

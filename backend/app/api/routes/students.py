@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.api.dependencies.auth import (
+    get_current_user,
     require_student,
     require_teacher_or_admin,
 )
@@ -101,16 +102,38 @@ async def get_student_dashboard_endpoint(
         ) from exc
 
 
+# A photo is personal data fetched with a token: it must not be stored by a
+# shared cache or served to a different user from a cache.
+PRIVATE_PHOTO_HEADERS = {"Cache-Control": "private, no-store", "Vary": "Authorization"}
+
+
 @router.get(
     "/{student_id}/photo",
     summary="Serve student profile photograph",
 )
-async def get_student_photo_endpoint(student_id: str):
-    """Serve student profile photograph from persistent storage or database."""
+async def get_student_photo_endpoint(
+    student_id: str,
+    current_user: Annotated[dict, Depends(get_current_user)],
+):
+    """Serve a student's profile photograph to someone allowed to see it.
+
+    Allowed: the student themself, an administrator, and a teacher who teaches
+    the student (assigned class, or a roster of one of the teacher's sessions).
+    Anyone else gets 403 whether or not the student exists.
+    """
     import base64
     from fastapi.responses import Response
 
     from app.core.uploads import student_photo_path
+    from app.services.photo_access import can_view_student_photo, find_student_profile
+
+    db = get_database()
+    doc = await find_student_profile(db, student_id)
+    if not await can_view_student_photo(db, current_user, student_id, doc):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not allowed to view this student's photo.",
+        )
 
     try:
         file_path = student_photo_path(student_id)
@@ -122,14 +145,10 @@ async def get_student_photo_endpoint(student_id: str):
         return Response(
             content=content,
             media_type="image/jpeg",
-            headers={"Cache-Control": "public, max-age=86400"},
+            headers=PRIVATE_PHOTO_HEADERS,
         )
 
     # Check MongoDB student_profiles collection for photo_base64
-    db = get_database()
-    doc = await db["student_profiles"].find_one(
-        {"$or": [{"student_id": student_id}, {"identity": student_id}]}
-    )
     photo_b64 = doc.get("photo_base64") if doc else None
     if not photo_b64:
         bio_doc = await db["biometric_profiles"].find_one({"identity": student_id})
@@ -147,7 +166,7 @@ async def get_student_photo_endpoint(student_id: str):
             return Response(
                 content=content,
                 media_type="image/jpeg",
-                headers={"Cache-Control": "public, max-age=86400"},
+                headers=PRIVATE_PHOTO_HEADERS,
             )
         except Exception:
             pass

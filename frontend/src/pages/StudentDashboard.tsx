@@ -4,6 +4,7 @@ import type {
   StudentAttendanceDashboardResponse,
   UserResponse,
 } from "../types";
+import { AuthenticatedImage } from "../components/common/AuthenticatedImage";
 import "./student-dashboard.css";
 
 interface StudentDashboardProps {
@@ -280,11 +281,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       <div className="erp-card" style={{ padding: "2.25rem" }}>
         {/* Prominent Profile Photo */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "1.75rem" }}>
-          {profile?.photo_url ? (
-            <img
-              src={profile.photo_url}
-              alt={profile.name}
-              style={{
+          {/* The photo needs the student's token, so it cannot be a plain <img src>. */}
+          <AuthenticatedImage
+            src={profile?.photo_url}
+            alt={profile?.name || "Profile photo"}
+            style={{
                 width: "96px",
                 height: "96px",
                 borderRadius: "50%",
@@ -292,26 +293,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 border: "3px solid var(--erp-primary)",
                 boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
               }}
-            />
-          ) : (
-            <div
-              style={{
-                width: "96px",
-                height: "96px",
-                borderRadius: "50%",
-                background: "var(--erp-primary-light)",
-                border: "2px solid var(--erp-primary-border)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "2.5rem",
-                color: "var(--erp-primary)",
-                fontWeight: 700,
-              }}
-            >
-              {profile?.name ? profile.name.charAt(0) : "S"}
-            </div>
-          )}
+            fallback={
+              <div
+                style={{
+                  width: "96px",
+                  height: "96px",
+                  borderRadius: "50%",
+                  background: "var(--erp-primary-light)",
+                  border: "2px solid var(--erp-primary-border)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "2.5rem",
+                  color: "var(--erp-primary)",
+                  fontWeight: 700,
+                }}
+              >
+                {profile?.name ? profile.name.charAt(0) : "S"}
+              </div>
+            }
+          />
 
           <h2 style={{ fontSize: "1.35rem", fontWeight: 700, color: "var(--erp-navy)", marginTop: "0.85rem", marginBottom: "0.15rem" }}>
             {profile?.name || user.email}

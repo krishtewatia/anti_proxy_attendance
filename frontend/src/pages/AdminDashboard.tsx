@@ -8,6 +8,7 @@ import type {
   UserResponse,
 } from "../types";
 import "./admin-dashboard.css";
+import { AuthenticatedImage } from "../components/common/AuthenticatedImage";
 
 interface Props {
   user: UserResponse;
@@ -456,18 +457,17 @@ export const AdminDashboard: React.FC<Props> = ({
                     <tr key={s.user_id}>
                       <td style={{ fontWeight: 600 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                          {s.photo_url ? (
-                            <img
-                              src={s.photo_url}
-                              alt={s.name}
-                              style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover", border: "1px solid var(--erp-border)" }}
-                              onError={(e) => { (e.currentTarget as HTMLElement).style.display = "none"; }}
-                            />
-                          ) : (
-                            <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.75rem", fontWeight: 700, color: "#475569" }}>
-                              {s.name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                          {/* The photo needs the admin's token, so it cannot be a plain <img src>. */}
+                          <AuthenticatedImage
+                            src={s.photo_url}
+                            alt={s.name}
+                            style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover", border: "1px solid var(--erp-border)" }}
+                            fallback={
+                              <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.75rem", fontWeight: 700, color: "#475569" }}>
+                                {s.name.charAt(0).toUpperCase()}
+                              </div>
+                            }
+                          />
                           <span>{s.name}</span>
                         </div>
                       </td>
