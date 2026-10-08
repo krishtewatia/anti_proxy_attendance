@@ -73,8 +73,13 @@ RUN mkdir -p /home/visionuser/.insightface/models /app/data && \
 # Copy application source code
 COPY --chown=visionuser:visiongroup . /app
 
-# Liveness models, read-only for the service user
-COPY --from=liveness-models --chown=root:root --chmod=0444 /liveness/ /app/models/liveness/
+# Liveness models, read-only for the service user. The directory is created
+# first with normal permissions: copying a directory with --chmod=0444 would
+# also strip its execute bit, and the service could then not open the files.
+RUN mkdir -p /app/models/liveness && chmod 0755 /app/models /app/models/liveness
+COPY --from=liveness-models --chown=root:root --chmod=0444     /liveness/minifasnet_v2_scale2.7_80x80.onnx     /liveness/minifasnet_v1se_scale4.0_80x80.onnx     /app/models/liveness/
+# Fail the build if the service user cannot read them.
+RUN su -s /bin/sh visionuser -c 'test -r /app/models/liveness/minifasnet_v2_scale2.7_80x80.onnx && test -r /app/models/liveness/minifasnet_v1se_scale4.0_80x80.onnx'
 
 USER visionuser
 

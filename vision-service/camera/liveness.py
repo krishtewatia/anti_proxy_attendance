@@ -280,9 +280,14 @@ def load_liveness_checker(
     """Load the model for the configured mode.
 
     enforce fails closed: without a usable model the service must not start.
-    observe starts without one, logging that nothing is being checked.
+    The same applies in any mode when LIVENESS_MODEL_DIR is set, as it is in
+    the image: a model that was meant to be there and cannot be loaded is a
+    broken deployment, not something to continue past. Only a development run
+    with no model directory configured starts in observe mode without one,
+    logging that nothing is being checked.
     """
-    directory = Path(model_dir or os.getenv("LIVENESS_MODEL_DIR") or DEFAULT_MODEL_DIR)
+    configured_dir = model_dir or os.getenv("LIVENESS_MODEL_DIR")
+    directory = Path(configured_dir or DEFAULT_MODEL_DIR)
     limit = resolve_liveness_threshold() if threshold is None else threshold
     try:
         checker = MiniFASNetLiveness(directory, threshold=limit)
@@ -290,6 +295,11 @@ def load_liveness_checker(
         if mode == MODE_ENFORCE:
             raise RuntimeError(
                 f"LIVENESS_MODE=enforce but the liveness model could not be loaded from {directory}: {exc}"
+            ) from exc
+        if configured_dir:
+            raise RuntimeError(
+                f"LIVENESS_MODEL_DIR is set to {directory} but the liveness model could not be "
+                f"loaded from it: {exc}"
             ) from exc
         logger.warning(
             "Liveness model not loaded (%s); observe mode continues without checking.", exc
