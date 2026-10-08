@@ -8,18 +8,14 @@ from pydantic import BaseModel, ConfigDict
 
 from app.api.dependencies.auth import require_admin
 from app.database.academic import add_academic_class, add_subject
-from app.database.biometric_profiles import delete_biometric_profile
+from app.database.mongodb import get_database
 from app.database.sessions import (
     create_session,
     delete_session_in_db,
     get_all_sessions_in_db,
     get_session,
 )
-from app.database.student_profiles import (
-    delete_student_profile,
-    get_student_profile_by_user_id,
-    list_all_students_full,
-)
+from app.database.student_profiles import list_all_students_full
 from app.database.teacher_profiles import (
     assign_classes_to_teacher,
     delete_teacher_profile,
@@ -38,6 +34,11 @@ from app.schemas.teacher import (
     TeacherRegisterRequest,
 )
 from app.services.session_enrollment import get_enrolled_roster
+from app.services.student_deletion import (
+    NotAStudentAccount,
+    StudentNotFound,
+    delete_student_completely,
+)
 from app.services.session_finalization import finalize_session_attendance
 from app.services.student_service import register_student_account
 from app.services.teacher_service import register_teacher_account
@@ -166,18 +167,35 @@ async def admin_create_student(
 
 @router.delete(
     "/students/{user_id}",
-    summary="Admin delete a student account and biometric record",
+    summary="Admin delete a student and everything held about them",
 )
 async def admin_delete_student(
     user_id: str,
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> dict:
-    prof = await get_student_profile_by_user_id(user_id)
-    if prof:
-        await delete_biometric_profile(prof.get("identity") or prof.get("student_id"))
-    await delete_student_profile(user_id)
-    await delete_user_by_id(user_id)
-    return {"status": "deleted", "user_id": user_id}
+    """Remove everything held about a student and record one audit entry.
+
+    Account, profile, face template, stored photo, attendance records and
+    their corrections, doorway events and roster entries all go. Only student
+    accounts can be deleted here.
+    """
+    try:
+        result = await delete_student_completely(get_database(), user_id, deleted_by=current_user)
+    except StudentNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Student '{user_id}' not found"
+        )
+    except NotAStudentAccount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account is not a student account and cannot be deleted here.",
+        )
+    return {
+        "status": "deleted",
+        "user_id": user_id,
+        "student_id": result.student_id,
+        "removed": result.counts(),
+    }
 
 
 # --- 3. TEACHER MANAGEMENT ---
@@ -222,6 +240,13 @@ async def admin_delete_teacher(
     user_id: str,
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> dict:
+    # Only teacher accounts: this route must not delete a student or an administrator.
+    account = await get_database()["users"].find_one({"user_id": user_id}, {"role": 1})
+    if account is not None and account.get("role") != "TEACHER":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account is not a teacher account and cannot be deleted here.",
+        )
     await delete_teacher_profile(user_id)
     await delete_user_by_id(user_id)
     return {"status": "deleted", "user_id": user_id}

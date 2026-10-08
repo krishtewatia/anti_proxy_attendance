@@ -39,8 +39,9 @@ flowchart LR
    - The user account in `users`.
    - The student record in `student_profiles`.
    - The biometric embedding in `biometric_profiles`.
-   - An immutable record of the deletion action is recorded in `audit_events`.
-   > This describes the intended behaviour. The current route does less: see [6.2](#62-deleting-a-student-does-not-remove-everything).
+   - The stored profile photo in the uploads volume.
+   - The student's attendance records, the corrections made to them, doorway events, and the student's entries on session rosters.
+   - One `STUDENT_DELETED` entry is recorded in `audit_events`, with the student's ID and counts only.
 2. **Session Archiving**:
    Session transit events in `attendance_events` can be configured with automated MongoDB Time-To-Live (TTL) expiration (e.g., 90 days after academic term completion).
 3. **Outbox Ephemerality**:
@@ -139,16 +140,12 @@ Embeddings are not exposed by this: they are served only to an administrator and
 
 **Must be fixed before** the system is deployed anywhere reachable by people outside the project (the AWS deployment phase).
 
-### 6.2 Deleting a student does not remove everything
+### 6.2 Deleting a student did not remove everything
 
-**Status: open, found 2026-10-08. No decision yet.**
+**Status: fixed (2026-10-08).**
 
-Section 2 describes a cascading, audited purge. What `DELETE /api/v1/admin/students/{user_id}` actually does is remove the user account, the student profile and the face template. It does not:
-- write an audit entry,
-- delete the student's stored photo from the uploads volume,
-- remove the student's attendance records or their entries on session rosters,
-- tell the vision service to drop the student from its in-memory gallery (that happens at the next gallery sync).
+`DELETE /api/v1/admin/students/{user_id}` used to remove only the user account, the student profile and the face template. It wrote no audit entry and left the stored photo, the attendance records and the roster entries behind. It also deleted whatever user ID it was given, including a teacher's or an administrator's.
 
-`DELETE /api/v1/enrollment/{identity}` removes only the face template, and does write an audit entry.
+It now removes everything held about the student, as section 2 describes: account, profile, face template, stored photo, attendance records and their corrections, doorway events, and the student's entries on session rosters. It asks the vision service to reload its gallery, and writes one `STUDENT_DELETED` audit entry holding the student's ID and the counts of what was removed, but not the name, email or any image data. It refuses accounts that are not students, and `DELETE /api/v1/admin/teachers/{user_id}` likewise refuses accounts that are not teachers.
 
-Until this is fixed, a complete deletion needs both API calls followed by a manual clean-up of attendance records, roster entries and the photo file. A fix would make the admin route remove all of these and record one audit entry, which also needs a dedicated audit action for student deletion (none exists today).
+Not removed, deliberately: earlier audit entries that mention the student's ID (the audit log is append-only), and the sessions themselves.
