@@ -465,8 +465,16 @@ export const api = {
     });
   },
 
-  deleteAdminStudent(userId: string): Promise<{ status: string; user_id: string }> {
-    return request<{ status: string; user_id: string }>(`/api/v1/admin/students/${encodeURIComponent(userId)}`, {
+  // Removes the account, profile, face template, photo, attendance records and roster entries.
+  deleteAdminStudent(
+    userId: string,
+  ): Promise<{ status: string; user_id: string; student_id?: string; removed?: Record<string, number | boolean> }> {
+    return request<{
+      status: string;
+      user_id: string;
+      student_id?: string;
+      removed?: Record<string, number | boolean>;
+    }>(`/api/v1/admin/students/${encodeURIComponent(userId)}`, {
       method: "DELETE",
     });
   },
