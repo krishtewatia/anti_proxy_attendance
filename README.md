@@ -642,6 +642,7 @@ The default stays `observe` until the threshold has been calibrated on a measure
 ## Known Limitations
 
 - **Single Active Session per Teacher**: Teachers are restricted to one active attendance session at a time.
+- **Teacher accounts can be self-registered (deferred by owner)**: anyone who can reach the API can register as a teacher, and a teacher with no assigned classes can create a session for any class and so see its roster and photos. Planned fix: admin-created teacher accounts, and sessions only for assigned classes. Details in [docs/security/security_and_privacy.md](docs/security/security_and_privacy.md#61-teacher-accounts-can-be-self-registered). It must be fixed before any deployment outside a local machine.
 - **Liveness is not yet enforced by default**: the gate runs in observe mode until its threshold is calibrated, so a held-up photo is logged but still marked unless `LIVENESS_MODE=enforce` is set. It has been measured on one person and one camera only.
 - **2D Facial Recognition**: The standard ArcFace pipeline uses 2D RGB frames without depth-sensing hardware; extreme angles or severe lighting variations can reduce match confidence.
 - **Client Processing**: Browser frame extraction frequency depends on the client machine's processing power.

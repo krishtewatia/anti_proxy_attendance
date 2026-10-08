@@ -40,6 +40,7 @@ flowchart LR
    - The student record in `student_profiles`.
    - The biometric embedding in `biometric_profiles`.
    - An immutable record of the deletion action is recorded in `audit_events`.
+   > This describes the intended behaviour. The current route does less: see [6.2](#62-deleting-a-student-does-not-remove-everything).
 2. **Session Archiving**:
    Session transit events in `attendance_events` can be configured with automated MongoDB Time-To-Live (TTL) expiration (e.g., 90 days after academic term completion).
 3. **Outbox Ephemerality**:
@@ -53,6 +54,7 @@ flowchart LR
    - **`ADMIN`**: Can enroll students, view system audit logs, and register cameras. Cannot alter finalized attendance without audit logging.
    - **`TEACHER`**: Can schedule sessions, monitor live feeds, finalize attendance, and apply manual corrections. Cannot access raw biometric galleries.
    - **`STUDENT`**: Can only view personal attendance records.
+   > Teacher accounts are currently open to self-registration, which weakens the `TEACHER` boundary above. See [6.1](#61-teacher-accounts-can-be-self-registered).
 2. **Machine-to-Machine Isolation**:
    - Camera nodes authenticate via pre-shared service keys (`X-Camera-Token` or `Authorization: Bearer`).
    - Camera tokens grant access **exclusively** to the event ingestion endpoint (`POST /api/v1/events`). Camera tokens cannot access session records, user data, or administrative tools.
@@ -103,3 +105,50 @@ Instead of relying on a fragile, CPU-heavy neural liveness classifier, the syste
 > 2. Implement explicit, consent-driven opt-in enrollment protocols.
 > 3. Provide an accessible non-biometric attendance alternative for non-consenting students.
 > 4. Ensure cryptographic storage encryption at rest (e.g., LUKS, MongoDB Encrypted Storage Engine).
+
+---
+
+## 6. Known Security Gaps
+
+Gaps that are known and not yet fixed. Each entry says who decided what, and what the fix will be.
+
+### 6.1 Teacher accounts can be self-registered
+
+**Status: deferred by owner (2026-10-08). No code change yet.**
+
+**What the gap is**
+- `POST /api/v1/auth/register` accepts the role `TEACHER`, and `POST /api/v1/teachers/register` is public. Anyone who can reach the API can create a teacher account. (The role `ADMIN` cannot be self-registered.)
+- When a session is created, the "class must be assigned to you" check only applies to teachers who have assigned classes. A teacher with none can create a session for any class, and the session's roster is filled from that class.
+
+**What it allows**
+A person with no connection to the institution can register as a teacher, create a session for any class, and then:
+- see that class's roster (names, student IDs, roll numbers),
+- load the profile photo of every student on it, because "the student is on a roster of one of my sessions" is one of the rules that grants photo access,
+- mark, correct and finalize attendance for that session, and export it.
+
+Embeddings are not exposed by this: they are served only to an administrator and to the internal vision service.
+
+**What limits it today**
+- The system runs locally for demonstration; it is not deployed on a public network.
+- Session creation, corrections and finalization are written to the audit log with the teacher's user ID.
+
+**Planned fix**
+1. Teacher accounts are created only by an administrator. Remove `TEACHER` from the roles accepted by public registration and put `POST /api/v1/teachers/register` behind the admin role.
+2. A teacher can create a session only for a class assigned to them. A teacher with no assigned classes can create none.
+3. Tests for both, and the public-route allowlist in `backend/tests/test_photo_route_auth.py` shrinks by one entry.
+
+**Must be fixed before** the system is deployed anywhere reachable by people outside the project (the AWS deployment phase).
+
+### 6.2 Deleting a student does not remove everything
+
+**Status: open, found 2026-10-08. No decision yet.**
+
+Section 2 describes a cascading, audited purge. What `DELETE /api/v1/admin/students/{user_id}` actually does is remove the user account, the student profile and the face template. It does not:
+- write an audit entry,
+- delete the student's stored photo from the uploads volume,
+- remove the student's attendance records or their entries on session rosters,
+- tell the vision service to drop the student from its in-memory gallery (that happens at the next gallery sync).
+
+`DELETE /api/v1/enrollment/{identity}` removes only the face template, and does write an audit entry.
+
+Until this is fixed, a complete deletion needs both API calls followed by a manual clean-up of attendance records, roster entries and the photo file. A fix would make the admin route remove all of these and record one audit entry, which also needs a dedicated audit action for student deletion (none exists today).
