@@ -440,7 +440,15 @@ docker run --rm -v anti_proxy_uploads:/data alpine ls -l /data/student_profiles
 docker volume rm anti_proxy_uploads
 ```
 
-The second command deletes every stored photo; stop the stack first. A photo that is missing from the volume is restored from the student record the next time it is requested.
+The second command deletes every stored photo; stop the stack first.
+
+**Moving photos from an older checkout.** Versions before the uploads volume kept photos in `backend/uploads/`. To move them, run this once from the folder that holds `docker-compose.yml`, with the stack running:
+
+```bash
+docker compose run --rm --no-deps -v "/path/to/old/backend/uploads:/legacy_uploads:ro" backend python -m app.tools.migrate_uploads --source /legacy_uploads --dry-run
+```
+
+Remove `--dry-run` to copy. Each photo is checked against the student it is named after: it must be identical to the copy in the student record, or its face must match the student's enrolled template (checked by the vision service). A photo that matches no student or fails the check is not copied; one that cannot be checked is left behind unless `--include-unverified` is given. Photos that exist only inside a student record are written out too. The command prints counts and ends with either `SAFE TO DELETE the old folder` or the list of photos that still need attention. It never deletes or changes the old folder.
 
 ### 5. Other Endpoints
 - **FastAPI OpenAPI Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)

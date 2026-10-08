@@ -148,7 +148,9 @@ async def get_student_photo_endpoint(
             headers=PRIVATE_PHOTO_HEADERS,
         )
 
-    # Check MongoDB student_profiles collection for photo_base64
+    # Older records keep a copy of the photo inside the student record. Serve
+    # it from there, but never write on a read: copying photos into the
+    # uploads directory is done once, by `python -m app.tools.migrate_uploads`.
     photo_b64 = doc.get("photo_base64") if doc else None
     if not photo_b64:
         bio_doc = await db["biometric_profiles"].find_one({"identity": student_id})
@@ -161,15 +163,10 @@ async def get_student_photo_endpoint(
             raw_b64 = raw_b64.split(",", 1)[1]
         try:
             content = base64.b64decode(raw_b64)
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.write_bytes(content)
-            return Response(
-                content=content,
-                media_type="image/jpeg",
-                headers=PRIVATE_PHOTO_HEADERS,
-            )
-        except Exception:
-            pass
+        except ValueError:
+            content = b""
+        if content:
+            return Response(content=content, media_type="image/jpeg", headers=PRIVATE_PHOTO_HEADERS)
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND, detail="Student photograph not found"

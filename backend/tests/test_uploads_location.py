@@ -182,9 +182,8 @@ async def test_uploaded_photo_is_written_outside_the_repository(
 
 
 @pytest.mark.anyio
-async def test_photo_restored_from_the_database_is_also_written_outside_the_repository(
-    fresh_db, tmp_path, monkeypatch
-):
+async def test_reading_a_photo_kept_in_the_student_record_writes_no_file(fresh_db, tmp_path, monkeypatch):
+    """A GET never writes: copying photos into the uploads directory is the migration command's job."""
     target = tmp_path / "uploads-volume"
     monkeypatch.setenv("UPLOADS_DIR", str(target))
     await mongodb.get_database()["student_profiles"].insert_one(
@@ -195,7 +194,8 @@ async def test_photo_restored_from_the_database_is_also_written_outside_the_repo
     photo = TestClient(app).get("/api/v1/students/UPLOC002/photo", headers=await _admin_headers())
 
     assert photo.status_code == 200
-    assert (target / "student_profiles" / "UPLOC002.jpg").is_file()
+    assert photo.content == b"placeholder photo bytes"
+    assert [p for p in tmp_path.rglob("*") if p.is_file()] == []
     assert _files_in_source_tree() - before == set()
 
 
