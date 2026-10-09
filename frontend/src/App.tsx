@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { AuthPage } from "./pages/AuthPage";
+import { AuthLayout } from "./components/auth/AuthLayout";
+import { ChangePasswordForm } from "./components/auth/ChangePasswordForm";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AppLayout } from "./components/layout/AppLayout";
 import { TeacherAttendanceFlow } from "./pages/TeacherAttendanceFlow";
@@ -17,6 +19,10 @@ export function App() {
   const [activeNavId, setActiveNavId] = useState<string>("dashboard");
   // Registrations and photo changes waiting for an administrator (admin badge).
   const [pendingApprovals, setPendingApprovals] = useState<number>(0);
+  // An account created or reset by an administrator must choose a password first.
+  const [mustChangePassword, setMustChangePassword] = useState<boolean>(() =>
+    auth.mustChangePassword()
+  );
   const [currentPath, setCurrentPath] = useState<string>(() => {
     if (typeof window !== "undefined") {
       return window.location.pathname || "/";
@@ -44,6 +50,7 @@ export function App() {
   useEffect(() => {
     const handlePopState = () => {
       setCurrentUser(auth.getStoredUser());
+      setMustChangePassword(auth.mustChangePassword());
       setCurrentPath(window.location.pathname || "/");
     };
 
@@ -60,6 +67,7 @@ export function App() {
 
   const handleLoginSuccess = (response: TokenResponse) => {
     setCurrentUser(response.user);
+    setMustChangePassword(Boolean(response.must_change_password));
     setActiveNavId("dashboard");
     const targetDashboard = getDashboardPath(response.user.role);
     navigate(targetDashboard);
@@ -68,9 +76,62 @@ export function App() {
   const handleLogout = () => {
     auth.logout();
     setCurrentUser(null);
+    setMustChangePassword(false);
     setActiveNavId("dashboard");
     navigate("/");
   };
+
+  const openChangePassword = () => navigate("/account/password");
+
+  // Before anything else: an account that must change its password sees only that.
+  if (currentUser && auth.isAuthenticated() && mustChangePassword) {
+    return (
+      <AuthLayout>
+        <ChangePasswordForm
+          forced
+          onDone={() => {
+            setMustChangePassword(false);
+            setCurrentUser(auth.getStoredUser());
+            navigate(getDashboardPath(currentUser.role));
+          }}
+          onCancel={handleLogout}
+        />
+      </AuthLayout>
+    );
+  }
+
+  // Any signed-in user can change their own password.
+  if (currentPath === "/account/password") {
+    return (
+      <ProtectedRoute currentUser={currentUser} onNavigate={navigate}>
+        {currentUser && (
+          <AppLayout
+            user={currentUser}
+            onLogout={handleLogout}
+            activeNavId=""
+            onSelectNav={handleNavSelect}
+          >
+            <div style={{ maxWidth: "440px", margin: "0 auto" }}>
+              <div className="erp-page-header">
+                <h1 className="erp-page-title">Change Password</h1>
+                <p className="erp-page-subtitle">{currentUser.email}</p>
+              </div>
+              <div className="erp-card" style={{ padding: "1.5rem" }}>
+                <ChangePasswordForm
+                  forced={false}
+                  onDone={() => {
+                    setCurrentUser(auth.getStoredUser());
+                    navigate(getDashboardPath(currentUser.role));
+                  }}
+                  onCancel={() => navigate(getDashboardPath(currentUser.role))}
+                />
+              </div>
+            </div>
+          </AppLayout>
+        )}
+      </ProtectedRoute>
+    );
+  }
 
   // Route 1: Teacher Attendance Flow (ERP Multi-view Workflow)
   if (currentPath === "/teacher/dashboard" || currentPath === "/dashboard/teacher") {
@@ -85,6 +146,7 @@ export function App() {
             user={currentUser}
             onLogout={handleLogout}
             activeNavId={activeNavId}
+            onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}
           >
             <TeacherAttendanceFlow
@@ -117,6 +179,7 @@ export function App() {
             user={currentUser}
             onLogout={handleLogout}
             activeNavId={activeNavId}
+            onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}
           >
             <SessionDetails
@@ -143,6 +206,7 @@ export function App() {
             user={currentUser}
             onLogout={handleLogout}
             activeNavId={activeNavId}
+            onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}
           >
             <StudentDashboard
@@ -171,6 +235,7 @@ export function App() {
             user={currentUser}
             onLogout={handleLogout}
             activeNavId={activeNavId}
+            onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}
             navBadges={{ approvals: pendingApprovals }}
           >

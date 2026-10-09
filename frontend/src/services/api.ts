@@ -30,8 +30,9 @@ import type {
   TeacherProfileResponse,
   TeacherRegisterRequest,
 } from "../types";
-import { clearStoredAuth, getStoredToken } from "./auth.ts";
+import { clearStoredAuth, getStoredToken, setMustChangePassword } from "./auth.ts";
 import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
+import type { AdminAccount, StudentEditFields, TeacherEditFields } from "../utils/accounts.ts";
 
 export const getApiBaseUrl = (): string => {
   if (import.meta.env?.VITE_API_BASE_URL) {
@@ -91,6 +92,13 @@ async function request<T>(
       } else if (typeof errorBody?.detail?.message === "string") {
         // Structured errors, e.g. { code: "account_pending", message: "..." }
         detail = errorBody.detail.message;
+        if (errorBody.detail.code === "password_change_required") {
+          // The app shows the change-password screen until this is cleared.
+          setMustChangePassword(true);
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new PopStateEvent("popstate"));
+          }
+        }
       }
     } catch {
       // Keep the default error message.
@@ -118,6 +126,13 @@ export const api = {
     return request<TokenResponse>("/api/v1/auth/login", {
       method: "POST",
       body: JSON.stringify(data),
+    });
+  },
+
+  changePassword(currentPassword: string, newPassword: string): Promise<TokenResponse> {
+    return request<TokenResponse>("/api/v1/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     });
   },
 
@@ -529,6 +544,54 @@ export const api = {
     });
   },
 
+  // --- Account management (admin) ---
+
+  updateAdminStudent(
+    userId: string,
+    changes: Partial<StudentEditFields>,
+  ): Promise<{ status: string; user_id: string; changed: string[] }> {
+    return request<{ status: string; user_id: string; changed: string[] }>(
+      `/api/v1/admin/students/${encodeURIComponent(userId)}`,
+      { method: "PATCH", body: JSON.stringify(changes) },
+    );
+  },
+
+  updateAdminTeacher(
+    userId: string,
+    changes: Partial<TeacherEditFields>,
+  ): Promise<{ status: string; user_id: string; changed: string[] }> {
+    return request<{ status: string; user_id: string; changed: string[] }>(
+      `/api/v1/admin/teachers/${encodeURIComponent(userId)}`,
+      { method: "PATCH", body: JSON.stringify(changes) },
+    );
+  },
+
+  // The temporary password comes back once, in this response only.
+  resetUserPassword(userId: string): Promise<{ user_id: string; temporary_password: string }> {
+    return request<{ user_id: string; temporary_password: string }>(
+      `/api/v1/admin/users/${encodeURIComponent(userId)}/reset-password`,
+      { method: "POST" },
+    );
+  },
+
+  getAdmins(): Promise<AdminAccount[]> {
+    return request<AdminAccount[]>("/api/v1/admin/admins");
+  },
+
+  createAdmin(data: { name: string; email: string; password: string }): Promise<AdminAccount> {
+    return request<AdminAccount>("/api/v1/admin/admins", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteAdmin(userId: string): Promise<{ status: string; user_id: string }> {
+    return request<{ status: string; user_id: string }>(
+      `/api/v1/admin/admins/${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+    );
+  },
+
   getAdminTeachers(): Promise<TeacherProfileResponse[]> {
     return request<TeacherProfileResponse[]>("/api/v1/admin/teachers");
   },
@@ -540,8 +603,9 @@ export const api = {
     });
   },
 
-  deleteAdminTeacher(userId: string): Promise<{ status: string; user_id: string }> {
-    return request<{ status: string; user_id: string }>(`/api/v1/admin/teachers/${encodeURIComponent(userId)}`, {
+  // Keeps the sessions and attendance the teacher recorded.
+  deleteAdminTeacher(userId: string): Promise<{ status: string; user_id: string; sessions_kept?: number }> {
+    return request<{ status: string; user_id: string; sessions_kept?: number }>(`/api/v1/admin/teachers/${encodeURIComponent(userId)}`, {
       method: "DELETE",
     });
   },

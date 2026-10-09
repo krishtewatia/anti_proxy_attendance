@@ -271,6 +271,7 @@ def run_flow(
     service_key: str | None,
     admin_email: str | None,
     admin_password: str | None,
+    admin_replacement_password: str | None,
     teacher_email: str | None,
     teacher_password: str | None,
     class_code: str,
@@ -303,6 +304,41 @@ def run_flow(
         ):
             return
         admin_auth = {"Authorization": f"Bearer {login.get('access_token', '')}"}
+
+        # An administrator created from the environment must replace that
+        # password before the account can do anything else.
+        if login.get("must_change_password"):
+            if not admin_replacement_password:
+                checks.check(
+                    "administrator can act",
+                    False,
+                    "this administrator must change their password first; log in once and change it",
+                )
+                return
+            status, blocked = api.call("GET", "/api/v1/admin/approvals/count", headers=admin_auth)
+            checks.check(
+                "administrator is blocked until the first password is changed",
+                status == 403 and "password_change_required" in json.dumps(blocked),
+                describe_response(status, blocked),
+            )
+            status, changed = api.post_json(
+                "/api/v1/auth/change-password",
+                {"current_password": admin_password, "new_password": admin_replacement_password},
+                admin_auth,
+            )
+            if not checks.check(
+                "administrator changes the first password",
+                status == 200 and not changed.get("must_change_password"),
+                describe_response(status, changed),
+            ):
+                return
+            status, _ = api.call("GET", "/api/v1/admin/approvals/count", headers=admin_auth)
+            checks.check(
+                "the token from before the password change is refused",
+                status == 401,
+                f"HTTP {status}",
+            )
+            admin_auth = {"Authorization": f"Bearer {changed.get('access_token', '')}"}
     else:
         checks.skip(
             "administrator logged in",
@@ -800,6 +836,8 @@ def main() -> int:
             service_key=None,
             admin_email=os.environ.get("SMOKE_ADMIN_EMAIL"),
             admin_password=os.environ.get("SMOKE_ADMIN_PASSWORD"),
+            # Never change the password of an administrator on a real deployment.
+            admin_replacement_password=None,
             teacher_email=os.environ.get("SMOKE_TEACHER_EMAIL"),
             teacher_password=os.environ.get("SMOKE_TEACHER_PASSWORD"),
             fresh_database=False,
@@ -811,6 +849,8 @@ def main() -> int:
         # The throwaway stack creates its own first administrator from these.
         admin_email = f"smoke_admin_{uuid.uuid4().hex[:6]}@smoke.test"
         admin_password = secrets.token_urlsafe(24)
+        # The flow replaces the first password, as every new administrator must.
+        admin_current_password = secrets.token_urlsafe(24)
         env = {
             **os.environ,
             "SMOKE_JWT_SECRET_KEY": secrets.token_hex(32),
@@ -833,6 +873,7 @@ def main() -> int:
                 service_key=service_key,
                 admin_email=admin_email,
                 admin_password=admin_password,
+                admin_replacement_password=admin_current_password,
                 teacher_email=None,
                 teacher_password=None,
                 fresh_database=True,
@@ -846,7 +887,7 @@ def main() -> int:
                 # removed, so the credentials are shown for running other checks
                 # against it (for example the frontend's live suites).
                 print(f"Stack '{project}' left running (--keep) at {base_url or '(not started)'}")
-                print(f"  administrator: {admin_email} / {admin_password}")
+                print(f"  administrator: {admin_email} / {admin_current_password}")
                 print(f"  service key  : {service_key}")
                 print("Remove it with:")
                 print(f"  docker compose -p {project} -f {COMPOSE_FILE} down -v")

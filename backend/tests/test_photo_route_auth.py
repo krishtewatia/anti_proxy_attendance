@@ -298,7 +298,13 @@ PUBLIC_ROUTES = {
     ("POST", "/api/v1/students/register"),
     ("POST", "/api/v1/teachers/register"),
 }
-AUTH_DEPENDENCIES = {"get_current_user", "require_service_key", "require_camera_auth"}
+# get_authenticated_user is the token check itself; get_current_user builds on it.
+AUTH_DEPENDENCIES = {
+    "get_authenticated_user",
+    "get_current_user",
+    "require_service_key",
+    "require_camera_auth",
+}
 
 
 def _api_routes(routes):

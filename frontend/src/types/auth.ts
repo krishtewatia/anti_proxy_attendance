@@ -22,4 +22,6 @@ export interface TokenResponse {
   access_token: string;
   token_type: string;
   user: UserResponse;
+  // True when the only thing this token may do is change the password.
+  must_change_password?: boolean;
 }

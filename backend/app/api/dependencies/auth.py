@@ -11,12 +11,17 @@ from app.security.jwt import decode_access_token
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
+async def get_authenticated_user(
     credentials: Annotated[
         HTTPAuthorizationCredentials | None,
         Depends(bearer_scheme),
     ],
 ) -> dict:
+    """The user a valid token belongs to, even if they still have to change their password.
+
+    Only the password-change route depends on this directly; everything else
+    uses ``get_current_user``.
+    """
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -51,6 +56,34 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # A password change or reset raises the user's token version; a token
+    # issued before that is no longer accepted.
+    if int(payload.get("tv", 0) or 0) != int(user.get("token_version", 0) or 0):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return user
+
+
+PASSWORD_CHANGE_REQUIRED_DETAIL = {
+    "code": "password_change_required",
+    "message": "You must change your password before you can continue.",
+}
+
+
+async def get_current_user(
+    user: Annotated[dict, Depends(get_authenticated_user)],
+) -> dict:
+    # An account created by an administrator, or whose password an
+    # administrator reset, can do nothing until its owner has chosen a password.
+    if user.get("must_change_password"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=PASSWORD_CHANGE_REQUIRED_DETAIL,
+        )
     return user
 
 

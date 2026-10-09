@@ -141,8 +141,11 @@ async def get_student_photo_endpoint(
             detail="You are not allowed to view this student's photo.",
         )
 
+    # The file and the face template are kept under the internal identity,
+    # which stays the same when an administrator changes the student's ID.
+    identity = str((doc or {}).get("identity") or student_id)
     try:
-        file_path = student_photo_path(student_id)
+        file_path = student_photo_path(identity)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
 
@@ -159,7 +162,7 @@ async def get_student_photo_endpoint(
     # uploads directory is done once, by `python -m app.tools.migrate_uploads`.
     photo_b64 = doc.get("photo_base64") if doc else None
     if not photo_b64:
-        bio_doc = await db["biometric_profiles"].find_one({"identity": student_id})
+        bio_doc = await db["biometric_profiles"].find_one({"identity": identity})
         if bio_doc and bio_doc.get("photo_base64"):
             photo_b64 = bio_doc["photo_base64"]
 

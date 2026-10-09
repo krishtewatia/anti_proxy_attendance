@@ -18,10 +18,9 @@ from app.database.sessions import (
 from app.database.student_profiles import list_all_students_full
 from app.database.teacher_profiles import (
     assign_classes_to_teacher,
-    delete_teacher_profile,
     list_all_teachers,
 )
-from app.database.users import delete_user_by_id, get_all_users
+from app.database.users import get_all_users
 from app.schemas.academic import AcademicClass, Subject
 from app.schemas.session import SessionCreate, SessionResponse
 from app.schemas.student import (
@@ -32,6 +31,11 @@ from app.schemas.teacher import (
     TeacherAssignClassesRequest,
     TeacherProfileResponse,
     TeacherRegisterRequest,
+)
+from app.services.account_admin_service import (
+    AccountAdminError,
+    delete_teacher,
+    mark_created_by_admin,
 )
 from app.services.session_enrollment import get_enrolled_roster
 from app.services.student_deletion import (
@@ -136,7 +140,9 @@ async def admin_list_students(
             photo_url=(
                 s.get("photo_url")
                 or (
-                    f"/api/v1/students/{s.get('student_id')}/photo" if s.get("student_id") else None
+                    f"/api/v1/students/{s.get('identity') or s.get('student_id')}/photo"
+                    if (s.get("identity") or s.get("student_id"))
+                    else None
                 )
             ),
             has_biometric=s.get("has_biometric", False),
@@ -157,7 +163,7 @@ async def admin_create_student(
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> StudentProfileResponse:
     try:
-        return await register_student_account(
+        created = await register_student_account(
             payload, enrolled_by=current_user["user_id"], approved=True
         )
     except Exception as exc:
@@ -165,6 +171,11 @@ async def admin_create_student(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+    # The administrator typed the first password: the student must replace it.
+    await mark_created_by_admin(
+        get_database(), created.user_id, role="STUDENT", created_by=current_user
+    )
+    return created
 
 
 @router.delete(
@@ -226,12 +237,16 @@ async def admin_create_teacher(
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> TeacherProfileResponse:
     try:
-        return await register_teacher_account(payload, approved=True)
+        created = await register_teacher_account(payload, approved=True)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+    await mark_created_by_admin(
+        get_database(), created.user_id, role="TEACHER", created_by=current_user
+    )
+    return created
 
 
 @router.delete(
@@ -242,16 +257,21 @@ async def admin_delete_teacher(
     user_id: str,
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> dict:
-    # Only teacher accounts: this route must not delete a student or an administrator.
+    """Remove the teacher's account and profile and record one audit entry.
+
+    The sessions and attendance they recorded are kept. Refused while one of
+    their sessions is in progress. Only teacher accounts can be deleted here.
+    """
     account = await get_database()["users"].find_one({"user_id": user_id}, {"role": 1})
     if account is not None and account.get("role") != "TEACHER":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This account is not a teacher account and cannot be deleted here.",
         )
-    await delete_teacher_profile(user_id)
-    await delete_user_by_id(user_id)
-    return {"status": "deleted", "user_id": user_id}
+    try:
+        return await delete_teacher(get_database(), user_id, deleted_by=current_user)
+    except AccountAdminError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @router.post(

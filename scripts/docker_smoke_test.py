@@ -190,6 +190,10 @@ def run_smoke_test(
         )
         if admin_status != 200 or "access_token" not in admin_data:
             raise SmokeTestFailure(f"Administrator login failed (HTTP {admin_status})")
+        if admin_data.get("must_change_password"):
+            raise SmokeTestFailure(
+                "This administrator must change their password first: log in once and change it."
+            )
         approve_status, approve_data = http_request(
             f"{backend_url}/api/v1/admin/approvals/{teacher_user_id}/approve",
             method="POST",

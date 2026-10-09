@@ -178,17 +178,19 @@ async def get_student_profile_response(user_id: str) -> StudentProfileResponse |
         return None
 
     stu_id = doc.get("student_id") or doc.get("identity") or user_id
+    # Photos are stored under the internal identity, not the student ID.
+    photo_key = doc.get("identity") or stu_id
     photo_url = doc.get("photo_url")
     if not photo_url:
         from app.core.uploads import student_photo_path
 
         try:
-            photo_on_disk = student_photo_path(str(stu_id)).exists()
+            photo_on_disk = student_photo_path(str(photo_key)).exists()
         except ValueError:
             photo_on_disk = False
 
         if photo_on_disk or doc.get("photo_base64") or doc.get("has_biometric"):
-            photo_url = f"/api/v1/students/{stu_id}/photo"
+            photo_url = f"/api/v1/students/{photo_key}/photo"
 
     return StudentProfileResponse(
         user_id=doc["user_id"],

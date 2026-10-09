@@ -2,12 +2,23 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies.rate_limiter import check_registration_rate_limit
 
-from app.schemas.auth import TokenResponse, UserCreate, UserLogin, UserResponse
+from typing import Annotated
+
+from app.api.dependencies.auth import get_authenticated_user
+from app.schemas.auth import (
+    PasswordChangeRequest,
+    TokenResponse,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+)
 from app.services.auth_service import (
     AccountPendingError,
     AuthenticationError,
     DuplicateUserError,
+    PasswordChangeError,
     authenticate_user,
+    change_own_password,
     register_user,
 )
 
@@ -50,4 +61,28 @@ async def login(credentials: UserLogin) -> TokenResponse:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
             headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+
+@router.post(
+    "/change-password",
+    response_model=TokenResponse,
+    summary="Change your own password; every earlier token stops working",
+)
+async def change_password(
+    payload: PasswordChangeRequest,
+    # Not get_current_user: this is the one route a user who must change their
+    # password is allowed to call.
+    current_user: Annotated[dict, Depends(get_authenticated_user)],
+) -> TokenResponse:
+    try:
+        return await change_own_password(
+            current_user,
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+        )
+    except PasswordChangeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
         ) from exc

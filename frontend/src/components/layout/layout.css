@@ -168,6 +168,12 @@
   color: #b91c1c;
 }
 
+.erp-btn-account:hover {
+  background: var(--erp-surface-subtle);
+  border-color: var(--erp-border);
+  color: var(--erp-text-body);
+}
+
 /* ERP Body Layout */
 .erp-body {
   display: flex;
