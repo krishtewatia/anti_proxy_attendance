@@ -24,6 +24,7 @@ from app.database.attendance import (
 )
 from app.database.mongodb import get_database
 from app.database.session_roster import get_session_roster
+from app.database.sessions import session_was_taken
 from app.schemas.attendance import AttendanceRecord
 from app.schemas.attendance_response import (
     AttendanceSessionResponse,
@@ -203,6 +204,7 @@ async def get_session_attendance(
         course_name=session.get("course_name"),
         total_students=len(summary_items),
         present_count=present_count,
+        was_taken=session_was_taken(session, existing_records),
         records=summary_items,
     )
 
@@ -234,13 +236,15 @@ async def export_session_attendance_csv(
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Student ID", "Student Name", "Status"])
+    # A session that was never taken has no absences to export.
+    taken = session_was_taken(session, records)
 
     for ident in roster_identities:
         s_info = student_map.get(ident, {})
         stu_id = s_info.get("student_id", ident)
         stu_name = s_info.get("name", ident)
         rec = records_by_ident.get(ident)
-        st = rec.get("status", "ABSENT") if rec else "ABSENT"
+        st = (rec.get("status", "ABSENT") if rec else "ABSENT") if taken else "Not taken"
         writer.writerow([stu_id, stu_name, st])
 
     csv_data = output.getvalue()

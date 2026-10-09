@@ -105,7 +105,9 @@ async def test_an_admin_can_open_every_view_of_a_session_they_do_not_own():
         export = await client.get(f"/api/v1/attendance/{session_id}/export", headers=admin)
     assert detail.json()["created_by"] == "teacher_owner"
     assert [r["student_id"] for r in attendance.json()["records"]] == ["ACC-STU"]
-    assert "ACC-STU,Access Student,ABSENT" in export.text
+    # The session was created but never started, so nobody in it is absent.
+    assert "ACC-STU,Access Student,Not taken" in export.text
+    assert attendance.json()["was_taken"] is False
 
 
 @pytest.mark.anyio

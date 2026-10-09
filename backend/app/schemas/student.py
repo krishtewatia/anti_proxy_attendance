@@ -99,7 +99,7 @@ class StudentAttendanceHistoryItem(BaseModel):
     subject: str
     class_code: str
     date_str: str
-    status: str  # "PRESENT" or "ABSENT"
+    status: str  # "PRESENT", "ABSENT" or "NOT_TAKEN"
 
 
 class StudentAttendanceDashboardResponse(BaseModel):
@@ -110,6 +110,9 @@ class StudentAttendanceDashboardResponse(BaseModel):
     profile: StudentProfileResponse
     overall_present: int
     overall_total: int
-    overall_percentage: float
+    # Sessions that were never taken are in neither total; the percentage is
+    # null when no session has been taken.
+    overall_percentage: Optional[float] = None
+    sessions_not_taken: int = 0
     subjects: list[SubjectAttendanceItem]
     history: list[StudentAttendanceHistoryItem]

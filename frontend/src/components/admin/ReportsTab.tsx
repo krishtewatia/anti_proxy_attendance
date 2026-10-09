@@ -13,7 +13,8 @@ const tileLabel: React.CSSProperties = { fontSize: "0.75rem", fontWeight: 600, c
 const tileValue: React.CSSProperties = { fontSize: "1.75rem", fontWeight: 800, marginTop: "0.25rem" };
 const tileNote: React.CSSProperties = { fontSize: "0.75rem", color: "var(--erp-text-muted)" };
 
-// Every figure here is counted by the server from finalized sessions.
+// Every figure here is counted by the server from finalized sessions in which
+// attendance was taken. Sessions closed without being taken are only listed.
 export const ReportsTab: React.FC = () => {
   const [summary, setSummary] = useState<ReportsSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +38,7 @@ export const ReportsTab: React.FC = () => {
     <div>
       <div className="erp-page-header">
         <h1 className="erp-page-title">Attendance Reports</h1>
-        <p className="erp-page-subtitle">Counted from finalized sessions</p>
+        <p className="erp-page-subtitle">Counted from finalized sessions in which attendance was taken</p>
       </div>
 
       {error && (
@@ -49,8 +50,10 @@ export const ReportsTab: React.FC = () => {
 
       {summary && summary.finalized_sessions === 0 && (
         <div className="erp-empty-box">
-          No session has been finalized yet, so there is nothing to report. Figures appear here once a
-          teacher finalizes a session.
+          No session with attendance has been finalized yet, so there is nothing to report. Figures
+          appear here once a teacher takes attendance and finalizes the session.
+          {(summary.sessions_not_taken ?? 0) > 0 &&
+            ` ${summary.sessions_not_taken} session(s) were closed without attendance being taken; they are not counted.`}
         </div>
       )}
 
@@ -66,6 +69,7 @@ export const ReportsTab: React.FC = () => {
               <div style={{ ...tileValue, color: "#15803d" }}>{formatTurnout(summary.average_turnout_percentage)}</div>
               <div style={tileNote}>
                 {summary.attendance_records} attendance records in {summary.finalized_sessions} finalized sessions
+                {(summary.sessions_not_taken ?? 0) > 0 && ` (${summary.sessions_not_taken} not taken, not counted)`}
               </div>
             </div>
             <div style={tile}>

@@ -35,6 +35,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   onSelectNav,
 }) => {
   const [step, setStep] = useState<Step>(1);
+  // The past session being viewed was never taken: nobody in it is absent.
+  const [viewedNotTaken, setViewedNotTaken] = useState(false);
 
   // Teacher dashboard state
   const [dashboardData, setDashboardData] = useState<TeacherDashboardResponse | null>(null);
@@ -229,6 +231,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       setRecords(attData.records);
 
       setCallout({ name: "Scanning", status: "IDLE" });
+      setViewedNotTaken(false);
       setStep(2);
       if (onSelectNav) onSelectNav("attendance");
 
@@ -254,6 +257,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       const attData = await api.getSessionAttendance(activeSess.session_id);
       setRecords(attData.records);
       setCallout({ name: "Session Resumed", status: "IDLE" });
+      setViewedNotTaken(false);
       setStep(2);
       if (onSelectNav) onSelectNav("attendance");
 
@@ -276,6 +280,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
       const attData = await api.getSessionAttendance(pastSess.session_id);
       setRecords(attData.records);
+      setViewedNotTaken(attData.was_taken === false);
       setStep(3);
       if (onSelectNav) onSelectNav("attendance");
     } catch (err: unknown) {
@@ -576,6 +581,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
     try {
       await api.updateAttendanceStatus(sessionId, item.attendance_id, newStatus);
+      // A corrected record means attendance has now been taken.
+      setViewedNotTaken(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(`Failed to update status for ${item.student_name}: ${msg}`);
@@ -1003,13 +1010,15 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
         <div className="erp-complete-page">
           <div className="erp-complete-card">
             <div className="erp-complete-header">
-              <div className="erp-complete-check">✓</div>
-              <h1 className="erp-complete-title">Attendance Complete</h1>
+              <div className="erp-complete-check">{viewedNotTaken ? "—" : "✓"}</div>
+              <h1 className="erp-complete-title">{viewedNotTaken ? "Attendance Not Taken" : "Attendance Complete"}</h1>
               <div className="erp-complete-meta">
                 <strong>{selectedSubject}</strong> • {selectedClass}
               </div>
               <div className="erp-complete-stats">
-                {presentCount} / {totalStudents} Present ({totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0}%)
+                {viewedNotTaken
+                  ? "This session does not count towards anyone's attendance."
+                  : `${presentCount} / ${totalStudents} Present (${totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0}%)`}
               </div>
             </div>
 
@@ -1034,8 +1043,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                         </td>
                         <td style={{ fontWeight: 600 }}>{student.student_name}</td>
                         <td>
-                          <span className={`status-badge ${isPresent ? "present" : "absent"}`}>
-                            {student.status}
+                          <span className={`status-badge ${viewedNotTaken ? "completed" : isPresent ? "present" : "absent"}`}>
+                            {viewedNotTaken ? "Not taken" : student.status}
                           </span>
                         </td>
                         <td>

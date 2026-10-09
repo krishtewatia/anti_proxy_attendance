@@ -32,4 +32,6 @@ class AttendanceSessionResponse(BaseModel):
     course_name: Optional[str] = None
     total_students: int = 0
     present_count: int = 0
+    # False when the session was never taken: its records are not absences.
+    was_taken: bool = True
     records: list[AttendanceSummaryItem]

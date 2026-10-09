@@ -259,6 +259,7 @@ async def get_student_dashboard(user_id: str) -> StudentAttendanceDashboardRespo
         overall_present=metrics["overall_present"],
         overall_total=metrics["overall_total"],
         overall_percentage=metrics["overall_percentage"],
+        sessions_not_taken=metrics["sessions_not_taken"],
         subjects=subjects,
         history=history,
     )

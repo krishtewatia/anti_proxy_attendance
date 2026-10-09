@@ -649,27 +649,42 @@ ATTENDANCE_SHORTAGE_THRESHOLD = 75.0
 
 @router.get(
     "/reports/summary",
-    summary="Attendance figures across all finalized sessions",
+    summary="Attendance figures across finalized sessions in which attendance was taken",
 )
 async def admin_reports_summary(
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> dict:
-    """Counted from finalized sessions only. Percentages are null when there is nothing to count."""
+    """Counted from finalized sessions in which attendance was taken.
+
+    A session that was closed without being taken is reported as a count of
+    its own and adds nothing to turnout or to anybody's absences. Percentages
+    are null when there is nothing to count.
+    """
     db = get_database()
-    finalized = [
+    closed = [
         doc
         async for doc in db["sessions"].find(
-            {"status": "FINALIZED"}, {"session_id": 1, "class_code": 1}
+            {"status": "FINALIZED"},
+            {"session_id": 1, "class_code": 1, "status": 1, "started_at": 1},
         )
     ]
-    session_ids = [doc["session_id"] for doc in finalized]
+    records_by_session: dict[str, list[dict]] = {}
+    if closed:
+        async for record in db["attendance_records"].find(
+            {"session_id": {"$in": [doc["session_id"] for doc in closed]}},
+            {"session_id": 1, "identity": 1, "status": 1, "marked_at": 1, "manually_corrected": 1},
+        ):
+            records_by_session.setdefault(record["session_id"], []).append(record)
+    finalized = [
+        doc
+        for doc in closed
+        if session_was_taken(doc, records_by_session.get(doc["session_id"], []))
+    ]
 
     total = present = 0
     per_student: dict[str, list[int]] = {}
-    if session_ids:
-        async for record in db["attendance_records"].find(
-            {"session_id": {"$in": session_ids}}, {"identity": 1, "status": 1}
-        ):
+    for doc in finalized:
+        for record in records_by_session.get(doc["session_id"], []):
             is_present = record.get("status") == "PRESENT"
             total += 1
             present += 1 if is_present else 0
@@ -684,6 +699,7 @@ async def admin_reports_summary(
     )
     return {
         "finalized_sessions": len(finalized),
+        "sessions_not_taken": len(closed) - len(finalized),
         "classes_with_sessions": len(
             {doc.get("class_code") for doc in finalized if doc.get("class_code")}
         ),

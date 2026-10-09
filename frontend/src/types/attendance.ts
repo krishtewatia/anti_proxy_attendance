@@ -36,6 +36,8 @@ export interface AttendanceSessionResponse {
   course_name?: string;
   total_students?: number;
   present_count?: number;
+  // false when the session was never taken: its records are not absences.
+  was_taken?: boolean;
   records: AttendanceSummaryItem[];
 }
 
