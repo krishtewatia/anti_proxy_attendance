@@ -117,3 +117,6 @@ frontend/tsconfig*.tsbuildinfo
 
 # Agent scaffolding - empty placeholder dir
 .agent/
+
+# UI audit screenshots: local only, they show real student photos
+ui_audit/
