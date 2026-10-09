@@ -1,7 +1,10 @@
 // The administrator's attendance report: counted by the server from finalized sessions.
 
 export interface ReportsSummary {
+  // Finalized sessions in which attendance was taken.
   finalized_sessions: number;
+  // Closed without being taken; counted nowhere else.
+  sessions_not_taken?: number;
   classes_with_sessions: number;
   attendance_records: number;
   // null when there is nothing to count.

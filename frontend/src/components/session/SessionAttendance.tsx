@@ -20,11 +20,14 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({ sessionId,
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selected, setSelected] = useState<AttendanceSummaryItem | null>(null);
+  // False when the session was never taken: nobody in it is absent.
+  const [wasTaken, setWasTaken] = useState(true);
 
   const load = useCallback(async () => {
     try {
       const data = await api.getAttendance(sessionId);
       setRecords(data.records);
+      setWasTaken(data.was_taken !== false);
       setError(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load attendance records.");
@@ -75,15 +78,22 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({ sessionId,
         </div>
         <div className="erp-metric-card">
           <span className="erp-metric-label">Present</span>
-          <span className="erp-metric-value" style={{ color: "var(--erp-present-text)" }}>{present}</span>
-          <span className="erp-metric-subtext">Marked by the camera or corrected</span>
+          <span className="erp-metric-value" style={{ color: "var(--erp-present-text)" }}>{wasTaken ? present : "—"}</span>
+          <span className="erp-metric-subtext">{wasTaken ? "Marked by the camera or corrected" : "Attendance was not taken"}</span>
         </div>
         <div className="erp-metric-card">
           <span className="erp-metric-label">Absent</span>
-          <span className="erp-metric-value" style={{ color: "var(--erp-absent-text)" }}>{records.length - present}</span>
-          <span className="erp-metric-subtext">Not marked present</span>
+          <span className="erp-metric-value" style={{ color: "var(--erp-absent-text)" }}>{wasTaken ? records.length - present : "—"}</span>
+          <span className="erp-metric-subtext">{wasTaken ? "Not marked present" : "Not counted as absences"}</span>
         </div>
       </div>
+
+      {!wasTaken && records.length > 0 && (
+        <p style={{ fontSize: "0.8125rem", color: "var(--erp-text-muted)", margin: "0 0 0.75rem" }}>
+          Attendance was not taken in this session, so it does not count towards anyone's attendance.
+          Correcting a record makes it count.
+        </p>
+      )}
 
       {viewerRole === "ADMIN" && records.length > 0 && (
         <p style={{ fontSize: "0.8125rem", color: "var(--erp-text-muted)", margin: "0 0 0.75rem" }}>
@@ -119,8 +129,8 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({ sessionId,
                       {record.student_id || "—"}
                     </td>
                     <td>
-                      <span className={`status-badge ${isPresent ? "present" : "absent"}`}>
-                        {isPresent ? "Present" : "Absent"}
+                      <span className={`status-badge ${!wasTaken ? "completed" : isPresent ? "present" : "absent"}`}>
+                        {!wasTaken ? "Not taken" : isPresent ? "Present" : "Absent"}
                       </span>
                       {record.manually_corrected && (
                         <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", color: "var(--erp-warning-text)" }}>

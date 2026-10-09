@@ -67,7 +67,9 @@ export interface StudentAttendanceDashboardResponse {
   profile: StudentProfileResponse;
   overall_present: number;
   overall_total: number;
-  overall_percentage: number;
+  // null when no session has been taken yet.
+  overall_percentage: number | null;
+  sessions_not_taken?: number;
   subjects: SubjectAttendanceItem[];
   history: StudentAttendanceHistoryItem[];
 }

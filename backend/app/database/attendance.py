@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from app.database.mongodb import get_database
+from app.database.sessions import session_was_taken
 from app.schemas.attendance import AttendanceRecord
 
 
@@ -116,7 +117,12 @@ async def compute_student_attendance_metrics(
     identity: str,
     class_code: str,
 ) -> dict:
-    """Calculate overall and subject-wise attendance for a student based on finalized sessions."""
+    """Calculate overall and subject-wise attendance for a student.
+
+    Only sessions in which attendance was actually taken are counted. A
+    session that was never taken appears in the history as NOT_TAKEN and is
+    left out of every total and percentage.
+    """
     db = get_database()
 
     # 1. Find all applicable sessions (matching student class_code or where student is in roster)
@@ -150,8 +156,18 @@ async def compute_student_attendance_metrics(
     records = await att_cursor.to_list(length=None)
     att_by_session = {r["session_id"]: r.get("status", "ABSENT") for r in records}
 
+    # Whether a session was taken depends on everybody's records, not only
+    # this student's.
+    session_records: dict[str, list[dict]] = {}
+    async for rec in db[ATTENDANCE_COLLECTION].find(
+        {"session_id": {"$in": [s["session_id"] for s in all_applicable_sessions]}},
+        {"session_id": 1, "status": 1, "marked_at": 1, "manually_corrected": 1},
+    ):
+        session_records.setdefault(rec["session_id"], []).append(rec)
+
     overall_present = 0
-    overall_total = len(all_applicable_sessions)
+    overall_total = 0
+    not_taken = 0
 
     subject_counts: dict[str, dict[str, int]] = {}
     history = []
@@ -159,16 +175,17 @@ async def compute_student_attendance_metrics(
     for s in all_applicable_sessions:
         s_id = s["session_id"]
         subj = s.get("subject") or s.get("course_name") or "General"
-        st = att_by_session.get(s_id, "ABSENT")
-
-        if st == "PRESENT":
-            overall_present += 1
-
-        if subj not in subject_counts:
-            subject_counts[subj] = {"present": 0, "total": 0}
-        subject_counts[subj]["total"] += 1
-        if st == "PRESENT":
-            subject_counts[subj]["present"] += 1
+        if session_was_taken(s, session_records.get(s_id, [])):
+            st = att_by_session.get(s_id, "ABSENT")
+            overall_total += 1
+            counts = subject_counts.setdefault(subj, {"present": 0, "total": 0})
+            counts["total"] += 1
+            if st == "PRESENT":
+                overall_present += 1
+                counts["present"] += 1
+        else:
+            st = "NOT_TAKEN"
+            not_taken += 1
 
         dt = s.get("start_time") or s.get("created_at")
         date_str = f"{dt.day} {dt:%b %Y}" if hasattr(dt, "strftime") else str(dt)[:10]
@@ -184,7 +201,8 @@ async def compute_student_attendance_metrics(
             }
         )
 
-    overall_pct = round((overall_present / overall_total * 100), 1) if overall_total > 0 else 0.0
+    # None when no session has been taken: there is nothing to be short of.
+    overall_pct = round((overall_present / overall_total * 100), 1) if overall_total > 0 else None
 
     subjects_list = []
     for subj_name, counts in sorted(subject_counts.items()):
@@ -204,6 +222,7 @@ async def compute_student_attendance_metrics(
         "overall_present": overall_present,
         "overall_total": overall_total,
         "overall_percentage": overall_pct,
+        "sessions_not_taken": not_taken,
         "subjects": subjects_list,
         "history": history,
     }

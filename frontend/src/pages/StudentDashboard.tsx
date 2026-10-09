@@ -1,5 +1,6 @@
 import { Pagination } from "../components/common/Pagination";
 import { paginate } from "../utils/sessions.ts";
+import { historyStatusBadge, isAttendanceShortage, nothingTaken as noSessionTaken } from "../utils/attendanceStatus.ts";
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../services";
 import type {
@@ -62,7 +63,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const profile = data?.profile;
   const overallPresent = data?.overall_present ?? 0;
   const overallTotal = data?.overall_total ?? 0;
+  // Sessions that were never taken are in neither figure. With nothing taken
+  // there is no percentage, and so no shortage.
+  const nothingTaken = noSessionTaken(data?.overall_percentage, overallTotal);
   const overallPct = data?.overall_percentage ?? 0;
+  const overallShortage = isAttendanceShortage(data?.overall_percentage, overallTotal);
+  const notTakenCount = data?.sessions_not_taken ?? 0;
   const subjects = data?.subjects ?? [];
   const history = data?.history ?? [];
   // Shown a page at a time, like the session lists.
@@ -95,18 +101,28 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       <div className="erp-student-overview-card">
         <div className="erp-overview-stat">
           <span className="erp-stat-label">Overall Attendance</span>
-          <span className={`erp-stat-number ${overallPct >= 75 ? "text-present" : "text-shortage"}`}>
-            {overallPct}%
-          </span>
-          <div className="erp-progress-track">
-            <div
-              className={`erp-progress-bar ${overallPct >= 75 ? "bar-present" : "bar-shortage"}`}
-              style={{ width: `${Math.min(overallPct, 100)}%` }}
-            />
-          </div>
-          <span className="erp-stat-subtext">
-            {overallPct >= 75 ? "Meets university 75% minimum criteria" : "Attendance shortage alert (< 75%)"}
-          </span>
+          {nothingTaken ? (
+            <>
+              <span className="erp-stat-number">—</span>
+              <div className="erp-progress-track" />
+              <span className="erp-stat-subtext">No attendance has been taken yet</span>
+            </>
+          ) : (
+            <>
+              <span className={`erp-stat-number ${overallShortage ? "text-shortage" : "text-present"}`}>
+                {overallPct}%
+              </span>
+              <div className="erp-progress-track">
+                <div
+                  className={`erp-progress-bar ${overallShortage ? "bar-shortage" : "bar-present"}`}
+                  style={{ width: `${Math.min(overallPct, 100)}%` }}
+                />
+              </div>
+              <span className="erp-stat-subtext">
+                {overallShortage ? "Attendance shortage alert (< 75%)" : "Meets university 75% minimum criteria"}
+              </span>
+            </>
+          )}
         </div>
 
         <div className="erp-overview-stat">
@@ -115,7 +131,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             {overallPresent} <span className="erp-stat-total">/ {overallTotal}</span>
           </span>
           <div style={{ height: "6px" }} />
-          <span className="erp-stat-subtext">Sessions you were marked present in</span>
+          <span className="erp-stat-subtext">
+            Sessions you were marked present in
+            {notTakenCount > 0 && ` (${notTakenCount} not taken, not counted)`}
+          </span>
         </div>
       </div>
 
@@ -256,16 +275,15 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </thead>
             <tbody>
               {historyPage.items.map((item, idx) => {
-                const isPresent = item.status === "PRESENT";
+                // Never taken: not an absence, and not counted.
+                const badge = historyStatusBadge(item.status);
                 return (
                   <tr key={idx}>
                     <td style={{ color: "var(--erp-text-muted)" }}>{item.date_str}</td>
                     <td style={{ fontWeight: 600 }}>{item.course_name || item.subject}</td>
                     <td>{item.class_code}</td>
                     <td>
-                      <span className={`status-badge ${isPresent ? "present" : "absent"}`}>
-                        {isPresent ? "✓ PRESENT" : "— ABSENT"}
-                      </span>
+                      <span className={`status-badge ${badge.className}`}>{badge.label}</span>
                     </td>
                   </tr>
                 );

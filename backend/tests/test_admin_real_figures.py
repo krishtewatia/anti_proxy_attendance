@@ -108,6 +108,7 @@ async def test_the_reports_summary_is_counted_from_finalized_sessions():
     assert response.status_code == 200, response.text
     assert response.json() == {
         "finalized_sessions": 2,
+        "sessions_not_taken": 0,
         "classes_with_sessions": 2,
         "attendance_records": 5,
         "average_turnout_percentage": 60.0,
