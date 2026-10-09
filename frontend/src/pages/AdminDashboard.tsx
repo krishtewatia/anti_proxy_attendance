@@ -120,7 +120,7 @@ export const AdminDashboard: React.FC<Props> = ({
       {activeTab === "classes" && <ClassesTab {...tabProps} />}
       {activeTab === "subjects" && <SubjectsTab {...tabProps} />}
       {activeTab === "sessions" && <SessionsTab {...tabProps} />}
-      {activeTab === "reports" && <ReportsTab {...data} />}
+      {activeTab === "reports" && <ReportsTab />}
       {activeTab === "admins" && <AdminsTab user={user} notify={setBanner} />}
       {activeTab === "profile" && (
         <ProfileTab

@@ -356,14 +356,15 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({
                             {markingAction === `${record.identity}_ABSENT` ? "..." : "− Mark Absent"}
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className="btn-review-attendance"
-                          onClick={() => setSelectedAttendance(record)}
-                          hidden={readOnly}
-                        >
-                          Details
-                        </button>
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            className="btn-review-attendance"
+                            onClick={() => setSelectedAttendance(record)}
+                          >
+                            Details
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

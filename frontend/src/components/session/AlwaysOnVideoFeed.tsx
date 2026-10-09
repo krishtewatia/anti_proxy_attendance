@@ -63,7 +63,7 @@ export const AlwaysOnVideoFeed: React.FC<AlwaysOnVideoFeedProps> = ({
             <span className="live-dot" />
             <span className="live-text">CONTINUOUS VIDEO FEED</span>
           </div>
-          <span className="video-classroom-tag">Classroom: {classroomId || "ROOM_101"}</span>
+          <span className="video-classroom-tag">Classroom: {classroomId || "—"}</span>
         </div>
 
       </div>
@@ -94,11 +94,6 @@ export const AlwaysOnVideoFeed: React.FC<AlwaysOnVideoFeedProps> = ({
                 </div>
               </div>
 
-              <div className="hud-stats-bar">
-                <span className="hud-stat-item">FPS: 30</span>
-                <span className="hud-stat-item">CAMERA: CAM_ROOM_101_DOOR</span>
-                <span className="hud-stat-item">DOOR SENSOR: ACTIVE</span>
-              </div>
             </div>
 
             {webcamError && (
@@ -114,24 +109,6 @@ export const AlwaysOnVideoFeed: React.FC<AlwaysOnVideoFeedProps> = ({
 
       </div>
 
-      {/* Continuous Optical Connection Telemetry Footer */}
-      <footer className="video-telemetry-bar">
-        <div className="telemetry-item">
-          <span className="telemetry-indicator online" />
-          <span className="telemetry-label">Continuous Connection:</span>
-          <span className="telemetry-val">ACTIVE (BROWSER WEBCAM)</span>
-        </div>
-
-        <div className="telemetry-item">
-          <span className="telemetry-label">Ingestion Mode:</span>
-          <span className="telemetry-val">Real-Time Facial Recognition</span>
-        </div>
-
-        <div className="telemetry-item">
-          <span className="telemetry-label">Target Doorway:</span>
-          <span className="telemetry-val">CAM_ROOM_101_DOOR</span>
-        </div>
-      </footer>
     </section>
   );
 };

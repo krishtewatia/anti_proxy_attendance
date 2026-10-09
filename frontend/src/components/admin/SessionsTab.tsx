@@ -77,18 +77,18 @@ export const SessionsTab: React.FC<AdminTabProps> = ({ sessions, reload }) => {
               </tr>
             ) : (
               current.items.map((sess) => {
-                const sessAny = sess as unknown as Record<string, unknown>;
-                const totalStu = typeof sessAny.total_students === "number" ? sessAny.total_students : 4;
-                const presCount = typeof sessAny.present_count === "number" ? sessAny.present_count : (sess.status === "COMPLETED" ? 4 : 0);
-                const absCount = Math.max(0, totalStu - presCount);
+                // Counted by the server; a dash when it sent nothing.
+                const total = sess.total_students;
+                const presentCount = sess.present_count;
+                const absent = total != null && presentCount != null ? Math.max(0, total - presentCount) : null;
                 return (
                   <tr key={sess.session_id}>
                     <td style={{ fontWeight: 600 }}>{sess.course_name}</td>
-                    <td>{sess.class_code || "DS-B"}</td>
-                    <td>{String(sessAny.teacher_name ?? sessAny.created_by ?? "—")}</td>
-                    <td>{totalStu}</td>
-                    <td style={{ color: "#15803d", fontWeight: 600 }}>{presCount}</td>
-                    <td style={{ color: "#b91c1c", fontWeight: 600 }}>{absCount}</td>
+                    <td>{sess.class_code || "—"}</td>
+                    <td>{sess.teacher_name || "—"}</td>
+                    <td>{total ?? "—"}</td>
+                    <td style={{ color: "#15803d", fontWeight: 600 }}>{presentCount ?? "—"}</td>
+                    <td style={{ color: "#b91c1c", fontWeight: 600 }}>{absent ?? "—"}</td>
                     <td>
                       <span className={`status-badge ${sessionStatusBadgeClass(sess.status)}`}>
                         {sessionStatusLabel(sess.status)}

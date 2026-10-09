@@ -1,3 +1,4 @@
+// What the backend stores. (COMPLETED is not written by it; kept for older data.)
 export type SessionStatus = 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'FINALIZED';
 
 export interface SessionCreate {
@@ -25,4 +26,8 @@ export interface SessionResponse {
   required_presence_percentage: number;
   status: SessionStatus;
   created_by: string;
+  // Sent by the administrator's session list only.
+  teacher_name?: string | null;
+  total_students?: number | null;
+  present_count?: number | null;
 }

@@ -37,11 +37,11 @@ export const ProfileTab: React.FC<{ user: UserResponse; onChangePassword?: () =>
             fontWeight: 700,
           }}
         >
-          A
+          {user.email.charAt(0).toUpperCase()}
         </div>
         <div>
           <h2 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--erp-navy)", margin: 0 }}>
-            System Administrator
+            {user.email}
           </h2>
         </div>
       </div>
@@ -51,13 +51,9 @@ export const ProfileTab: React.FC<{ user: UserResponse; onChangePassword?: () =>
           <span style={label}>Role:</span>
           <span className="erp-role-pill role-admin">Administrator</span>
         </div>
-        <div style={row}>
-          <span style={label}>Official Email:</span>
-          <strong>{user.email}</strong>
-        </div>
         <div style={{ ...row, borderBottom: "none" }}>
-          <span style={label}>System Status:</span>
-          <span className="status-badge present">Online</span>
+          <span style={label}>Email:</span>
+          <strong>{user.email}</strong>
         </div>
       </div>
 

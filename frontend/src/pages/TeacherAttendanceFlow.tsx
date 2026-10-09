@@ -34,15 +34,13 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
   // Teacher dashboard state
   const [dashboardData, setDashboardData] = useState<TeacherDashboardResponse | null>(null);
-  const [assignedClasses, setAssignedClasses] = useState<string[]>(["DS-B", "DS-C"]);
-  const [assignedSubjects, setAssignedSubjects] = useState<string[]>([
-    "Machine Learning",
-    "Computer Networks",
-    "DBMS",
-  ]);
+  // What an administrator assigned to this teacher. Empty until loaded, and
+  // empty if nothing is assigned: never a made-up class or subject.
+  const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
+  const [assignedSubjects, setAssignedSubjects] = useState<string[]>([]);
 
-  const [selectedClass, setSelectedClass] = useState<string>("DS-B");
-  const [selectedSubject, setSelectedSubject] = useState<string>("Machine Learning");
+  const [selectedClass, setSelectedClass] = useState<string>("");
+  const [selectedSubject, setSelectedSubject] = useState<string>("");
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -176,16 +174,16 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     try {
       const data = await api.getTeacherDashboard();
       setDashboardData(data);
-      if (data.teacher.assigned_classes && data.teacher.assigned_classes.length > 0) {
-        setAssignedClasses(data.teacher.assigned_classes);
-        setSelectedClass(data.teacher.assigned_classes[0]);
-      }
-      if (data.teacher.assigned_subjects && data.teacher.assigned_subjects.length > 0) {
-        setAssignedSubjects(data.teacher.assigned_subjects);
-        setSelectedSubject(data.teacher.assigned_subjects[0]);
-      }
-    } catch {
-      // Fallback defaults
+      const classes = data.teacher.assigned_classes || [];
+      const subjects = data.teacher.assigned_subjects || [];
+      setAssignedClasses(classes);
+      setAssignedSubjects(subjects);
+      setSelectedClass((current) => (classes.includes(current) ? current : classes[0] ?? ""));
+      setSelectedSubject((current) => (subjects.includes(current) ? current : subjects[0] ?? ""));
+    } catch (err: unknown) {
+      setErrorMessage(
+        `Could not load your classes: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   };
 
@@ -208,10 +206,10 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
       // 1. Create Session
       const session = await api.createSession({
-        course_name: `${selectedSubject} — ${selectedClass}`,
+        course_name: selectedSubject ? `${selectedSubject} — ${selectedClass}` : selectedClass,
         classroom_id: "ROOM_101",
         class_code: selectedClass,
-        subject: selectedSubject,
+        subject: selectedSubject || undefined,
         start_time: now.toISOString(),
         end_time: in2h.toISOString(),
         required_presence_percentage: 100.0,
@@ -618,7 +616,12 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   const hasActiveSession = Boolean(dashboardData?.active_session);
   const activeSess = dashboardData?.active_session;
   const previousSessions = dashboardData?.previous_sessions ?? [];
-  const teacherName = dashboardData?.teacher.name || "Teacher";
+  const teacherName = dashboardData?.teacher.name || user.email;
+  const teacherDepartment = dashboardData?.teacher.department || "";
+  const teacherId = dashboardData?.teacher.teacher_id || "";
+  const noClasses = assignedClasses.length === 0;
+  const noClassesMessage =
+    "No classes are assigned to you yet. Ask an administrator to assign your classes.";
 
   // Tab 1: Teacher Dashboard
   const renderDashboardView = () => (
@@ -671,13 +674,14 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       {/* Assigned Classes */}
       <div className="erp-section" style={{ marginBottom: "1.75rem" }}>
         <h2 className="erp-section-title">Assigned Classes</h2>
+        {noClasses && <div className="erp-empty-box">{noClassesMessage}</div>}
         <div className="erp-classes-grid">
           {assignedClasses.map((cls) => (
             <div key={cls} className="erp-class-card">
               <div className="erp-class-code">{cls}</div>
-              <div className="erp-class-dept">Department of Data Science</div>
+              {teacherDepartment && <div className="erp-class-dept">{teacherDepartment}</div>}
               <div className="erp-class-subjects">
-                {assignedSubjects.join(" • ")}
+                {assignedSubjects.length > 0 ? assignedSubjects.join(" • ") : "No subjects assigned"}
               </div>
               <button
                 type="button"
@@ -717,7 +721,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
               <tbody>
                 {previousSessions.slice(0, 5).map((ps) => (
                   <tr key={ps.session_id}>
-                    <td style={{ fontWeight: 600 }}>{ps.class_code || "DS-B"}</td>
+                    <td style={{ fontWeight: 600 }}>{ps.class_code || "—"}</td>
                     <td>{ps.subject || ps.course_name}</td>
                     <td>{ps.present_count} / {ps.total_students}</td>
                     <td style={{ fontWeight: 600, color: ps.attendance_percentage >= 75 ? "#15803d" : "#b91c1c" }}>
@@ -765,6 +769,12 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
             </div>
           )}
 
+          {noClasses && (
+            <div className="erp-alert-box warning" style={{ marginBottom: "1.25rem" }}>
+              {noClassesMessage}
+            </div>
+          )}
+
           <div className="erp-form-stack">
             <div className="form-group">
               <label className="form-label" htmlFor="erp-subject-select">Subject</label>
@@ -773,8 +783,9 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                 className="erp-select-input"
                 value={selectedSubject}
                 onChange={(e) => setSelectedSubject(e.target.value)}
-                disabled={hasActiveSession || loading}
+                disabled={hasActiveSession || loading || assignedSubjects.length === 0}
               >
+                {assignedSubjects.length === 0 && <option value="">No subjects assigned</option>}
                 {assignedSubjects.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
@@ -788,8 +799,9 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                 className="erp-select-input"
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
-                disabled={hasActiveSession || loading}
+                disabled={hasActiveSession || loading || noClasses}
               >
+                {noClasses && <option value="">No classes assigned</option>}
                 {assignedClasses.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
@@ -827,7 +839,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                 type="button"
                 className="erp-btn erp-btn-primary"
                 onClick={handleStartAttendance}
-                disabled={hasActiveSession || loading}
+                disabled={hasActiveSession || loading || !selectedClass}
                 style={{ width: "100%", padding: "0.85rem", fontSize: "1rem" }}
               >
                 {loading ? "Starting Attendance Session..." : "START ATTENDANCE"}
@@ -1067,19 +1079,17 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     <div className="erp-classes-view">
       <div className="erp-page-header">
         <h1 className="erp-page-title">My Assigned Classes</h1>
-        <p className="erp-page-subtitle">Academic Year 2025–26 • Term II Teaching Allocations</p>
+        <p className="erp-page-subtitle">Classes an administrator has assigned to you</p>
       </div>
 
+      {noClasses && <div className="erp-empty-box">{noClassesMessage}</div>}
       <div className="erp-classes-grid">
         {assignedClasses.map((cls) => (
           <div key={cls} className="erp-class-card">
             <div className="erp-class-code">{cls}</div>
-            <div className="erp-class-dept">Department of Data Science</div>
+            {teacherDepartment && <div className="erp-class-dept">{teacherDepartment}</div>}
             <div className="erp-class-subjects">
-              Subjects: {assignedSubjects.join(", ")}
-            </div>
-            <div style={{ marginTop: "1rem", fontSize: "0.8125rem", color: "var(--erp-text-muted)" }}>
-              Section DS-B • 4 Students Registered
+              Subjects: {assignedSubjects.length > 0 ? assignedSubjects.join(", ") : "none assigned"}
             </div>
             <button
               type="button"
@@ -1129,7 +1139,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                 return (
                   <tr key={ps.session_id}>
                     <td style={{ fontWeight: 600 }}>{ps.subject || ps.course_name}</td>
-                    <td>{ps.class_code || "DS-B"}</td>
+                    <td>{ps.class_code || "—"}</td>
                     <td>{ps.total_students}</td>
                     <td style={{ color: "#15803d", fontWeight: 600 }}>{ps.present_count}</td>
                     <td style={{ color: "#b91c1c", fontWeight: 600 }}>{absent}</td>
@@ -1183,38 +1193,34 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
               fontWeight: 700,
             }}
           >
-            {teacherName.charAt(0)}
+            {teacherName.charAt(0).toUpperCase()}
           </div>
           <div>
             <h2 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--erp-text-main)", margin: 0 }}>
               {teacherName}
             </h2>
-            <div style={{ color: "var(--erp-text-muted)", fontSize: "0.875rem" }}>
-              Department of Data Science
-            </div>
+            {teacherDepartment && (
+              <div style={{ color: "var(--erp-text-muted)", fontSize: "0.875rem" }}>{teacherDepartment}</div>
+            )}
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", fontSize: "0.875rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--erp-border)" }}>
             <span style={{ color: "var(--erp-text-muted)" }}>Faculty ID:</span>
-            <strong style={{ fontFamily: "var(--font-mono)" }}>T001</strong>
+            <strong style={{ fontFamily: "var(--font-mono)" }}>{teacherId || "—"}</strong>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--erp-border)" }}>
             <span style={{ color: "var(--erp-text-muted)" }}>Department:</span>
-            <strong>Data Science</strong>
+            <strong>{teacherDepartment || "—"}</strong>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--erp-border)" }}>
             <span style={{ color: "var(--erp-text-muted)" }}>Assigned Classes:</span>
-            <strong>{assignedClasses.join(", ")}</strong>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--erp-border)" }}>
-            <span style={{ color: "var(--erp-text-muted)" }}>Institutional Email:</span>
-            <strong>{user.email}</strong>
+            <strong>{noClasses ? "None assigned" : assignedClasses.join(", ")}</strong>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0" }}>
-            <span style={{ color: "var(--erp-text-muted)" }}>Academic Status:</span>
-            <span className="status-badge present">Active Faculty</span>
+            <span style={{ color: "var(--erp-text-muted)" }}>Email:</span>
+            <strong>{user.email}</strong>
           </div>
         </div>
       </div>

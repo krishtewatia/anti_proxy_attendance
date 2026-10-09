@@ -94,26 +94,28 @@ async def register_teacher_account(
 
 
 async def get_teacher_profile(user_id: str) -> TeacherProfileResponse:
-    """Retrieve teacher profile by user_id, falling back to defaults if not yet established."""
+    """Retrieve teacher profile by user_id; empty values if none has been set up yet."""
     doc = await get_teacher_profile_by_user_id(user_id)
     if not doc:
-        # Create a basic profile if needed
+        # No profile yet (an account approved without one, or created before
+        # profiles existed): say so with empty values rather than invented ones.
+        user = await get_database()["users"].find_one({"user_id": user_id}, {"email": 1}) or {}
         return TeacherProfileResponse(
             user_id=user_id,
-            teacher_id="T-DEFAULT",
-            name="Teacher",
-            email="teacher@demo.edu",
-            department="Academic Department",
-            assigned_classes=["DS-B", "DS-C"],
-            assigned_subjects=["Machine Learning", "Deep Learning"],
+            teacher_id="",
+            name="",
+            email=user.get("email", ""),
+            department="",
+            assigned_classes=[],
+            assigned_subjects=[],
         )
 
     return TeacherProfileResponse(
         user_id=doc["user_id"],
-        teacher_id=doc.get("teacher_id", "T001"),
-        name=doc.get("name", "Professor"),
+        teacher_id=doc.get("teacher_id", ""),
+        name=doc.get("name", ""),
         email=doc.get("email", ""),
-        department=doc.get("department", "General"),
+        department=doc.get("department", ""),
         assigned_classes=doc.get("assigned_classes", []),
         assigned_subjects=doc.get("assigned_subjects", []),
     )

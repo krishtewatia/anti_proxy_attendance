@@ -73,38 +73,9 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
         })
         .catch(() => {
           // Fallback demo students
-          const fallback = [
-            {
-              identity: "student_alice",
-              name: "Alice Smith",
-              email: "alice@demo.edu",
-              student_id: "STU_ALICE",
-              has_biometric: true,
-            },
-            {
-              identity: "student_bob",
-              name: "Bob Jones",
-              email: "bob@demo.edu",
-              student_id: "STU_BOB",
-              has_biometric: true,
-            },
-            {
-              identity: "student_charlie",
-              name: "Charlie Davis",
-              email: "charlie@demo.edu",
-              student_id: "STU_CHARLIE",
-              has_biometric: true,
-            },
-            {
-              identity: "person_01",
-              name: "Demo Candidate 1",
-              email: "person_01@campus.edu",
-              student_id: "person_01",
-              has_biometric: true,
-            },
-          ];
-          setStudentDirectory(fallback);
-          setSelectedStudents(new Set(fallback.map((s) => s.identity)));
+          // No directory: an empty list, never invented students.
+          setStudentDirectory([]);
+          setSelectedStudents(new Set());
         })
         .finally(() => {
           setDirectoryLoading(false);
