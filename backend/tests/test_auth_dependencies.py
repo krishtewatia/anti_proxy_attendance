@@ -319,12 +319,12 @@ async def test_rbac_get_roster(rbac_fixture):
         )
         assert res_student.status_code == 403
 
-        # ADMIN -> 403
+        # ADMIN -> 200: an administrator may open any session to read it
         res_admin = await client.get(
             f"/api/v1/sessions/{session_id}/roster",
             headers={"Authorization": f"Bearer {rbac_fixture['admin_token']}"},
         )
-        assert res_admin.status_code == 403
+        assert res_admin.status_code == 200
 
         # TEACHER -> 200
         res_teacher = await client.get(
@@ -383,12 +383,12 @@ async def test_rbac_get_attendance(rbac_fixture):
         )
         assert res_student.status_code == 403
 
-        # ADMIN -> 403
+        # ADMIN -> 200: an administrator may open any session to read it
         res_admin = await client.get(
             f"/api/v1/attendance/{session_id}",
             headers={"Authorization": f"Bearer {rbac_fixture['admin_token']}"},
         )
-        assert res_admin.status_code == 403
+        assert res_admin.status_code == 200
 
         # TEACHER -> 200
         res_teacher = await client.get(

@@ -107,6 +107,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # The same APP_NAME the backend uses: one setting renames the product.
+        VITE_APP_NAME: ${APP_NAME:-Anti-Proxy Attendance System}
     container_name: anti-proxy-frontend
     restart: unless-stopped
     depends_on:

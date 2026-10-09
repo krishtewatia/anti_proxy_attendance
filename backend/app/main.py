@@ -103,9 +103,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 app = FastAPI(
-    title="Anti-Proxy Attendance System Backend",
+    title=f"{settings.PROJECT_NAME} Backend",
     version="0.1.0",
-    description="Backend API for Anti-Proxy Attendance System",
+    description=f"Backend API for {settings.PROJECT_NAME}",
     lifespan=lifespan,
 )
 

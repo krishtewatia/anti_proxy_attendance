@@ -16,12 +16,15 @@ export interface SessionAttendanceProps {
   sessionId: string;
   requiredPercentage?: number;
   onFinalize?: () => void;
+  // An administrator reads a session; corrections are made by its teacher.
+  readOnly?: boolean;
 }
 
 export const SessionAttendance: React.FC<SessionAttendanceProps> = ({
   sessionId,
   requiredPercentage = 70.0,
   onFinalize: _onFinalize,
+  readOnly = false,
 }) => {
   const [records, setRecords] = useState<AttendanceSummaryItem[]>([]);
   const [liveSnapshot, setLiveSnapshot] = useState<SessionLiveSnapshotResponse | null>(null);
@@ -334,7 +337,7 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({
 
                     <td>
                       <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-                        {!isPresent ? (
+                        {readOnly ? null : !isPresent ? (
                           <button
                             type="button"
                             className="btn-mark-present-quick"
@@ -357,6 +360,7 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({
                           type="button"
                           className="btn-review-attendance"
                           onClick={() => setSelectedAttendance(record)}
+                          hidden={readOnly}
                         >
                           Details
                         </button>

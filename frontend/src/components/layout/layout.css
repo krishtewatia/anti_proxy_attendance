@@ -1,9 +1,13 @@
 /* ==========================================================================
-   COLLEGE ERP - Layout Shell Styles
+   Layout Shell Styles
    ========================================================================== */
 
+/* The shell is exactly as tall as the window: the header and the sidebar stay
+   where they are and only the content pane scrolls. */
 .erp-app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background-color: var(--erp-bg);
@@ -160,6 +164,7 @@
   align-items: center;
   gap: 0.35rem;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .erp-btn-logout:hover {
@@ -178,7 +183,7 @@
 .erp-body {
   display: flex;
   flex: 1;
-  min-height: calc(100vh - 64px);
+  min-height: 0;
 }
 
 /* ERP Sidebar */
@@ -189,8 +194,28 @@
   padding: 1.5rem 0.875rem 1rem 0.875rem;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   flex-shrink: 0;
+  /* Its own scroll if the window is shorter than the menu. */
+  overflow-y: auto;
+}
+
+/* The navigation starts at the top; only the footer is pushed to the bottom.
+   (With space-between the menu sat in the middle of a sidebar as tall as the
+   page, so it moved whenever the page length changed.) */
+.erp-sidebar > nav {
+  flex: 1 0 auto;
+}
+
+.erp-home-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: var(--erp-radius-sm);
+}
+
+.erp-home-link:focus-visible {
+  outline: 2px solid var(--erp-primary);
+  outline-offset: 4px;
 }
 
 .erp-sidebar-heading {
@@ -264,12 +289,38 @@
 /* Content Area */
 .erp-content-pane {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   padding: 2rem;
   overflow-y: auto;
   max-width: 100%;
 }
 
+/* Phone and narrow windows: the menu becomes one row above the content and
+   scrolls sideways; the header stays compact. */
 @media (max-width: 768px) {
+  .erp-header {
+    height: auto;
+    min-height: 56px;
+    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+  }
+  .erp-header-right {
+    gap: 0.5rem;
+  }
+  .erp-brand-subtitle,
+  .erp-user-info,
+  .erp-btn-account span,
+  .erp-sidebar-heading,
+  .erp-sidebar-footer {
+    display: none;
+  }
+  .erp-btn-account::after {
+    content: "Password";
+  }
+  .erp-brand-title {
+    font-size: 0.9rem;
+  }
   .erp-body {
     flex-direction: column;
   }
@@ -277,11 +328,23 @@
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--erp-border);
-    padding: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    overflow: visible;
+  }
+  .erp-sidebar > nav {
+    flex: 0 0 auto;
   }
   .erp-nav-list {
     flex-direction: row;
     overflow-x: auto;
+    gap: 0.35rem;
+    padding-bottom: 0.25rem;
+  }
+  .erp-nav-list li {
+    flex: 0 0 auto;
+  }
+  .erp-nav-btn {
+    white-space: nowrap;
   }
   .erp-content-pane {
     padding: 1rem;

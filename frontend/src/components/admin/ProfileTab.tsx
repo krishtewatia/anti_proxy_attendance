@@ -1,5 +1,6 @@
 import React from "react";
 import type { UserResponse } from "../../types";
+import { APP_NAME } from "../../config/app.ts";
 
 const row: React.CSSProperties = {
   display: "flex",
@@ -16,7 +17,7 @@ export const ProfileTab: React.FC<{ user: UserResponse; onChangePassword?: () =>
   <div style={{ maxWidth: "600px", margin: "0 auto" }}>
     <div className="erp-page-header" style={{ textAlign: "center" }}>
       <h1 className="erp-page-title">Administrator Profile</h1>
-      <p className="erp-page-subtitle">College ERP Management & System Privileges</p>
+      <p className="erp-page-subtitle">{APP_NAME}</p>
     </div>
 
     <div className="erp-card" style={{ padding: "2rem" }}>
@@ -42,9 +43,6 @@ export const ProfileTab: React.FC<{ user: UserResponse; onChangePassword?: () =>
           <h2 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--erp-navy)", margin: 0 }}>
             System Administrator
           </h2>
-          <div style={{ color: "var(--erp-text-muted)", fontSize: "0.875rem" }}>
-            Office of Academic Affairs & Administration
-          </div>
         </div>
       </div>
 
@@ -56,10 +54,6 @@ export const ProfileTab: React.FC<{ user: UserResponse; onChangePassword?: () =>
         <div style={row}>
           <span style={label}>Official Email:</span>
           <strong>{user.email}</strong>
-        </div>
-        <div style={row}>
-          <span style={label}>Institution:</span>
-          <strong>Apex Institute of Technology</strong>
         </div>
         <div style={{ ...row, borderBottom: "none" }}>
           <span style={label}>System Status:</span>

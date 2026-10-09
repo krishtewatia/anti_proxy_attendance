@@ -1,4 +1,5 @@
 import React from "react";
+import { sessionStatusBadgeClass, sessionStatusLabel } from "../../utils/sessions.ts";
 import { type AdminData } from "./adminShared.ts";
 
 export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic, sessions }) => {
@@ -91,8 +92,8 @@ export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic,
                     <td>{s.classroom_id}</td>
                     <td>{new Date(s.start_time).toLocaleDateString()}</td>
                     <td>
-                      <span className={`status-badge ${s.status === "ACTIVE" ? "active" : "completed"}`}>
-                        {s.status}
+                      <span className={`status-badge ${sessionStatusBadgeClass(s.status)}`}>
+                        {sessionStatusLabel(s.status)}
                       </span>
                     </td>
                   </tr>

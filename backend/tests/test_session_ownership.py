@@ -235,7 +235,8 @@ async def test_roster_retrieval_ownership(ownership_context):
             f"/api/v1/sessions/{session_id}/roster",
             headers={"Authorization": f"Bearer {ownership_context['admin_token']}"},
         )
-        assert res_admin.status_code == 403
+        # An administrator may open any session (read-only); see test_admin_session_access.py.
+        assert res_admin.status_code == 200
 
         # Nonexistent Session -> 404
         res_404 = await client.get(
@@ -319,7 +320,8 @@ async def test_attendance_retrieval_ownership(ownership_context):
             f"/api/v1/attendance/{session_id}",
             headers={"Authorization": f"Bearer {ownership_context['admin_token']}"},
         )
-        assert res_admin.status_code == 403
+        # An administrator may open any session (read-only); see test_admin_session_access.py.
+        assert res_admin.status_code == 200
 
         # Nonexistent Session -> 404
         res_404 = await client.get(
@@ -359,7 +361,8 @@ async def test_list_sessions_ownership_matrix(ownership_context):
             "/api/v1/sessions",
             headers={"Authorization": f"Bearer {ownership_context['admin_token']}"},
         )
-        assert res_admin.status_code == 403
+        # An administrator may open any session (read-only); see test_admin_session_access.py.
+        assert res_admin.status_code == 200
 
         # 4. Teacher A -> sees Session A
         res_teacher_a = await client.get(
@@ -449,7 +452,8 @@ async def test_get_session_details_ownership_matrix(ownership_context):
             f"/api/v1/sessions/{session_id}",
             headers={"Authorization": f"Bearer {ownership_context['admin_token']}"},
         )
-        assert res_admin.status_code == 403
+        # An administrator may open any session (read-only); see test_admin_session_access.py.
+        assert res_admin.status_code == 200
 
         # 4. Teacher B (Non-owner) -> 403
         res_b = await client.get(

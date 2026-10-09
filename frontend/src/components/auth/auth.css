@@ -1,5 +1,5 @@
 /* ==========================================================================
-   COLLEGE ERP - Authentication Styling (Login & Registration)
+   Authentication Styling (Login & Registration)
    ========================================================================== */
 
 .erp-auth-wrapper {
@@ -19,6 +19,19 @@
 }
 
 /* Header & Crest */
+.erp-auth-home-link {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.erp-auth-home-link:focus-visible {
+  outline: 2px solid var(--erp-primary);
+  outline-offset: 4px;
+}
+
 .erp-auth-header {
   text-align: center;
   margin-bottom: 1.75rem;

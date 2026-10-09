@@ -15,6 +15,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# The name shown in the interface (APP_NAME in .env, passed by Compose).
+ARG VITE_APP_NAME="Anti-Proxy Attendance System"
+ENV VITE_APP_NAME=${VITE_APP_NAME}
+
 # Copy source code and build production bundle
 COPY . .
 RUN npm run build

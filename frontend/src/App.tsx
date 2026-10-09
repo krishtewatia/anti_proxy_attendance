@@ -83,6 +83,12 @@ export function App() {
 
   const openChangePassword = () => navigate("/account/password");
 
+  // The logo and name in the header: the home page of the signed-in role.
+  const goHome = () => {
+    setActiveNavId("dashboard");
+    navigate(currentUser ? getDashboardPath(currentUser.role) : "/");
+  };
+
   // Before anything else: an account that must change its password sees only that.
   if (currentUser && auth.isAuthenticated() && mustChangePassword) {
     return (
@@ -108,6 +114,7 @@ export function App() {
           <AppLayout
             user={currentUser}
             onLogout={handleLogout}
+            onGoHome={goHome}
             activeNavId=""
             onSelectNav={handleNavSelect}
           >
@@ -145,6 +152,7 @@ export function App() {
           <AppLayout
             user={currentUser}
             onLogout={handleLogout}
+            onGoHome={goHome}
             activeNavId={activeNavId}
             onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}
@@ -178,6 +186,7 @@ export function App() {
           <AppLayout
             user={currentUser}
             onLogout={handleLogout}
+            onGoHome={goHome}
             activeNavId={activeNavId}
             onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}
@@ -205,6 +214,7 @@ export function App() {
           <AppLayout
             user={currentUser}
             onLogout={handleLogout}
+            onGoHome={goHome}
             activeNavId={activeNavId}
             onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}
@@ -234,6 +244,7 @@ export function App() {
           <AppLayout
             user={currentUser}
             onLogout={handleLogout}
+            onGoHome={goHome}
             activeNavId={activeNavId}
             onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}

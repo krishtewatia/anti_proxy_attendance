@@ -70,7 +70,7 @@ Write-Host "  [OK] Built-in PC webcam and USB webcams supported natively in brow
 Write-Host "`n============================================================" -ForegroundColor Green
 Write-Host "  SYSTEM READY FOR ATTENDANCE" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
-Write-Host "  Teacher ERP Portal : http://localhost:3000" -ForegroundColor White
+Write-Host "  Web portal        : http://localhost:3000" -ForegroundColor White
 Write-Host "  FastAPI Backend    : http://localhost:8000" -ForegroundColor White
 Write-Host "  Vision service     : internal only (no published port)" -ForegroundColor White
 Write-Host "  Camera Mode        : BROWSER-OWNED (Activates on 'Take Attendance')" -ForegroundColor Cyan

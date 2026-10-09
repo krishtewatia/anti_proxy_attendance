@@ -454,7 +454,7 @@ async def test_get_corrections_student_role_rejected_403(
 
 
 @pytest.mark.anyio
-async def test_get_corrections_admin_role_rejected_403(
+async def test_get_corrections_admin_can_read_200(
     sample_session_and_attendance, admin_headers
 ):
     data = sample_session_and_attendance
@@ -464,7 +464,9 @@ async def test_get_corrections_admin_role_rejected_403(
             f"/api/v1/attendance/{data['session_id']}/records/{data['attendance_id']}/corrections",
             headers=admin_headers,
         )
-    assert resp.status_code == 403
+    # An administrator may read any session's correction history; making a
+    # correction stays the owning teacher's (test_correction_admin_role_rejected_403).
+    assert resp.status_code == 200
 
 
 @pytest.mark.anyio

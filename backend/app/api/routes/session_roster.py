@@ -4,7 +4,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database.mongodb import get_database
-from app.api.dependencies.auth import get_owned_session, require_teacher
+from app.api.dependencies.auth import (
+    get_owned_session,
+    require_teacher,
+    require_teacher_or_admin,
+)
 from app.schemas.session_roster_response import (
     SessionRosterResponse,
     SessionRosterUpdate,
@@ -104,7 +108,7 @@ async def update_session_roster(
 )
 async def get_session_roster(
     session_id: str,
-    current_user: Annotated[dict, Depends(require_teacher)],
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
 ) -> SessionRosterResponse:
     await get_owned_session(session_id, current_user)
 
