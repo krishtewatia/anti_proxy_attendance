@@ -235,7 +235,7 @@ graph TD
 - **Teacher Management**: Create and edit teachers, and assign the classes (`DS-B`, `CS-A`) and subjects each one may take attendance for. Deleting a teacher keeps the sessions and attendance they recorded, and is refused while one of their sessions is in progress.
 - **Passwords**: An account an administrator creates, or whose password an administrator resets, must choose its own password at the next sign-in. A reset shows a temporary password once; nobody can read an existing password. Changing or resetting a password signs that account out everywhere.
 - **Administrators**: Add and remove administrator accounts. The last administrator cannot be removed and nobody can delete their own account.
-- **Curriculum Management**: Create academic departments, classes, and subjects.
+- **Classes and Subjects**: Create, edit, archive, restore and delete classes and subjects. An archived class or subject is no longer offered for registration, new sessions or new assignments, and everything that already refers to it is kept. A class or subject that is in use cannot be renamed or deleted, only archived.
 
 ---
 
@@ -439,7 +439,7 @@ It also creates the starting academic catalog (classes such as `DS-B`, `CS-A` an
 ### 4. Use It With Your Own Data
 The repository ships with **no face photos, no embeddings and no student records**. Everyone who uses the system enrolls their own.
 
-1. **Admin** signs in at [http://localhost:3000](http://localhost:3000), adds or edits classes and subjects, and assigns classes to teachers. More teachers can register themselves from the sign-up page.
+1. **Admin** signs in at [http://localhost:3000](http://localhost:3000), adds or edits classes and subjects, and assigns classes to teachers. More teachers can register themselves from the sign-up page; an administrator approves them and assigns their classes. The sign-up page offers students the classes that exist and are active.
 2. **Each student** registers from the sign-up page with their own details and a clear, front-facing photo. The photo is turned into a face embedding and stored in your database; registration is rejected if no face is found.
 3. **A teacher** opens the attendance flow, picks an assigned class and subject, selects a camera (a laptop webcam, a USB webcam, or a phone connected as a USB webcam), and starts the session. Recognized students on the class roster are marked present once.
 4. **The teacher** ends the session and downloads the CSV. A teacher can correct any record by hand; corrections are audited and are never overwritten by the camera.
@@ -488,7 +488,12 @@ Remove `--dry-run` to copy. Each photo is checked against the student it is name
 | `PATCH` | `/api/v1/admin/teachers/{user_id}` | Admin | Edit a teacher's name, email, teacher ID, department, classes or subjects |
 | `DELETE` | `/api/v1/admin/teachers/{user_id}` | Admin | Delete a teacher; their sessions and attendance are kept |
 | `GET` `POST` `DELETE` | `/api/v1/admin/admins` | Admin | List, add and remove administrators (not yourself, not the last one) |
-| `POST` | `/api/v1/students/register` | Public | Self-service student registration with photo & biometrics |
+| `POST` | `/api/v1/students/register` | Public, rate-limited | Self-service student registration with photo & biometrics, into one of the active classes |
+| `GET` | `/api/v1/academic/public/classes` | Public | The active classes (code, branch, section) for the registration form |
+| `GET` `POST` | `/api/v1/admin/academic/classes` | Admin | List every class with its status and what refers to it; create a class |
+| `PATCH` `DELETE` | `/api/v1/admin/academic/classes/{class_code}` | Admin | Edit a class (code, branch and section only while unused); delete it if nothing refers to it |
+| `POST` | `/api/v1/admin/academic/classes/{class_code}/archive` and `/unarchive` | Admin | Hide a class from registration, new sessions and new assignments, or restore it |
+| `GET` `POST` `PATCH` `DELETE` | `/api/v1/admin/academic/subjects[/{subject_id}]` and `/archive`, `/unarchive` | Admin | The same for subjects |
 | `GET` | `/api/v1/students/me` | Student | Get authenticated student's profile & attendance metrics |
 | `GET` | `/api/v1/students/{student_id}/photo` | The student, admins, and teachers who teach the student | Serve student profile photograph (JPEG) |
 | `POST` | `/api/v1/sessions` | Teacher | Create new active attendance session for class |

@@ -2,9 +2,10 @@ import React, { useMemo, useState } from "react";
 import { api } from "../../services";
 import type { StudentProfileResponse } from "../../types";
 import { studentEditChanges, studentIdChangeWarning, type StudentEditFields } from "../../utils/accounts.ts";
+import { classChoices, classLabel } from "../../utils/catalog.ts";
 import { AuthenticatedImage } from "../common/AuthenticatedImage";
 import { AdminModal, TemporaryPasswordNotice } from "./shared";
-import { BRANCH_OPTIONS, dangerButton, errorText, fieldGap, smallButton, type AdminTabProps } from "./adminShared.ts";
+import { dangerButton, errorText, fieldGap, smallButton, type AdminTabProps } from "./adminShared.ts";
 
 const EMPTY_STUDENT = {
   name: "",
@@ -12,8 +13,7 @@ const EMPTY_STUDENT = {
   password: "",
   student_id: "",
   roll_number: "",
-  branch: "Data Science",
-  section: "B",
+  class_code: "",
 };
 
 function editFields(student: StudentProfileResponse): StudentEditFields {
@@ -22,8 +22,7 @@ function editFields(student: StudentProfileResponse): StudentEditFields {
     email: student.email,
     student_id: student.student_id,
     roll_number: student.roll_number,
-    branch: student.branch,
-    section: student.section,
+    class_code: student.class_code,
   };
 }
 
@@ -36,15 +35,8 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
   const [saving, setSaving] = useState(false);
   const [temporary, setTemporary] = useState<{ label: string; password: string } | null>(null);
 
-  const branches = useMemo(() => {
-    const fromCatalog = (academic?.branches || []).map((b) => b.name);
-    return fromCatalog.length > 0 ? fromCatalog : BRANCH_OPTIONS;
-  }, [academic]);
-
-  const sectionsFor = (branch: string): string[] => {
-    const match = (academic?.branches || []).find((b) => b.name === branch);
-    return match && match.sections.length > 0 ? match.sections : ["A", "B", "C"];
-  };
+  // Active classes only: an archived class is not offered to a new student.
+  const activeClasses = useMemo(() => academic?.classes || [], [academic]);
 
   const filteredStudents = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -60,8 +52,13 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
   }, [students, searchQuery]);
 
   const handleCreate = async () => {
+    const classCode = newStudent.class_code || activeClasses[0]?.class_code || "";
+    if (!classCode) {
+      notify({ type: "error", text: "Create a class first: a student must belong to one." });
+      return;
+    }
     try {
-      await api.createAdminStudent(newStudent);
+      await api.createAdminStudent({ ...newStudent, class_code: classCode });
       notify({
         type: "success",
         text: `Student ${newStudent.name} created. They must choose their own password at first sign-in.`,
@@ -244,23 +241,14 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
             </div>
           </div>
 
-          <div className="erp-form-grid-2" style={fieldGap}>
-            <div className="form-group">
-              <label className="form-label">Branch</label>
-              <select value={newStudent.branch} onChange={(e) => setNewStudent({ ...newStudent, branch: e.target.value })} className="erp-select-input">
-                {branches.map((branch) => (
-                  <option key={branch} value={branch}>{branch}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Section</label>
-              <select value={newStudent.section} onChange={(e) => setNewStudent({ ...newStudent, section: e.target.value })} className="erp-select-input">
-                {sectionsFor(newStudent.branch).map((section) => (
-                  <option key={section} value={section}>Section {section}</option>
-                ))}
-              </select>
-            </div>
+          <div className="form-group" style={fieldGap}>
+            <label className="form-label">Class</label>
+            <select value={newStudent.class_code || activeClasses[0]?.class_code || ""} onChange={(e) => setNewStudent({ ...newStudent, class_code: e.target.value })} className="erp-select-input">
+              {activeClasses.length === 0 && <option value="">No classes exist yet</option>}
+              {activeClasses.map((item) => (
+                <option key={item.class_code} value={item.class_code}>{classLabel(item)}</option>
+              ))}
+            </select>
           </div>
 
           <div className="form-group" style={fieldGap}>
@@ -296,23 +284,13 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
             </div>
           </div>
 
-          <div className="erp-form-grid-2" style={fieldGap}>
-            <div className="form-group">
-              <label className="form-label">Branch</label>
-              <select value={editForm.branch} onChange={(e) => setEditForm({ ...editForm, branch: e.target.value })} className="erp-select-input">
-                {[...new Set([...branches, editForm.branch])].filter(Boolean).map((branch) => (
-                  <option key={branch} value={branch}>{branch}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Section</label>
-              <select value={editForm.section} onChange={(e) => setEditForm({ ...editForm, section: e.target.value })} className="erp-select-input">
-                {[...new Set([...sectionsFor(editForm.branch), editForm.section])].filter(Boolean).map((section) => (
-                  <option key={section} value={section}>Section {section}</option>
-                ))}
-              </select>
-            </div>
+          <div className="form-group" style={fieldGap}>
+            <label className="form-label">Class</label>
+            <select value={editForm.class_code} onChange={(e) => setEditForm({ ...editForm, class_code: e.target.value })} className="erp-select-input">
+              {classChoices(activeClasses, editing.class_code).map((item) => (
+                <option key={item.class_code} value={item.class_code}>{classLabel(item)}</option>
+              ))}
+            </select>
           </div>
 
           <div className="form-group">

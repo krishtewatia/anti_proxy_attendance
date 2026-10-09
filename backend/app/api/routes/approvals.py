@@ -35,6 +35,8 @@ class ApproveRegistrationRequest(BaseModel):
     assigned_subjects: Optional[list[str]] = Field(default=None, max_length=100)
     branch: Optional[str] = Field(default=None, max_length=128)
     section: Optional[str] = Field(default=None, max_length=16)
+    # A student's class can also be confirmed by its code.
+    class_code: Optional[str] = Field(default=None, max_length=20)
 
 
 def _http(exc: ApprovalError) -> HTTPException:
@@ -71,6 +73,7 @@ async def approve_registration_endpoint(
             assigned_subjects=body.assigned_subjects,
             branch=body.branch,
             section=body.section,
+            class_code=body.class_code,
         )
     except ApprovalError as exc:
         raise _http(exc) from exc

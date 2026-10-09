@@ -33,6 +33,13 @@ import type {
 import { clearStoredAuth, getStoredToken, setMustChangePassword } from "./auth.ts";
 import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
 import type { AdminAccount, StudentEditFields, TeacherEditFields } from "../utils/accounts.ts";
+import type {
+  AdminClassRow,
+  AdminSubjectRow,
+  ClassChanges,
+  PublicClass,
+  SubjectEditFields,
+} from "../utils/catalog.ts";
 
 export const getApiBaseUrl = (): string => {
   if (import.meta.env?.VITE_API_BASE_URL) {
@@ -618,6 +625,66 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     });
+  },
+
+  // --- Classes and subjects ---
+
+  // The active classes, for the registration form. Needs no sign-in.
+  getPublicClasses(): Promise<PublicClass[]> {
+    return request<PublicClass[]>("/api/v1/academic/public/classes");
+  },
+
+  getAdminClasses(): Promise<AdminClassRow[]> {
+    return request<AdminClassRow[]>("/api/v1/admin/academic/classes");
+  },
+
+  updateAdminClass(classCode: string, changes: ClassChanges): Promise<{ class_code: string; changed: string[] }> {
+    return request<{ class_code: string; changed: string[] }>(
+      `/api/v1/admin/academic/classes/${encodeURIComponent(classCode)}`,
+      { method: "PATCH", body: JSON.stringify(changes) },
+    );
+  },
+
+  setAdminClassArchived(classCode: string, archived: boolean): Promise<{ class_code: string; status: string }> {
+    return request<{ class_code: string; status: string }>(
+      `/api/v1/admin/academic/classes/${encodeURIComponent(classCode)}/${archived ? "archive" : "unarchive"}`,
+      { method: "POST" },
+    );
+  },
+
+  deleteAdminClass(classCode: string): Promise<{ status: string; class_code: string }> {
+    return request<{ status: string; class_code: string }>(
+      `/api/v1/admin/academic/classes/${encodeURIComponent(classCode)}`,
+      { method: "DELETE" },
+    );
+  },
+
+  getAdminSubjects(): Promise<AdminSubjectRow[]> {
+    return request<AdminSubjectRow[]>("/api/v1/admin/academic/subjects");
+  },
+
+  updateAdminSubject(
+    subjectId: string,
+    changes: Partial<SubjectEditFields>,
+  ): Promise<{ subject_id: string; changed: string[] }> {
+    return request<{ subject_id: string; changed: string[] }>(
+      `/api/v1/admin/academic/subjects/${encodeURIComponent(subjectId)}`,
+      { method: "PATCH", body: JSON.stringify(changes) },
+    );
+  },
+
+  setAdminSubjectArchived(subjectId: string, archived: boolean): Promise<{ subject_id: string; status: string }> {
+    return request<{ subject_id: string; status: string }>(
+      `/api/v1/admin/academic/subjects/${encodeURIComponent(subjectId)}/${archived ? "archive" : "unarchive"}`,
+      { method: "POST" },
+    );
+  },
+
+  deleteAdminSubject(subjectId: string): Promise<{ status: string; subject_id: string }> {
+    return request<{ status: string; subject_id: string }>(
+      `/api/v1/admin/academic/subjects/${encodeURIComponent(subjectId)}`,
+      { method: "DELETE" },
+    );
   },
 
   addAdminClass(data: { class_code: string; branch: string; section: string; semester?: number }): Promise<AcademicClass> {

@@ -55,16 +55,15 @@ async function runAccountTests() {
     email: "asha@example.test",
     student_id: "DS202610",
     roll_number: "20261010",
-    branch: "Data Science",
-    section: "B",
+    class_code: "DS-B",
   };
   expect(Object.keys(studentEditChanges(student, { ...student })).length === 0, "nothing changed must send nothing");
   expect(Object.keys(studentEditChanges(student, { ...student, name: " Asha Verma " })).length === 0, "whitespace is not a change");
   const idOnly = studentEditChanges(student, { ...student, student_id: "DS202699" });
   expect(JSON.stringify(idOnly) === JSON.stringify({ student_id: "DS202699" }), "an ID change must send only the ID");
-  const moved = studentEditChanges(student, { ...student, section: "c" });
-  expect(moved.branch === "Data Science" && moved.section === "C", "a class change must send branch and section together");
-  expect(moved.name === undefined && moved.email === undefined, "a class change must not resend other fields");
+  const moved = studentEditChanges(student, { ...student, class_code: " ds-c " });
+  expect(JSON.stringify(moved) === JSON.stringify({ class_code: "DS-C" }), "a class change must send only the class code");
+  expect(Object.keys(studentEditChanges(student, { ...student, class_code: "ds-b" })).length === 0, "the same class in another case is not a change");
   expect(studentIdChangeWarning("DS202610", "DS202699").includes("DS202610") && studentIdChangeWarning("DS202610", "DS202699").includes("DS202699"), "the warning must name both IDs");
 
   console.log("[6/7] Only the teacher fields that changed are sent...");

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StudentProfile(BaseModel):
@@ -39,13 +39,24 @@ class StudentRegisterRequest(BaseModel):
     roll_number: str = Field(
         min_length=2, max_length=64, description="ERP / Roll number e.g. 20261234"
     )
-    branch: str = Field(
-        min_length=1, max_length=64, description="Academic branch e.g. Data Science"
+    # The class is given by its code (the registration form's list of active
+    # classes), or the older way by branch and section.
+    class_code: Optional[str] = Field(
+        default=None, min_length=2, max_length=20, description="Class code e.g. DS-B"
     )
-    section: str = Field(min_length=1, max_length=16, description="Section e.g. B")
+    branch: str = Field(default="", max_length=64, description="Academic branch e.g. Data Science")
+    section: str = Field(default="", max_length=16, description="Section e.g. B")
     photo_base64: Optional[str] = Field(
         default=None, description="Optional Base64 encoded photograph"
     )
+
+    @model_validator(mode="after")
+    def class_or_branch_and_section(self) -> "StudentRegisterRequest":
+        if not (self.class_code and self.class_code.strip()) and not (
+            self.branch.strip() and self.section.strip()
+        ):
+            raise ValueError("Choose a class, or give both a branch and a section")
+        return self
 
 
 class StudentProfileResponse(BaseModel):

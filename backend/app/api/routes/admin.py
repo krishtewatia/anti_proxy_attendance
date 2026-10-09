@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 
 from app.api.dependencies.auth import require_admin
-from app.database.academic import add_academic_class, add_subject
+from app.services import academic_admin_service as catalog
+from app.services.academic_admin_service import AcademicAdminError
 from app.database.mongodb import get_database
 from app.database.sessions import (
     create_session,
@@ -16,10 +17,7 @@ from app.database.sessions import (
     get_session,
 )
 from app.database.student_profiles import list_all_students_full
-from app.database.teacher_profiles import (
-    assign_classes_to_teacher,
-    list_all_teachers,
-)
+from app.database.teacher_profiles import list_all_teachers
 from app.database.users import get_all_users
 from app.schemas.academic import AcademicClass, Subject
 from app.schemas.session import SessionCreate, SessionResponse
@@ -36,6 +34,7 @@ from app.services.account_admin_service import (
     AccountAdminError,
     delete_teacher,
     mark_created_by_admin,
+    update_teacher,
 )
 from app.services.session_enrollment import get_enrolled_roster
 from app.services.student_deletion import (
@@ -74,10 +73,53 @@ class AddClassRequest(BaseModel):
     semester: Optional[int] = None
 
 
+class UpdateClassRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    class_code: Optional[str] = None
+    branch: Optional[str] = None
+    section: Optional[str] = None
+    semester: Optional[int] = None
+    clear_semester: bool = False
+
+
 class AddSubjectRequest(BaseModel):
     name: str
     code: Optional[str] = None
     branch: Optional[str] = None
+
+
+class UpdateSubjectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = None
+    code: Optional[str] = None
+    branch: Optional[str] = None
+
+
+def _catalog_refused(exc: AcademicAdminError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=str(exc))
+
+
+async def _refuse_unavailable_assignments(classes: list[str], subjects: list[str]) -> None:
+    """A new teacher can be given only classes that exist and are active, and no archived subject."""
+    db = get_database()
+    codes = {str(c).strip().upper() for c in classes if str(c).strip()}
+    unknown = []
+    for code in sorted(codes):
+        if not catalog.is_active(await catalog.find_class(db, code)):
+            unknown.append(code)
+    if unknown and await db["academic_classes"].count_documents({}) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown or archived class: {', '.join(unknown)}",
+        )
+    retired = await catalog.archived_subjects(db, [s for s in subjects if s and s.strip()])
+    if retired:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Archived subject: {', '.join(retired)}",
+        )
 
 
 # --- 1. USER ACCOUNTS OVERVIEW ---
@@ -236,6 +278,7 @@ async def admin_create_teacher(
     payload: TeacherRegisterRequest,
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> TeacherProfileResponse:
+    await _refuse_unavailable_assignments(payload.assigned_classes, payload.assigned_subjects)
     try:
         created = await register_teacher_account(payload, approved=True)
     except Exception as exc:
@@ -284,20 +327,42 @@ async def admin_assign_teacher_classes(
     payload: TeacherAssignClassesRequest,
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> TeacherProfileResponse:
-    updated = await assign_classes_to_teacher(
-        teacher_id=teacher_id,
-        assigned_classes=payload.assigned_classes,
-        assigned_subjects=payload.assigned_subjects,
+    # Same rules and audit entry as editing the teacher: only active classes
+    # and subjects can be added.
+    db = get_database()
+    profile = await db["teacher_profiles"].find_one(
+        {"$or": [{"teacher_id": teacher_id}, {"user_id": teacher_id}]}, {"user_id": 1}
     )
-    if not updated:
+    if profile is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Teacher '{teacher_id}' not found",
         )
+    try:
+        await update_teacher(
+            db,
+            profile["user_id"],
+            updated_by=current_user,
+            assigned_classes=payload.assigned_classes,
+            assigned_subjects=payload.assigned_subjects,
+        )
+    except AccountAdminError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    updated = await db["teacher_profiles"].find_one({"user_id": profile["user_id"]}, {"_id": 0})
     return TeacherProfileResponse(**updated)
 
 
 # --- 4. ACADEMIC STRUCTURE MANAGEMENT ---
+
+
+@router.get(
+    "/academic/classes",
+    summary="Every class, archived ones included, with what refers to each",
+)
+async def admin_list_classes(
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> list[dict]:
+    return await catalog.list_classes_for_admin(get_database())
 
 
 @router.post(
@@ -310,13 +375,98 @@ async def admin_add_class(
     payload: AddClassRequest,
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> AcademicClass:
-    doc = await add_academic_class(
-        class_code=payload.class_code,
-        branch=payload.branch,
-        section=payload.section,
-        semester=payload.semester,
-    )
+    try:
+        doc = await catalog.create_class(
+            get_database(),
+            class_code=payload.class_code,
+            branch=payload.branch,
+            section=payload.section,
+            semester=payload.semester,
+            created_by=current_user,
+        )
+    except AcademicAdminError as exc:
+        raise _catalog_refused(exc) from exc
     return AcademicClass(**doc)
+
+
+@router.patch(
+    "/academic/classes/{class_code}",
+    summary="Edit a class; its code, branch and section are fixed once it is in use",
+)
+async def admin_update_class(
+    class_code: str,
+    payload: UpdateClassRequest,
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> dict:
+    try:
+        return await catalog.update_class(
+            get_database(),
+            class_code,
+            updated_by=current_user,
+            new_class_code=payload.class_code,
+            branch=payload.branch,
+            section=payload.section,
+            semester=payload.semester,
+            clear_semester=payload.clear_semester,
+        )
+    except AcademicAdminError as exc:
+        raise _catalog_refused(exc) from exc
+
+
+@router.post(
+    "/academic/classes/{class_code}/archive",
+    summary="Hide a class from registration, new sessions and new assignments",
+)
+async def admin_archive_class(
+    class_code: str,
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> dict:
+    try:
+        return await catalog.set_class_archived(
+            get_database(), class_code, archived=True, changed_by=current_user
+        )
+    except AcademicAdminError as exc:
+        raise _catalog_refused(exc) from exc
+
+
+@router.post(
+    "/academic/classes/{class_code}/unarchive",
+    summary="Make an archived class available again",
+)
+async def admin_unarchive_class(
+    class_code: str,
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> dict:
+    try:
+        return await catalog.set_class_archived(
+            get_database(), class_code, archived=False, changed_by=current_user
+        )
+    except AcademicAdminError as exc:
+        raise _catalog_refused(exc) from exc
+
+
+@router.delete(
+    "/academic/classes/{class_code}",
+    summary="Delete a class that nothing refers to",
+)
+async def admin_delete_class(
+    class_code: str,
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> dict:
+    try:
+        return await catalog.delete_class(get_database(), class_code, deleted_by=current_user)
+    except AcademicAdminError as exc:
+        raise _catalog_refused(exc) from exc
+
+
+@router.get(
+    "/academic/subjects",
+    summary="Every subject, archived ones included, with what refers to each",
+)
+async def admin_list_subjects(
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> list[dict]:
+    return await catalog.list_subjects_for_admin(get_database())
 
 
 @router.post(
@@ -329,12 +479,85 @@ async def admin_add_subject(
     payload: AddSubjectRequest,
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> Subject:
-    doc = await add_subject(
-        name=payload.name,
-        code=payload.code,
-        branch=payload.branch,
-    )
+    try:
+        doc = await catalog.create_subject(
+            get_database(),
+            name=payload.name,
+            code=payload.code,
+            branch=payload.branch,
+            created_by=current_user,
+        )
+    except AcademicAdminError as exc:
+        raise _catalog_refused(exc) from exc
     return Subject(**doc)
+
+
+@router.patch(
+    "/academic/subjects/{subject_id}",
+    summary="Edit a subject; its name is fixed once it is in use",
+)
+async def admin_update_subject(
+    subject_id: str,
+    payload: UpdateSubjectRequest,
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> dict:
+    try:
+        return await catalog.update_subject(
+            get_database(),
+            subject_id,
+            updated_by=current_user,
+            name=payload.name,
+            code=payload.code,
+            branch=payload.branch,
+        )
+    except AcademicAdminError as exc:
+        raise _catalog_refused(exc) from exc
+
+
+@router.post(
+    "/academic/subjects/{subject_id}/archive",
+    summary="Hide a subject from new sessions and new assignments",
+)
+async def admin_archive_subject(
+    subject_id: str,
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> dict:
+    try:
+        return await catalog.set_subject_archived(
+            get_database(), subject_id, archived=True, changed_by=current_user
+        )
+    except AcademicAdminError as exc:
+        raise _catalog_refused(exc) from exc
+
+
+@router.post(
+    "/academic/subjects/{subject_id}/unarchive",
+    summary="Make an archived subject available again",
+)
+async def admin_unarchive_subject(
+    subject_id: str,
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> dict:
+    try:
+        return await catalog.set_subject_archived(
+            get_database(), subject_id, archived=False, changed_by=current_user
+        )
+    except AcademicAdminError as exc:
+        raise _catalog_refused(exc) from exc
+
+
+@router.delete(
+    "/academic/subjects/{subject_id}",
+    summary="Delete a subject that nothing refers to",
+)
+async def admin_delete_subject(
+    subject_id: str,
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> dict:
+    try:
+        return await catalog.delete_subject(get_database(), subject_id, deleted_by=current_user)
+    except AcademicAdminError as exc:
+        raise _catalog_refused(exc) from exc
 
 
 # --- 5. SESSION MONITORING ---
@@ -402,6 +625,12 @@ async def admin_create_session_endpoint(
         None, description="Optional teacher ID to assign this session to"
     ),
 ) -> SessionResponse:
+    try:
+        await catalog.refuse_archived_session_target(
+            get_database(), class_code=session.class_code, subject=session.subject
+        )
+    except AcademicAdminError as exc:
+        raise _catalog_refused(exc) from exc
     created_by = assigned_teacher_id if assigned_teacher_id else current_user["user_id"]
     created_session = await create_session(session, created_by=created_by)
 

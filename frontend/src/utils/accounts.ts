@@ -48,8 +48,8 @@ export interface StudentEditFields {
   email: string;
   student_id: string;
   roll_number: string;
-  branch: string;
-  section: string;
+  // The student's class, by its code.
+  class_code: string;
 }
 
 // Only what the administrator actually changed is sent, so an untouched
@@ -65,12 +65,9 @@ export function studentEditChanges(
       changes[key] = value;
     }
   }
-  const branch = edited.branch.trim();
-  const section = edited.section.trim().toUpperCase();
-  if (branch !== (original.branch ?? "").trim() || section !== (original.section ?? "").trim().toUpperCase()) {
-    // A class is a branch and a section together.
-    changes.branch = branch;
-    changes.section = section;
+  const classCode = edited.class_code.trim().toUpperCase();
+  if (classCode !== (original.class_code ?? "").trim().toUpperCase()) {
+    changes.class_code = classCode;
   }
   return changes;
 }

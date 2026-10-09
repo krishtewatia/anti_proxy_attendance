@@ -12,6 +12,7 @@ from app.database.student_profiles import (
     normalize_class_code,
     upsert_student_profile,
 )
+from app.database.mongodb import get_database
 from app.database.users import create_user, get_user_by_email
 from app.schemas.student import (
     StudentAttendanceDashboardResponse,
@@ -23,6 +24,7 @@ from app.schemas.student import (
 )
 from app.security.passwords import hash_password
 from app.core.account_status import ACCOUNT_APPROVED, ACCOUNT_PENDING
+from app.services.academic_admin_service import resolve_active_class
 from app.services.student_biometric_service import (
     ENROLL_ACTIVE,
     ENROLL_PENDING_REGISTRATION,
@@ -104,8 +106,19 @@ async def register_student_account(
     if existing_profile is not None:
         raise DuplicateStudentProfileError(f"Student ID '{req.student_id}' is already registered")
 
-    # 3. Compute class code
-    class_code = normalize_class_code(req.branch, req.section)
+    # 3. The class: an active class from the catalog. Only a database with no
+    #    catalog at all falls back to deriving a code from branch and section.
+    db = get_database()
+    chosen = await resolve_active_class(
+        db, class_code=req.class_code, branch=req.branch, section=req.section
+    )
+    if chosen is not None:
+        branch, section, class_code = chosen["branch"], chosen["section"], chosen["class_code"]
+    elif req.class_code or await db["academic_classes"].count_documents({}) > 0:
+        raise ValueError("Choose one of the classes in the list; that class is not available.")
+    else:
+        branch, section = req.branch, req.section
+        class_code = normalize_class_code(branch, section)
 
     # 4. Extract and store the biometric embedding if a photo was provided. This
     #    runs before the account is created: if no face is found the request
@@ -147,8 +160,8 @@ async def register_student_account(
         email=req.email,
         student_id=req.student_id,
         roll_number=req.roll_number,
-        branch=req.branch,
-        section=req.section,
+        branch=branch,
+        section=section,
         class_code=class_code,
         photo_base64=req.photo_base64,
         photo_url=photo_url,
@@ -162,8 +175,8 @@ async def register_student_account(
         email=req.email,
         student_id=req.student_id,
         roll_number=req.roll_number,
-        branch=req.branch,
-        section=req.section,
+        branch=branch,
+        section=section,
         class_code=class_code,
         photo_url=photo_url,
         has_biometric=has_biometric,
