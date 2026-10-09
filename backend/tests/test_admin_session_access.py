@@ -142,18 +142,15 @@ async def test_the_session_list_shows_a_teacher_their_own_and_an_admin_everythin
 
 
 @pytest.mark.anyio
-async def test_an_admin_reads_but_does_not_take_or_correct_attendance():
-    """Opening a session is read-only for an administrator.
-
-    Creating, starting and ending a session, sending camera frames, editing
-    the roster and correcting a record stay with the teacher who owns it.
-    Finalizing and deleting are done through the administrator's own routes.
+async def test_an_admin_does_not_take_attendance_or_edit_rosters():
+    """Creating, starting and ending a session, sending camera frames and editing the
+    roster stay with the teacher who owns the session. Finalizing and deleting are
+    done through the administrator's own routes.
     """
     teacher = await _token("teacher_owner", "TEACHER", ("DS-B",))
     admin = await _token("admin_acc", "ADMIN")
-    db = mongodb.get_database()
     async with _client() as client:
-        session_id, attendance_id = await _owned_session(client, teacher)
+        session_id, _ = await _owned_session(client, teacher)
         refused = [
             await client.post("/api/v1/sessions", headers=admin, json=_session()),
             await client.post(f"/api/v1/sessions/{session_id}/start", headers=admin),
@@ -166,16 +163,12 @@ async def test_an_admin_reads_but_does_not_take_or_correct_attendance():
             await client.post(
                 f"/api/v1/sessions/{session_id}/roster", headers=admin, json={"identities": []}
             ),
-            await client.patch(
-                f"/api/v1/attendance/{session_id}/records/{attendance_id}",
-                headers=admin,
-                json={"new_status": "PRESENT", "new_presence_seconds": 3600.0, "reason": "Office"},
+            await client.put(
+                f"/api/v1/sessions/{session_id}/roster", headers=admin, json={"identities": []}
             ),
             await client.delete(f"/api/v1/sessions/{session_id}", headers=admin),
         ]
         assert [r.status_code for r in refused] == [403] * 7
-        record = await db["attendance_records"].find_one({"attendance_id": attendance_id})
-        assert record["status"] == "ABSENT"
 
         # The administrator's own routes for a session.
         finalized = await client.post(f"/api/v1/admin/sessions/{session_id}/finalize", headers=admin)
@@ -186,3 +179,136 @@ async def test_an_admin_reads_but_does_not_take_or_correct_attendance():
         assert detail.json()["status"] == "FINALIZED"
         deleted = await client.delete(f"/api/v1/admin/sessions/{session_id}", headers=admin)
         assert deleted.status_code == 200
+
+
+def _correction(reason: str = "Medical certificate checked by the office") -> dict:
+    return {"new_status": "PRESENT", "new_presence_seconds": 0.0, "reason": reason}
+
+
+@pytest.mark.anyio
+async def test_an_admin_can_correct_attendance_with_a_reason_and_it_is_audited_as_theirs():
+    teacher = await _token("teacher_owner", "TEACHER", ("DS-B",))
+    admin = await _token("admin_acc", "ADMIN")
+    db = mongodb.get_database()
+    async with _client() as client:
+        session_id, attendance_id = await _owned_session(client, teacher)
+        path = f"/api/v1/attendance/{session_id}/records/{attendance_id}"
+
+        corrected = await client.patch(path, headers=admin, json=_correction())
+        assert corrected.status_code == 200, corrected.text
+        assert corrected.json()["corrected_by"] == "admin_acc"
+        assert corrected.json()["previous_status"] == "ABSENT"
+
+        # Everyone who opens the session sees the corrected record.
+        for viewer in (admin, teacher):
+            row = (await client.get(f"/api/v1/attendance/{session_id}", headers=viewer)).json()["records"][0]
+            assert (row["status"], row["manually_corrected"]) == ("PRESENT", True)
+        history = await client.get(f"{path}/corrections", headers=teacher)
+        assert [c["reason"] for c in history.json()] == ["Medical certificate checked by the office"]
+
+    entries = [doc async for doc in db["audit_events"].find({"action": "ATTENDANCE_CORRECTED"})]
+    assert len(entries) == 1
+    entry = entries[0]
+    assert (entry["actor_user_id"], entry["actor_role"]) == ("admin_acc", "ADMIN")
+    assert entry["metadata"]["admin_correction"] is True
+    assert entry["metadata"]["corrected_by_role"] == "ADMIN"
+    assert entry["metadata"]["reason"] == "Medical certificate checked by the office"
+    assert (entry["metadata"]["previous_status"], entry["metadata"]["new_status"]) == ("ABSENT", "PRESENT")
+    assert entry["metadata"]["session_id"] == session_id
+
+
+@pytest.mark.anyio
+async def test_an_admin_correction_without_a_reason_is_refused_and_changes_nothing():
+    teacher = await _token("teacher_owner", "TEACHER", ("DS-B",))
+    admin = await _token("admin_acc", "ADMIN")
+    db = mongodb.get_database()
+    async with _client() as client:
+        session_id, attendance_id = await _owned_session(client, teacher)
+        path = f"/api/v1/attendance/{session_id}/records/{attendance_id}"
+
+        # The one-click toggle carries no reason.
+        toggle = await client.patch(path, headers=admin, json={"status": "PRESENT"})
+        blank = await client.patch(path, headers=admin, json=_correction("   "))
+        empty = await client.patch(path, headers=admin, json=_correction(""))
+        missing = await client.patch(
+            path, headers=admin, json={"new_status": "PRESENT", "new_presence_seconds": 0.0}
+        )
+    assert (toggle.status_code, blank.status_code) == (400, 400)
+    assert "reason" in toggle.json()["detail"].lower()
+    assert empty.status_code == 422 and missing.status_code in (400, 422)
+
+    record = await db["attendance_records"].find_one({"attendance_id": attendance_id})
+    assert record["status"] == "ABSENT" and not record.get("manually_corrected")
+    assert await db["audit_events"].count_documents({"action": "ATTENDANCE_CORRECTED"}) == 0
+    assert await db["attendance_corrections"].count_documents({}) == 0
+
+
+@pytest.mark.anyio
+async def test_a_teachers_correction_is_still_allowed_and_is_not_marked_as_an_admin_correction():
+    teacher = await _token("teacher_owner", "TEACHER", ("DS-B",))
+    other_teacher = await _token("teacher_other", "TEACHER", ("DS-B",))
+    student = await _token("student_acc", "STUDENT")
+    db = mongodb.get_database()
+    async with _client() as client:
+        session_id, attendance_id = await _owned_session(client, teacher)
+        path = f"/api/v1/attendance/{session_id}/records/{attendance_id}"
+        # The owner can still use the one-click toggle; nobody else can correct at all.
+        toggled = await client.patch(path, headers=teacher, json={"status": "PRESENT"})
+        as_other = await client.patch(path, headers=other_teacher, json=_correction())
+        as_student = await client.patch(path, headers=student, json=_correction())
+        no_token = await client.patch(path, json=_correction())
+    assert toggled.status_code == 200, toggled.text
+    assert (as_other.status_code, as_student.status_code, no_token.status_code) == (403, 403, 401)
+
+    entry = await db["audit_events"].find_one({"action": "ATTENDANCE_CORRECTED"})
+    assert (entry["actor_user_id"], entry["actor_role"]) == ("teacher_owner", "TEACHER")
+    assert entry["metadata"]["admin_correction"] is False
+
+
+@pytest.mark.anyio
+async def test_attendance_rows_carry_the_students_name_id_and_roll_number():
+    teacher = await _token("teacher_owner", "TEACHER", ("DS-B",))
+    await mongodb.get_database()["student_profiles"].update_one(
+        {"identity": "ACC-STU"}, {"$set": {"roll_number": "20261234"}}
+    )
+    async with _client() as client:
+        session_id, _ = await _owned_session(client, teacher)
+        row = (await client.get(f"/api/v1/attendance/{session_id}", headers=teacher)).json()["records"][0]
+    assert (row["student_name"], row["student_id"], row["roll_number"]) == (
+        "Access Student",
+        "ACC-STU",
+        "20261234",
+    )
+
+
+@pytest.mark.anyio
+async def test_a_session_that_was_never_started_is_reported_as_not_taken():
+    """Created and closed without attendance: its 0 % is not a turnout."""
+    teacher = await _token("teacher_owner", "TEACHER", ("DS-B",))
+    admin = await _token("admin_acc", "ADMIN")
+    db = mongodb.get_database()
+    async with _client() as client:
+        never_taken, _ = await _owned_session(client, teacher)
+        await client.post(f"/api/v1/admin/sessions/{never_taken}/finalize", headers=admin)
+
+        # Started, everyone absent: taken, and a real 0 %.
+        taken_empty = (await client.post("/api/v1/sessions", headers=teacher, json=_session("Taken"))).json()["session_id"]
+        assert (await client.post(f"/api/v1/sessions/{taken_empty}/start", headers=teacher)).status_code == 200
+        await client.post(f"/api/v1/sessions/{taken_empty}/finalize", headers=teacher)
+
+        # From before start times were stored, but with a mark: taken.
+        legacy = (await client.post("/api/v1/sessions", headers=teacher, json=_session("Legacy"))).json()["session_id"]
+        await client.get(f"/api/v1/attendance/{legacy}", headers=teacher)
+        await db["attendance_records"].update_one({"session_id": legacy}, {"$set": {"status": "PRESENT"}})
+        await db["sessions"].update_one({"session_id": legacy}, {"$set": {"status": "FINALIZED"}})
+
+        dashboard = (await client.get("/api/v1/teachers/dashboard", headers=teacher)).json()
+        admin_rows = {s["session_id"]: s for s in (await client.get("/api/v1/admin/sessions", headers=admin)).json()}
+
+    teacher_rows = {s["session_id"]: s for s in dashboard["previous_sessions"]}
+    for rows in (teacher_rows, admin_rows):
+        assert rows[never_taken]["was_taken"] is False
+        assert rows[taken_empty]["was_taken"] is True
+        assert rows[legacy]["was_taken"] is True
+    assert teacher_rows[taken_empty]["attendance_percentage"] == 0.0
+    assert (await db["sessions"].find_one({"session_id": taken_empty}))["started_at"] is not None

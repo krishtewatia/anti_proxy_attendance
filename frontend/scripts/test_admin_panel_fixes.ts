@@ -105,7 +105,7 @@ async function run() {
   const authLayout = readFileSync("src/components/auth/AuthLayout.tsx", "utf-8");
   expect(/<a className="erp-auth-home-link" href="\/"/.test(authLayout), "the sign-in page header must link to the public home page");
   const app = readFileSync("src/App.tsx", "utf-8");
-  expect((app.match(/onGoHome=\{goHome\}/g) || []).length === (app.match(/<AppLayout\n/g) || []).length, "every signed-in layout must be given the home action");
+  expect((app.match(/onGoHome=\{goHome\}/g) || []).length === (app.match(/<AppLayout\r?\n/g) || []).length, "every signed-in layout must be given the home action");
 
   console.log("[6/6] The product name comes from one setting; no made-up institution (bug e)...");
   expect(APP_NAME === "Anti-Proxy Attendance System", `unexpected default name: ${APP_NAME}`);

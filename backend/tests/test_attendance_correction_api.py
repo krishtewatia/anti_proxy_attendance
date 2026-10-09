@@ -169,9 +169,10 @@ async def test_correction_student_role_rejected_403(
 
 
 @pytest.mark.anyio
-async def test_correction_admin_role_rejected_403(
+async def test_correction_by_admin_with_a_reason_is_accepted(
     sample_session_and_attendance, admin_headers
 ):
+    """An administrator may correct attendance, with a reason (see test_admin_session_access.py)."""
     data = sample_session_and_attendance
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -184,7 +185,7 @@ async def test_correction_admin_role_rejected_403(
                 "reason": "Admin correction attempt",
             },
         )
-    assert resp.status_code == 403
+    assert resp.status_code == 200
 
 
 # ------------------------------------------------------------------------------

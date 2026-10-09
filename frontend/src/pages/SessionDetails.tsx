@@ -1,10 +1,13 @@
-import { isSessionCompleted, sessionStatusLabel } from "../utils/sessions.ts";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { AuditLogs } from "../components/audit";
 import { AlwaysOnVideoFeed, SessionAttendance } from "../components/session";
 import { api } from "../services";
 import type { SessionResponse, UserResponse } from "../types";
-import "./session-details.css";
+import { formatDate, formatTime } from "../utils/dates.ts";
+import { isSessionActive, isSessionCompleted, sessionStatusBadgeClass, sessionStatusLabel } from "../utils/sessions.ts";
+// The page is built from the classes the dashboards already use.
+import "./admin-dashboard.css";
+import "./teacher-attendance-flow.css";
 
 interface SessionDetailsProps {
   sessionId: string;
@@ -12,45 +15,58 @@ interface SessionDetailsProps {
   onNavigate: (path: string) => void;
 }
 
-function formatSessionDateTime(isoStr: string): string {
-  try {
-    const d = new Date(isoStr);
-    const dateStr = d.toLocaleDateString(undefined, {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-    const timeStr = d.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-    return `${dateStr} • ${timeStr}`;
-  } catch {
-    return isoStr;
-  }
+const field: React.CSSProperties = { display: "flex", flexDirection: "column", gap: "0.2rem" };
+const fieldLabel: React.CSSProperties = {
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  color: "var(--erp-text-muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+};
+const fieldValue: React.CSSProperties = { fontSize: "0.9375rem", fontWeight: 600, color: "var(--erp-text-main)" };
+
+// What the line under the title says, by status.
+export function sessionPageSubtitle(status: string): string {
+  if (isSessionCompleted(status)) return "Final attendance for this session, with its correction history.";
+  if (isSessionActive(status)) return "Attendance is being taken now.";
+  return "This session has not been started yet.";
 }
 
-export const SessionDetails: React.FC<SessionDetailsProps> = ({
-  sessionId,
-  user,
-  onNavigate,
-}) => {
+export const SessionDetails: React.FC<SessionDetailsProps> = ({ sessionId, user, onNavigate }) => {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [errorType, setErrorType] = useState<"NOT_FOUND" | "FORBIDDEN" | "GENERAL" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [banner, setBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [attendanceRefreshKey, setAttendanceRefreshKey] = useState(0);
 
   const isUserAdmin = user?.role === "ADMIN";
+  const backPath = isUserAdmin ? "/dashboard/admin" : "/dashboard/teacher";
+
+  const fetchSession = useCallback(async () => {
+    setLoading(true);
+    setErrorMessage(null);
+    setNotFound(false);
+    try {
+      setSession(await api.getSession(sessionId));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setErrorMessage(msg);
+      setNotFound(msg.includes("404") || msg.toLowerCase().includes("not found"));
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    void fetchSession();
+  }, [fetchSession]);
 
   const handleEndSession = async () => {
     if (
       !window.confirm(
-        "End session and finalize attendance records now? This locks the session against live camera events and calculates final attendance."
+        "End this session and finalize its attendance now? Students not marked present are recorded as absent.",
       )
     ) {
       return;
@@ -63,16 +79,11 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
       } else {
         await api.finalizeSession(sessionId);
       }
-      setSession((prev) => (prev ? { ...prev, status: "FINALIZED" } : prev));
       setAttendanceRefreshKey((k) => k + 1);
-      setBanner({
-        type: "success",
-        text: "Session ended and attendance finalized! You can now manually adjust attendance records below.",
-      });
-      fetchSession();
+      setBanner({ type: "success", text: "Session finalized. Records can still be corrected below." });
+      await fetchSession();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setBanner({ type: "error", text: `Failed to end session: ${msg}` });
+      setBanner({ type: "error", text: `Failed to finalize the session: ${err instanceof Error ? err.message : String(err)}` });
     } finally {
       setActionLoading(false);
     }
@@ -82,7 +93,7 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
     if (!session) return;
     if (
       !window.confirm(
-        `Are you sure you want to permanently delete session "${session.course_name}" (${session.session_id})? This will delete all attendance records.`
+        `Delete the session "${session.course_name}"?\n\nIts roster and all its attendance records are deleted too. This cannot be undone.`,
       )
     ) {
       return;
@@ -91,347 +102,148 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
     try {
       if (isUserAdmin) {
         await api.adminDeleteSession(sessionId);
-        onNavigate("/dashboard/admin");
       } else {
         await api.deleteSession(sessionId);
-        onNavigate("/dashboard/teacher");
       }
+      onNavigate(backPath);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setBanner({ type: "error", text: `Failed to delete session: ${msg}` });
+      setBanner({ type: "error", text: `Failed to delete the session: ${err instanceof Error ? err.message : String(err)}` });
       setActionLoading(false);
     }
   };
 
-  const fetchSession = async () => {
-    setLoading(true);
-    setErrorType(null);
-    setErrorMessage(null);
+  const backButton = (
+    <button
+      type="button"
+      className="erp-btn erp-btn-secondary"
+      style={{ marginBottom: "1.25rem" }}
+      onClick={() => onNavigate(backPath)}
+    >
+      ← Back to {isUserAdmin ? "Admin Dashboard" : "Dashboard"}
+    </button>
+  );
 
-    try {
-      const data = await api.getSession(sessionId);
-      setSession(data);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMessage(msg);
-
-      if (msg.includes("404") || msg.toLowerCase().includes("not found")) {
-        setErrorType("NOT_FOUND");
-      } else if (
-        msg.includes("403") ||
-        msg.toLowerCase().includes("own") ||
-        msg.toLowerCase().includes("permissions")
-      ) {
-        setErrorType("FORBIDDEN");
-      } else {
-        setErrorType("GENERAL");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchSession();
-  }, [sessionId]);
-
-  const handleCopyId = async (id: string) => {
-    try {
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(id);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
-    } catch {
-      // Ignore copy error
-    }
-  };
-
-  // State 1: Loading
-  if (loading) {
+  if (loading && !session) {
     return (
-      <div className="session-details-page" aria-live="polite">
-        <button
-          type="button"
-          className="session-back-btn"
-          onClick={() => onNavigate("/dashboard/teacher")}
-        >
-          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-          </svg>
-          <span>Back to Sessions</span>
-        </button>
-
-        <div className="session-skeleton-header" />
-        <div className="session-skeleton-box" />
+      <div aria-live="polite">
+        {backButton}
+        <div className="erp-empty-box">Loading session...</div>
       </div>
     );
   }
 
-  // State 2: 404 Not Found
-  if (errorType === "NOT_FOUND") {
+  if (!session) {
     return (
-      <div className="session-details-page">
-        <button
-          type="button"
-          className="session-back-btn"
-          onClick={() => onNavigate("/dashboard/teacher")}
-        >
-          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-          </svg>
-          <span>Back to Sessions</span>
-        </button>
-
-        <div className="session-error-container" role="alert">
-          <div className="session-error-icon-wrapper not-found" aria-hidden="true">
-            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M12 18h.01"
-              />
-            </svg>
-          </div>
-          <h2 className="session-error-title">Session Not Found</h2>
-          <p className="session-error-desc">
-            This session may have been deleted or you may not have access to it.
-          </p>
-          <button
-            type="button"
-            className="btn-primary-action"
-            onClick={() => onNavigate("/dashboard/teacher")}
-          >
-            Back to Sessions
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // State 3: 403 Forbidden or other API error
-  if (errorType || !session) {
-    return (
-      <div className="session-details-page">
-        <button
-          type="button"
-          className="session-back-btn"
-          onClick={() => onNavigate("/dashboard/teacher")}
-        >
-          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-          </svg>
-          <span>Back to Sessions</span>
-        </button>
-
-        <div className="session-error-container" role="alert">
-          <div className="session-error-icon-wrapper forbidden" aria-hidden="true">
-            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-              />
-            </svg>
-          </div>
-          <h2 className="session-error-title">
-            {errorType === "FORBIDDEN" ? "Access Denied" : "Unable to Load Session"}
+      <div>
+        {backButton}
+        <div className="erp-card" style={{ padding: "2rem", textAlign: "center" }} role="alert">
+          <h2 style={{ fontSize: "1.125rem", fontWeight: 700, color: "var(--erp-text-main)", marginBottom: "0.5rem" }}>
+            {notFound ? "Session Not Found" : "Unable to Load Session"}
           </h2>
-          <p className="session-error-desc">
-            {errorMessage || "You do not have permission to view this attendance session."}
+          <p style={{ color: "var(--erp-text-muted)", fontSize: "0.875rem", marginBottom: "1.25rem" }}>
+            {notFound
+              ? "This session may have been deleted."
+              : errorMessage || "You do not have permission to view this session."}
           </p>
-          <div className="session-error-actions">
-            <button
-              type="button"
-              className="btn-primary-action"
-              onClick={() => onNavigate("/dashboard/teacher")}
-            >
-              Back to Sessions
-            </button>
-            <button
-              type="button"
-              className="btn-secondary-action"
-              onClick={fetchSession}
-            >
+          {!notFound && (
+            <button type="button" className="erp-btn erp-btn-secondary" onClick={() => void fetchSession()}>
               Retry
             </button>
-          </div>
+          )}
         </div>
       </div>
     );
   }
 
-  // State 4: Success - Display Real Session Information
+  const completed = isSessionCompleted(session.status);
+
   return (
-    <div className="session-details-page">
-      {/* Navigation Top */}
-      <button
-        type="button"
-        className="session-back-btn"
-        onClick={() => onNavigate(isUserAdmin ? "/dashboard/admin" : "/dashboard/teacher")}
-      >
-        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-        </svg>
-        <span>Back to {isUserAdmin ? "Admin Dashboard" : "Sessions"}</span>
-      </button>
+    <div>
+      {backButton}
 
-      {/* Header */}
-      <header className="session-details-header">
-        <h1 className="session-details-title">Session Details</h1>
-        <p className="session-details-subtitle">
-          View scheduled parameters, verification criteria, and classroom allocation.
-        </p>
-      </header>
+      <div className="erp-page-header">
+        <h1 className="erp-page-title">{session.course_name}</h1>
+        <p className="erp-page-subtitle">{sessionPageSubtitle(session.status)}</p>
+      </div>
 
-      {/* Notification Banner */}
       {banner && (
-        <div className={`session-banner session-banner-${banner.type}`} role="status">
-          <div className="session-banner-content">
-            <span className="session-banner-icon" aria-hidden="true">
-              {banner.type === "success" ? "✓" : "!"}
-            </span>
-            <span>{banner.text}</span>
-          </div>
+        <div className={`alert-banner ${banner.type}`} role="status" style={{ marginBottom: "1.5rem" }}>
+          <span>{banner.text}</span>
           <button
             type="button"
-            className="session-banner-close"
             onClick={() => setBanner(null)}
-            aria-label="Dismiss banner"
+            aria-label="Dismiss"
+            style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* Main Info Card */}
-      <article className="session-info-card">
-        {/* Top: Course Name & Status + Actions */}
-        <div className="session-info-top">
-          <div className="session-info-top-left">
-            <h2 className="session-course-title">{session.course_name}</h2>
-            <span className={`status-badge status-${session.status.toLowerCase()}`}>
-              <span className="status-dot" aria-hidden="true" />
-              {sessionStatusLabel(session.status)}
-            </span>
+      <div className="erp-card" style={{ padding: "1.5rem", marginBottom: "2rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "1.25rem 2rem", flex: "1 1 420px" }}>
+            <div style={field}>
+              <span style={fieldLabel}>Status</span>
+              <span>
+                <span className={`status-badge ${sessionStatusBadgeClass(session.status)}`}>
+                  {sessionStatusLabel(session.status)}
+                </span>
+              </span>
+            </div>
+            <div style={field}>
+              <span style={fieldLabel}>Class</span>
+              <span style={fieldValue}>{session.class_code || "—"}</span>
+            </div>
+            <div style={field}>
+              <span style={fieldLabel}>Subject</span>
+              <span style={fieldValue}>{session.subject || "—"}</span>
+            </div>
+            <div style={field}>
+              <span style={fieldLabel}>Date</span>
+              <span style={fieldValue}>{formatDate(session.start_time)}</span>
+            </div>
+            <div style={field}>
+              <span style={fieldLabel}>Time</span>
+              <span style={fieldValue}>
+                {formatTime(session.start_time)} – {formatTime(session.end_time)}
+              </span>
+            </div>
           </div>
 
-          <div className="session-header-actions">
-            {!isSessionCompleted(session.status) ? (
-              <button
-                type="button"
-                className="btn-end-session"
-                onClick={handleEndSession}
-                disabled={actionLoading}
-                title="End session and finalize attendance records"
-              >
-                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
-                </svg>
-                <span>{actionLoading ? "Finalizing..." : "End Session & Finalize"}</span>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            {!completed && (
+              <button type="button" className="erp-btn erp-btn-primary" onClick={handleEndSession} disabled={actionLoading}>
+                {actionLoading ? "Finalizing..." : "End Session & Finalize"}
               </button>
-            ) : (
-              <span className="session-finalized-tag">
-                ✓ Attendance Finalized
-              </span>
             )}
-
             <button
               type="button"
-              className="btn-delete-session"
+              className="erp-btn erp-btn-secondary"
+              style={{ color: "var(--erp-absent-text)" }}
               onClick={handleDeleteSession}
               disabled={actionLoading}
-              title="Permanently delete this session and its attendance"
             >
-              <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-              <span>Delete Session</span>
+              Delete Session
             </button>
           </div>
         </div>
-
-        {/* Details Grid */}
-        <div className="session-details-grid">
-          {/* Classroom */}
-          <div className="session-detail-item">
-            <span className="detail-label">Classroom</span>
-            <div className="detail-value">
-              <span className="detail-badge-classroom">{session.classroom_id}</span>
-            </div>
-          </div>
-
-          {/* Start Time */}
-          <div className="session-detail-item">
-            <span className="detail-label">Start Time</span>
-            <div className="detail-value">
-              <span>{formatSessionDateTime(session.start_time)}</span>
-            </div>
-          </div>
-
-          {/* End Time */}
-          <div className="session-detail-item">
-            <span className="detail-label">End Time</span>
-            <div className="detail-value">
-              <span>{formatSessionDateTime(session.end_time)}</span>
-            </div>
-          </div>
-
-          {/* Required Presence */}
-          <div className="session-detail-item">
-            <span className="detail-label">Required Presence</span>
-            <div className="detail-value">
-              <span className="detail-value-highlight">
-                {session.required_presence_percentage}%
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Session ID Row */}
-        <div className="session-detail-item" style={{ paddingTop: "0.5rem" }}>
-          <span className="detail-label">Session ID</span>
-          <div className="session-id-container">
-            <code className="session-id-code">{session.session_id}</code>
-            <button
-              type="button"
-              className="btn-copy-id"
-              onClick={() => handleCopyId(session.session_id)}
-              title="Copy Session ID"
-            >
-              <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75"
-                />
-              </svg>
-              <span>{copied ? "Copied!" : "Copy ID"}</span>
-            </button>
-          </div>
-        </div>
-      </article>
+      </div>
 
       {/* The camera belongs to the teacher taking attendance. An administrator
           opens a session to read it, so their webcam is never switched on. */}
-      {!isUserAdmin && !isSessionCompleted(session.status) && (
-        <AlwaysOnVideoFeed sessionId={session.session_id} classroomId={session.classroom_id} />
-      )}
+      {!isUserAdmin && isSessionActive(session.status) && <AlwaysOnVideoFeed sessionId={session.session_id} />}
 
-      {/* Real-time Attendance Ledger & Verification */}
       <SessionAttendance
         key={attendanceRefreshKey}
         sessionId={session.session_id}
-        requiredPercentage={session.required_presence_percentage}
-        onFinalize={handleEndSession}
-        readOnly={isUserAdmin}
+        viewerRole={isUserAdmin ? "ADMIN" : "TEACHER"}
       />
 
-      {/* Session Audit Trail & Compliance Ledger */}
       <AuditLogs
         sessionId={session.session_id}
         title="Session Audit Trail"
-        subtitle="Immutable, append-only history of session creation, finalizations, and manual corrections."
+        subtitle="Every change to this session and its attendance, in order."
       />
     </div>
   );

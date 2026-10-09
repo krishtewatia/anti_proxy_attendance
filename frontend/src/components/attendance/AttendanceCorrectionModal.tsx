@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   formatCorrectionTimestamp,
-  formatPresenceDuration,
 } from "../session/attendance-helpers.ts";
 import { api } from "../../services";
 import type {
@@ -13,6 +12,7 @@ import {
   type AttendanceCorrectionValidationErrors,
   validateAttendanceCorrectionForm,
 } from "./validation.ts";
+import "../../pages/admin-dashboard.css";
 import "./attendance-correction-modal.css";
 
 export interface AttendanceCorrectionModalProps {
@@ -171,7 +171,7 @@ export const AttendanceCorrectionModal: React.FC<
 
   return (
     <div
-      className="modal-backdrop"
+      className="erp-modal-overlay"
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
@@ -244,21 +244,13 @@ export const AttendanceCorrectionModal: React.FC<
                   >
                     {currentStatus === "PRESENT" ? "✓" : "✕"} {currentStatus}
                   </span>
-                  <span className="current-sep">·</span>
-                  <span className="current-percentage-text">
-                    {attendance.presence_percentage.toFixed(2)}%
-                  </span>
-                  <span className="current-duration-text">
-                    ({formatPresenceDuration(attendance.presence_duration_seconds)})
-                  </span>
                 </div>
               </div>
 
               <div className="current-student-identity">
                 <span className="identity-label">Student:</span>
-                <code className="current-identity-code">
-                  {attendance.identity}
-                </code>
+                <strong>{attendance.student_name || attendance.identity}</strong>
+                {attendance.roll_number && <span> · Roll No {attendance.roll_number}</span>}
               </div>
             </div>
 
@@ -321,42 +313,6 @@ export const AttendanceCorrectionModal: React.FC<
                 {fieldErrors.status && (
                   <span className="field-error-text" role="alert">
                     {fieldErrors.status}
-                  </span>
-                )}
-              </div>
-
-              {/* Presence Duration (seconds) */}
-              <div className="correction-field-group">
-                <div className="correction-field-label">
-                  <span>
-                    Presence Duration (seconds){" "}
-                    <span className="correction-field-required">*</span>
-                  </span>
-                  <span className="field-helper-preview">
-                    ≈ {formatPresenceDuration(newPresenceSeconds || 0)}
-                  </span>
-                </div>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  className={`correction-input ${
-                    fieldErrors.presence ? "has-error" : ""
-                  }`}
-                  value={isNaN(newPresenceSeconds) ? "" : newPresenceSeconds}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    setNewPresenceSeconds(isNaN(val) ? 0 : val);
-                    if (fieldErrors.presence) {
-                      setFieldErrors((prev) => ({ ...prev, presence: undefined }));
-                    }
-                  }}
-                  disabled={saving}
-                  placeholder="e.g. 3000"
-                />
-                {fieldErrors.presence && (
-                  <span className="field-error-text" role="alert">
-                    {fieldErrors.presence}
                   </span>
                 )}
               </div>
@@ -541,15 +497,6 @@ export const AttendanceCorrectionModal: React.FC<
                           </span>
                         </div>
 
-                        <div className="transition-row duration-transition-row">
-                          <span className="duration-tag">
-                            {formatPresenceDuration(item.previous_presence_seconds)}
-                          </span>
-                          <span className="transition-arrow">→</span>
-                          <span className="duration-tag">
-                            {formatPresenceDuration(item.new_presence_seconds)}
-                          </span>
-                        </div>
                       </div>
 
                       <div className="history-item-reason">

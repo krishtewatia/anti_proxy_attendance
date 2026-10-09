@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies.auth import (
     get_owned_session,
-    require_teacher,
     require_teacher_or_admin,
 )
 from app.database.attendance import get_attendance_record
@@ -36,13 +35,15 @@ async def correct_session_attendance(
     session_id: str,
     attendance_id: str,
     payload: AttendanceCorrectionCreate | AttendanceStatusToggle,
-    current_user: Annotated[dict, Depends(require_teacher)],
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
 ) -> AttendanceCorrectionResponse | AttendanceStatusToggleResponse:
     """
     Manually correct an attendance record for a session.
 
     Enforces:
-    1. Authentication & Role: User must be an authenticated TEACHER.
+    1. Authentication & Role: the session's teacher, or an administrator.
+       An administrator must give a reason, and the audit entry is marked as
+       an administrator's correction.
     2. Session Ownership: Session must exist and be owned by the calling teacher.
     3. Attendance Isolation: Attendance record must exist and belong to the specified session.
     4. Service Execution: Executes audit logging and atomic record update.
@@ -66,6 +67,14 @@ async def correct_session_attendance(
 
     # 3. Call service layer (a status toggle is audited exactly like a full correction)
     is_toggle = isinstance(payload, AttendanceStatusToggle)
+    is_admin = current_user.get("role") == "ADMIN"
+    if is_admin and (is_toggle or not payload.reason.strip()):
+        # The one-click toggle carries no reason; an administrator changing a
+        # teacher's record has to say why.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An administrator must give a reason for correcting attendance.",
+        )
     if is_toggle:
         new_status = payload.status
         new_presence_seconds = float(record.get("presence_duration_seconds", 0.0))
@@ -82,6 +91,7 @@ async def correct_session_attendance(
             new_presence_seconds=new_presence_seconds,
             reason=reason,
             corrected_by=current_user["user_id"],
+            corrected_by_role="ADMIN" if is_admin else "TEACHER",
         )
     except AttendanceNotFoundError as exc:
         raise HTTPException(

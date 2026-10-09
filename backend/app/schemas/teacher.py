@@ -60,7 +60,10 @@ class TeacherSessionSummaryItem(BaseModel):
     total_students: int
     present_count: int
     attendance_percentage: float
-    status: str  # "ACTIVE" or "FINALIZED"
+    status: str  # "SCHEDULED", "ACTIVE" or "FINALIZED"
+    # False when the session was created but attendance was never taken.
+    was_taken: bool = True
+    start_time: Optional[datetime] = None
     created_at: Optional[datetime] = None
 
 

@@ -1,4 +1,5 @@
 import React from "react";
+import { formatDate } from "../../utils/dates.ts";
 import { sessionStatusBadgeClass, sessionStatusLabel } from "../../utils/sessions.ts";
 import { type AdminData } from "./adminShared.ts";
 
@@ -41,7 +42,7 @@ export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic,
       <div className="erp-section" style={{ marginBottom: "2rem" }}>
         <h2 className="erp-section-title">Currently Active Sessions</h2>
         {activeSessions.length === 0 ? (
-          <div className="erp-empty-box">No classroom sessions currently active.</div>
+          <div className="erp-empty-box">No sessions in progress.</div>
         ) : (
           <div className="erp-table-container">
             <table className="erp-table">
@@ -49,7 +50,6 @@ export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic,
                 <tr>
                   <th>Subject / Course</th>
                   <th>Class</th>
-                  <th>Room</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -58,7 +58,6 @@ export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic,
                   <tr key={s.session_id}>
                     <td style={{ fontWeight: 600 }}>{s.course_name}</td>
                     <td>{s.class_code || "—"}</td>
-                    <td>{s.classroom_id}</td>
                     <td>
                       <span className="status-badge active">In Progress</span>
                     </td>
@@ -81,7 +80,6 @@ export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic,
                 <tr>
                   <th>Course</th>
                   <th>Class</th>
-                  <th>Room</th>
                   <th>Date</th>
                   <th>Status</th>
                 </tr>
@@ -91,8 +89,7 @@ export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic,
                   <tr key={s.session_id}>
                     <td style={{ fontWeight: 600 }}>{s.course_name}</td>
                     <td>{s.class_code || "—"}</td>
-                    <td>{s.classroom_id}</td>
-                    <td>{new Date(s.start_time).toLocaleDateString()}</td>
+                    <td>{formatDate(s.start_time)}</td>
                     <td>
                       <span className={`status-badge ${sessionStatusBadgeClass(s.status)}`}>
                         {sessionStatusLabel(s.status)}

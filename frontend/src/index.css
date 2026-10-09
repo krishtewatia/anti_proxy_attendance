@@ -25,6 +25,9 @@
   --erp-text-body: #334155;
   --erp-text-muted: #64748b;
   --erp-text-subtle: #94a3b8;
+  /* Muted text placed on the grey surface (table headers, neutral badges):
+     the ordinary muted grey is 4.3:1 there, this is 5:1. */
+  --erp-text-on-subtle: #5b6b82;
 
   /* Semantic Attendance Colors */
   --erp-present-bg: #dcfce7;
@@ -68,6 +71,14 @@
   --text-main: var(--erp-text-main);
   --text-muted: var(--erp-text-muted);
   --text-dim: var(--erp-text-subtle);
+  /* Names the audit trail and correction form still use. They were never
+     defined, which left the Save Correction button with no background. */
+  --primary-gradient: var(--erp-primary);
+  --primary-glow: rgba(29, 78, 216, 0.25);
+  --border-glow: var(--erp-primary-border);
+  --shadow-card: var(--erp-shadow-card);
+  --transition-fast: 0.15s ease;
+  --radius-xl: var(--erp-radius-lg);
   --radius-sm: var(--erp-radius-sm);
   --radius-md: var(--erp-radius-md);
   --radius-lg: var(--erp-radius-lg);
@@ -159,7 +170,7 @@ a:hover {
 
 .erp-table th {
   background: var(--erp-surface-subtle);
-  color: var(--erp-text-muted);
+  color: var(--erp-text-on-subtle);
   font-weight: 600;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--erp-border);
@@ -215,7 +226,7 @@ a:hover {
 
 .status-badge.completed {
   background-color: var(--erp-surface-subtle);
-  color: var(--erp-text-muted);
+  color: var(--erp-text-on-subtle);
   border: 1px solid var(--erp-border);
 }
 

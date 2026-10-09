@@ -3,12 +3,10 @@ import "./always-on-video-feed.css";
 
 export interface AlwaysOnVideoFeedProps {
   sessionId: string;
-  classroomId: string;
 }
 
 export const AlwaysOnVideoFeed: React.FC<AlwaysOnVideoFeedProps> = ({
   sessionId: _sessionId,
-  classroomId,
 }) => {
   const [webcamError, setWebcamError] = useState<string | null>(null);
 
@@ -63,7 +61,6 @@ export const AlwaysOnVideoFeed: React.FC<AlwaysOnVideoFeedProps> = ({
             <span className="live-dot" />
             <span className="live-text">CONTINUOUS VIDEO FEED</span>
           </div>
-          <span className="video-classroom-tag">Classroom: {classroomId || "—"}</span>
         </div>
 
       </div>

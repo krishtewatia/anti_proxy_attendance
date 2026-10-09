@@ -7,6 +7,8 @@ import {
   sessionStatusLabel,
   type SessionStatusFilter,
 } from "../../utils/sessions.ts";
+import { formatDate } from "../../utils/dates.ts";
+import { Pagination } from "../common/Pagination";
 import { smallButton, type AdminTabProps } from "./adminShared.ts";
 
 const PAGE_SIZE = 15;
@@ -26,7 +28,7 @@ export const SessionsTab: React.FC<AdminTabProps> = ({ sessions, reload }) => {
     <div>
       <div className="erp-page-header">
         <h1 className="erp-page-title">Attendance Sessions</h1>
-        <p className="erp-page-subtitle">Classroom attendance register logs and finalized records</p>
+        <p className="erp-page-subtitle">Every teacher's attendance sessions</p>
       </div>
 
       <div className="erp-table-action-bar">
@@ -58,6 +60,7 @@ export const SessionsTab: React.FC<AdminTabProps> = ({ sessions, reload }) => {
         <table className="erp-table">
           <thead>
             <tr>
+              <th>Date</th>
               <th>Subject</th>
               <th>Class</th>
               <th>Teacher</th>
@@ -71,7 +74,7 @@ export const SessionsTab: React.FC<AdminTabProps> = ({ sessions, reload }) => {
           <tbody>
             {current.items.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: "center", padding: "2rem", color: "var(--erp-text-muted)" }}>
+                <td colSpan={9} style={{ textAlign: "center", padding: "2rem", color: "var(--erp-text-muted)" }}>
                   No attendance sessions found.
                 </td>
               </tr>
@@ -83,12 +86,19 @@ export const SessionsTab: React.FC<AdminTabProps> = ({ sessions, reload }) => {
                 const absent = total != null && presentCount != null ? Math.max(0, total - presentCount) : null;
                 return (
                   <tr key={sess.session_id}>
+                    <td style={{ color: "var(--erp-text-muted)", whiteSpace: "nowrap" }}>{formatDate(sess.start_time)}</td>
                     <td style={{ fontWeight: 600 }}>{sess.course_name}</td>
                     <td>{sess.class_code || "—"}</td>
                     <td>{sess.teacher_name || "—"}</td>
                     <td>{total ?? "—"}</td>
-                    <td style={{ color: "#15803d", fontWeight: 600 }}>{presentCount ?? "—"}</td>
-                    <td style={{ color: "#b91c1c", fontWeight: 600 }}>{absent ?? "—"}</td>
+                    {sess.was_taken === false ? (
+                      <td colSpan={2} style={{ color: "var(--erp-text-muted)" }}>Not taken</td>
+                    ) : (
+                      <>
+                        <td style={{ color: "#15803d", fontWeight: 600 }}>{presentCount ?? "—"}</td>
+                        <td style={{ color: "#b91c1c", fontWeight: 600 }}>{absent ?? "—"}</td>
+                      </>
+                    )}
                     <td>
                       <span className={`status-badge ${sessionStatusBadgeClass(sess.status)}`}>
                         {sessionStatusLabel(sess.status)}
@@ -111,36 +121,7 @@ export const SessionsTab: React.FC<AdminTabProps> = ({ sessions, reload }) => {
         </table>
       </div>
 
-      {current.total > 0 && (
-        <div className="erp-pagination" role="navigation" aria-label="Session pages">
-          <span className="erp-pagination-summary">
-            Showing {current.from}–{current.to} of {current.total}
-          </span>
-          <div className="erp-pagination-buttons">
-            <button
-              type="button"
-              className="erp-btn erp-btn-secondary"
-              style={smallButton}
-              disabled={current.page <= 1}
-              onClick={() => setPage(current.page - 1)}
-            >
-              ← Previous
-            </button>
-            <span className="erp-pagination-page">
-              Page {current.page} of {current.pageCount}
-            </span>
-            <button
-              type="button"
-              className="erp-btn erp-btn-secondary"
-              style={smallButton}
-              disabled={current.page >= current.pageCount}
-              onClick={() => setPage(current.page + 1)}
-            >
-              Next →
-            </button>
-          </div>
-        </div>
-      )}
+      <Pagination page={current} onChange={setPage} label="Session pages" />
     </div>
   );
 };

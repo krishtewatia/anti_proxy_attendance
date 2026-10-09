@@ -1,3 +1,5 @@
+import { Pagination } from "../components/common/Pagination";
+import { paginate } from "../utils/sessions.ts";
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../services";
 import type {
@@ -15,6 +17,8 @@ interface StudentDashboardProps {
   onSelectNav?: (navId: string) => void;
 }
 
+const HISTORY_PAGE_SIZE = 15;
+
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   user,
   activeNavId = "dashboard",
@@ -23,6 +27,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const [data, setData] = useState<StudentAttendanceDashboardResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [historyPageNumber, setHistoryPageNumber] = useState(1);
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
@@ -60,6 +65,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const overallPct = data?.overall_percentage ?? 0;
   const subjects = data?.subjects ?? [];
   const history = data?.history ?? [];
+  // Shown a page at a time, like the session lists.
+  const historyPage = paginate(history, historyPageNumber, HISTORY_PAGE_SIZE);
 
   // Determine time of day greeting
   const getGreeting = () => {
@@ -108,7 +115,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             {overallPresent} <span className="erp-stat-total">/ {overallTotal}</span>
           </span>
           <div style={{ height: "6px" }} />
-          <span className="erp-stat-subtext">Verified classroom lectures</span>
+          <span className="erp-stat-subtext">Sessions you were marked present in</span>
         </div>
       </div>
 
@@ -248,7 +255,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               </tr>
             </thead>
             <tbody>
-              {history.map((item, idx) => {
+              {historyPage.items.map((item, idx) => {
                 const isPresent = item.status === "PRESENT";
                 return (
                   <tr key={idx}>
@@ -267,6 +274,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           </table>
         </div>
       )}
+      <Pagination page={historyPage} onChange={setHistoryPageNumber} label="Attendance history pages" />
     </div>
   );
 

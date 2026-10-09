@@ -1,3 +1,4 @@
+import { formatDate, formatTime } from "../../utils/dates.ts";
 import React, { useEffect, useState } from "react";
 import { api } from "../../services";
 import type { AuditAction, AuditEventResponse, AuditResourceType } from "../../types";
@@ -16,25 +17,7 @@ function formatAuditTimestamp(isoStr: string): {
   dateStr: string;
   timeStr: string;
 } {
-  try {
-    const d = new Date(isoStr);
-    const dateStr = d.toLocaleDateString("en-US", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-    const timeStr = d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-    return { dateStr, timeStr };
-  } catch {
-    return {
-      dateStr: isoStr.slice(0, 10),
-      timeStr: isoStr.slice(11, 16),
-    };
-  }
+  return { dateStr: formatDate(isoStr), timeStr: formatTime(isoStr) };
 }
 
 function getActionConfig(action: AuditAction): {
@@ -443,14 +426,6 @@ export const AuditLogs: React.FC<AuditLogsProps> = ({
                                     <span className="audit-detail-label">Course</span>
                                     <span className="audit-detail-value">
                                       {String(event.metadata.course_name)}
-                                    </span>
-                                  </div>
-                                )}
-                                {Boolean(event.metadata.classroom_id) && (
-                                  <div className="audit-detail-item">
-                                    <span className="audit-detail-label">Classroom</span>
-                                    <span className="audit-detail-value">
-                                      {String(event.metadata.classroom_id)}
                                     </span>
                                   </div>
                                 )}
