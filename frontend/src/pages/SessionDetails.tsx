@@ -43,7 +43,6 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
   const [actionLoading, setActionLoading] = useState(false);
   const [banner, setBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [attendanceRefreshKey, setAttendanceRefreshKey] = useState(0);
-  const [rosterIdentities, setRosterIdentities] = useState<string[]>([]);
 
   const isUserAdmin = user?.role === "ADMIN";
 
@@ -111,12 +110,6 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
     try {
       const data = await api.getSession(sessionId);
       setSession(data);
-      try {
-        const rosterData = await api.getSessionRoster(sessionId);
-        setRosterIdentities(rosterData?.identities || []);
-      } catch {
-        // roster might not be set yet
-      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(msg);
@@ -418,13 +411,8 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
         </div>
       </article>
 
-      {/* Always-On Optical Video Feed (Laptop Webcam / Simulator) */}
-      <AlwaysOnVideoFeed
-        sessionId={session.session_id}
-        classroomId={session.classroom_id}
-        rosterIdentities={rosterIdentities}
-        onEventDispatched={() => setAttendanceRefreshKey((k) => k + 1)}
-      />
+      {/* Always-On Optical Video Feed (Laptop Webcam) */}
+      <AlwaysOnVideoFeed sessionId={session.session_id} classroomId={session.classroom_id} />
 
       {/* Real-time Attendance Ledger & Verification */}
       <SessionAttendance

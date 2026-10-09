@@ -20,7 +20,11 @@ from typing import Any, Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.database.academic import ACADEMIC_CLASSES_COLLECTION, SUBJECTS_COLLECTION
+from app.database.academic import (
+    ACADEMIC_CLASSES_COLLECTION,
+    SUBJECTS_COLLECTION,
+    seed_academic_data_if_empty,
+)
 from app.database.student_profiles import normalize_class_code
 from app.services.audit_service import record_audit_event
 
@@ -319,11 +323,13 @@ async def find_subject_by_name(db: AsyncIOMotorDatabase, name: str) -> dict[str,
     return await db[SUBJECTS_COLLECTION].find_one({"name": _same_text(name)}, {"_id": 0})
 
 
-async def archived_subjects(db: AsyncIOMotorDatabase, names: list[str]) -> list[str]:
-    """The given subject names that exist in the catalog and are archived."""
+async def unavailable_subjects(db: AsyncIOMotorDatabase, names: list[str]) -> list[str]:
+    """The given subject names that cannot be used: not in the catalog, or archived."""
+    # A database nobody has opened the catalog on yet gets the starting catalog first.
+    await seed_academic_data_if_empty()
     refused = []
     for name in names:
-        if not is_active(await find_subject_by_name(db, name) or {"status": STATUS_ACTIVE}):
+        if not is_active(await find_subject_by_name(db, name)):
             refused.append(name)
     return refused
 
@@ -331,7 +337,10 @@ async def archived_subjects(db: AsyncIOMotorDatabase, names: list[str]) -> list[
 async def refuse_archived_session_target(
     db: AsyncIOMotorDatabase, *, class_code: Optional[str], subject: Optional[str]
 ) -> None:
-    """No new session for an archived class or subject. Sessions that exist are kept."""
+    """No new session for an archived class, or for a subject that is not an active catalog subject.
+
+    Sessions that exist are kept.
+    """
     if class_code:
         found = await find_class(db, class_code)
         if found is not None and not is_active(found):
@@ -339,9 +348,11 @@ async def refuse_archived_session_target(
                 f"Class {found['class_code']} is archived; no new sessions can be created for it.",
                 400,
             )
-    if subject and await archived_subjects(db, [subject]):
+    if subject and subject.strip() and await unavailable_subjects(db, [subject]):
         raise AcademicAdminError(
-            f"Subject '{subject}' is archived; no new sessions can be created for it.", 400
+            f"Subject '{subject}' is not an active subject in the catalog; "
+            "no new sessions can be created for it.",
+            400,
         )
 
 

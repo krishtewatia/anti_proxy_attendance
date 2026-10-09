@@ -102,7 +102,7 @@ def _catalog_refused(exc: AcademicAdminError) -> HTTPException:
 
 
 async def _refuse_unavailable_assignments(classes: list[str], subjects: list[str]) -> None:
-    """A new teacher can be given only classes that exist and are active, and no archived subject."""
+    """A new teacher can be given only classes and subjects that exist and are active."""
     db = get_database()
     codes = {str(c).strip().upper() for c in classes if str(c).strip()}
     unknown = []
@@ -114,11 +114,11 @@ async def _refuse_unavailable_assignments(classes: list[str], subjects: list[str
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unknown or archived class: {', '.join(unknown)}",
         )
-    retired = await catalog.archived_subjects(db, [s for s in subjects if s and s.strip()])
-    if retired:
+    refused = await catalog.unavailable_subjects(db, [s for s in subjects if s and s.strip()])
+    if refused:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Archived subject: {', '.join(retired)}",
+            detail=f"Unknown or archived subject: {', '.join(refused)}",
         )
 
 

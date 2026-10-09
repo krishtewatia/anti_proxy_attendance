@@ -21,6 +21,7 @@ from app.database import mongodb
 from app.database.mongodb import init_indexes
 from app.database.users import create_user
 from app.main import app
+from tests.conftest import assign_teacher_classes
 from app.security.jwt import create_access_token
 from app.security.passwords import hash_password
 
@@ -381,13 +382,16 @@ async def test_listing_routes_do_not_return_photos_or_embeddings():
     )
     admin = await _user("admin_listing", "ADMIN")
     teacher = await _user("teacher_listing", "TEACHER")
+    await assign_teacher_classes("teacher_listing", ("DS-B",))
     student = _token("user_photo_1", "STUDENT")
 
     checks = [
         ("/api/v1/students/me", student),
         ("/api/v1/students/profile", student),
         ("/api/v1/students/dashboard", student),
-        ("/api/v1/academic/classes/DS-B/students", student),
+        # The class list is for administrators and that class's teachers only
+        # (a student gets 403: see test_catalog_access_rules.py).
+        ("/api/v1/academic/classes/DS-B/students", admin),
         ("/api/v1/academic/classes/DS-B/students", teacher),
         ("/api/v1/students/directory", teacher),
         ("/api/v1/enrollment", teacher),

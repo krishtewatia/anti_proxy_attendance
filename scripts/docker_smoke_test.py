@@ -31,7 +31,7 @@ from typing import Any, Optional
 import urllib.parse
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_API_KEY = "test_vision_api_key_for_smoke_test_12345"
+# No built-in key: the service key comes from VISION_SERVICE_API_KEY or --api-key.
 
 
 class SmokeTestFailure(Exception):
@@ -135,7 +135,7 @@ def check_frontend(frontend_url: str) -> None:
 def run_smoke_test(
     backend_url: str = "http://localhost:8000",
     frontend_url: str = "http://localhost:3000",
-    vision_api_key: str = DEFAULT_API_KEY,
+    vision_api_key: str = "",
     docker_up: bool = False,
     docker_down: bool = False,
 ) -> bool:
@@ -355,8 +355,8 @@ def main():
     )
     parser.add_argument(
         "--api-key",
-        default=os.getenv("VISION_SERVICE_API_KEY", DEFAULT_API_KEY),
-        help="Vision API Key",
+        default=os.getenv("VISION_SERVICE_API_KEY", ""),
+        help="Service key the backend was started with (or set VISION_SERVICE_API_KEY)",
     )
     parser.add_argument(
         "--docker-up", action="store_true", help="Execute docker compose up -d before test"

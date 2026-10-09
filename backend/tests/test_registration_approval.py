@@ -171,8 +171,12 @@ async def test_a_token_for_a_pending_account_is_refused(stub_vision_embedding):
 async def test_pending_student_is_not_recognizable_or_listed_anywhere(
     stub_vision_embedding, service_key_headers
 ):
+    from tests.conftest import assign_teacher_classes
+
     admin = await _token("admin_apr", "ADMIN")
     teacher = await _token("teacher_apr", "TEACHER")
+    # The class list is shown only to that class's teachers.
+    await assign_teacher_classes("teacher_apr", ("DS-B",))
     async with _client() as client:
         await client.post("/api/v1/students/register", json=_student_payload())
 
@@ -181,7 +185,7 @@ async def test_pending_student_is_not_recognizable_or_listed_anywhere(
         directory = await client.get("/api/v1/students/directory", headers=teacher)
         admin_list = await client.get("/api/v1/admin/students", headers=admin)
 
-    assert class_list.json() == []
+    assert class_list.status_code == 200 and class_list.json() == []
     assert "APR001" not in json.dumps(directory.json())
     assert admin_list.json() == []
     # The photo and template are held for the administrator's review

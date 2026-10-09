@@ -20,6 +20,7 @@
 // class unless the suite chose one.
 
 import { api, getApiBaseUrl } from "../src/services/index.ts";
+import type { VisionEventCreate, VisionEventResponse } from "../src/types/index.ts";
 
 // A class from the default catalog that the smoke test leaves empty, so a
 // session's automatic roster starts with nobody on it.
@@ -40,6 +41,25 @@ async function adminToken(email: string, password: string): Promise<string> {
 }
 
 // Returns the backend's health answer, or throws to make the calling suite skip.
+// Doorway events are sent by cameras with the backend's service key, never by
+// the browser client. The live suites post them directly, with the key the
+// throwaway backend was started with.
+export async function ingestVisionEvent(event: VisionEventCreate): Promise<VisionEventResponse> {
+  const serviceKey = process.env.LIVE_TEST_SERVICE_KEY;
+  if (!serviceKey) {
+    throw new Error("LIVE_TEST_SERVICE_KEY is needed to send doorway events to the throwaway backend");
+  }
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": serviceKey },
+    body: JSON.stringify(event),
+  });
+  if (!response.ok) {
+    throw new Error(`doorway event was refused (HTTP ${response.status})`);
+  }
+  return (await response.json()) as VisionEventResponse;
+}
+
 export async function requireLiveBackend(): ReturnType<typeof api.checkHealth> {
   const email = process.env.LIVE_TEST_ADMIN_EMAIL;
   const password = process.env.LIVE_TEST_ADMIN_PASSWORD;
@@ -72,14 +92,6 @@ export async function requireLiveBackend(): ReturnType<typeof api.checkHealth> {
     }
     return created;
   };
-
-  // Doorway events need the backend's service key; the client's built-in
-  // value only matches a backend configured with that same test key.
-  const serviceKey = process.env.LIVE_TEST_SERVICE_KEY;
-  if (serviceKey) {
-    const ingest = api.ingestVisionEvent.bind(api);
-    api.ingestVisionEvent = (event) => ingest(event, serviceKey);
-  }
 
   const createSession = api.createSession.bind(api);
   api.createSession = (data) =>

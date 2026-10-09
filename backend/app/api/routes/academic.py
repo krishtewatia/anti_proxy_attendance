@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies.auth import get_current_user
 from app.database.academic import (
@@ -11,6 +11,7 @@ from app.database.academic import (
     list_all_subjects,
 )
 from app.database.student_profiles import get_students_by_class
+from app.database.teacher_profiles import get_teacher_profile_by_user_id
 from app.schemas.academic import AcademicClass, AcademicStructureResponse, Subject
 
 router = APIRouter(
@@ -84,7 +85,19 @@ async def get_class_roster_endpoint(
     class_code: str,
     current_user: Annotated[dict, Depends(get_current_user)],
 ) -> list[dict]:
-    """Auto-roster lookup: returns all students where class_code matches."""
+    """The students of one class, for an administrator or a teacher assigned to that class."""
+    role = current_user.get("role")
+    allowed = role == "ADMIN"
+    if role == "TEACHER":
+        profile = await get_teacher_profile_by_user_id(current_user["user_id"])
+        assigned = {str(c).strip().upper() for c in (profile or {}).get("assigned_classes") or []}
+        allowed = class_code.strip().upper() in assigned
+    if not allowed:
+        # The same answer whether or not the class exists.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an administrator or a teacher assigned to this class can list its students.",
+        )
     students = await get_students_by_class(class_code=class_code)
     return [
         {
