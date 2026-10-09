@@ -8,7 +8,11 @@ import type {
 } from "../types";
 import { getFaceOverlayStyle, hasSpoof } from "../utils/faceOverlay";
 import "./teacher-attendance-flow.css";
-import { sessionStatusBadgeClass, sessionStatusLabel } from "../utils/sessions.ts";
+import { paginate, sessionStatusBadgeClass, sessionStatusLabel } from "../utils/sessions.ts";
+import { formatDate, formatSessionTurnout } from "../utils/dates.ts";
+import { Pagination } from "../components/common/Pagination";
+
+const SESSIONS_PAGE_SIZE = 15;
 
 interface TeacherAttendanceFlowProps {
   user: UserResponse;
@@ -34,6 +38,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
   // Teacher dashboard state
   const [dashboardData, setDashboardData] = useState<TeacherDashboardResponse | null>(null);
+  const [sessionsPageNumber, setSessionsPageNumber] = useState(1);
   // What an administrator assigned to this teacher. Empty until loaded, and
   // empty if nothing is assigned: never a made-up class or subject.
   const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
@@ -207,7 +212,6 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       // 1. Create Session
       const session = await api.createSession({
         course_name: selectedSubject ? `${selectedSubject} — ${selectedClass}` : selectedClass,
-        classroom_id: "ROOM_101",
         class_code: selectedClass,
         subject: selectedSubject || undefined,
         start_time: now.toISOString(),
@@ -616,6 +620,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   const hasActiveSession = Boolean(dashboardData?.active_session);
   const activeSess = dashboardData?.active_session;
   const previousSessions = dashboardData?.previous_sessions ?? [];
+  // The full list is shown a page at a time, like the administrator's.
+  const sessionsPage = paginate(previousSessions, sessionsPageNumber, SESSIONS_PAGE_SIZE);
   const teacherName = dashboardData?.teacher.name || user.email;
   const teacherDepartment = dashboardData?.teacher.department || "";
   const teacherId = dashboardData?.teacher.teacher_id || "";
@@ -710,10 +716,11 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
             <table className="erp-table">
               <thead>
                 <tr>
+                  <th>Date</th>
                   <th>Class</th>
                   <th>Subject</th>
                   <th>Present</th>
-                  <th>Turnout %</th>
+                  <th>Turnout</th>
                   <th>Status</th>
                   <th>Action</th>
                 </tr>
@@ -721,11 +728,18 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
               <tbody>
                 {previousSessions.slice(0, 5).map((ps) => (
                   <tr key={ps.session_id}>
+                    <td style={{ color: "var(--erp-text-muted)", whiteSpace: "nowrap" }}>{formatDate(ps.start_time || ps.created_at)}</td>
                     <td style={{ fontWeight: 600 }}>{ps.class_code || "—"}</td>
                     <td>{ps.subject || ps.course_name}</td>
-                    <td>{ps.present_count} / {ps.total_students}</td>
-                    <td style={{ fontWeight: 600, color: ps.attendance_percentage >= 75 ? "#15803d" : "#b91c1c" }}>
-                      {ps.attendance_percentage}%
+                    <td>{ps.was_taken === false ? "—" : `${ps.present_count} / ${ps.total_students}`}</td>
+                    <td
+                      style={
+                        ps.was_taken === false
+                          ? { color: "var(--erp-text-muted)" }
+                          : { fontWeight: 600, color: ps.attendance_percentage >= 75 ? "#15803d" : "#b91c1c" }
+                      }
+                    >
+                      {formatSessionTurnout(ps)}
                     </td>
                     <td>
                       <span className={`status-badge ${sessionStatusBadgeClass(ps.status)}`}>
@@ -934,7 +948,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                 )}
               </div>
               <div className="erp-camera-footer">
-                Live Classroom Camera Feed
+                Live Camera Feed
               </div>
             </div>
 
@@ -1124,6 +1138,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
           <table className="erp-table">
             <thead>
               <tr>
+                <th>Date</th>
                 <th>Subject</th>
                 <th>Class</th>
                 <th>Students</th>
@@ -1134,15 +1149,22 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
               </tr>
             </thead>
             <tbody>
-              {previousSessions.map((ps) => {
+              {sessionsPage.items.map((ps) => {
                 const absent = Math.max(0, ps.total_students - ps.present_count);
                 return (
                   <tr key={ps.session_id}>
+                    <td style={{ color: "var(--erp-text-muted)", whiteSpace: "nowrap" }}>{formatDate(ps.start_time || ps.created_at)}</td>
                     <td style={{ fontWeight: 600 }}>{ps.subject || ps.course_name}</td>
                     <td>{ps.class_code || "—"}</td>
                     <td>{ps.total_students}</td>
-                    <td style={{ color: "#15803d", fontWeight: 600 }}>{ps.present_count}</td>
-                    <td style={{ color: "#b91c1c", fontWeight: 600 }}>{absent}</td>
+                    {ps.was_taken === false ? (
+                      <td colSpan={2} style={{ color: "var(--erp-text-muted)" }}>Not taken</td>
+                    ) : (
+                      <>
+                        <td style={{ color: "#15803d", fontWeight: 600 }}>{ps.present_count}</td>
+                        <td style={{ color: "#b91c1c", fontWeight: 600 }}>{absent}</td>
+                      </>
+                    )}
                     <td>
                       <span className={`status-badge ${sessionStatusBadgeClass(ps.status)}`}>
                         {sessionStatusLabel(ps.status)}
@@ -1165,6 +1187,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
           </table>
         </div>
       )}
+      <Pagination page={sessionsPage} onChange={setSessionsPageNumber} label="Session pages" />
     </div>
   );
 

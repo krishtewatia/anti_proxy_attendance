@@ -15,6 +15,7 @@ from app.database.sessions import (
     delete_session_in_db,
     get_all_sessions_in_db,
     get_session,
+    session_was_taken,
 )
 from app.database.student_profiles import list_all_students_full
 from app.database.teacher_profiles import list_all_teachers
@@ -593,9 +594,13 @@ async def list_all_sessions_endpoint(
     }
     record_counts: dict[str, int] = {}
     present_counts: dict[str, int] = {}
-    async for record in db["attendance_records"].find({}, {"session_id": 1, "status": 1}):
+    records_by_session: dict[str, list[dict]] = {}
+    async for record in db["attendance_records"].find(
+        {}, {"session_id": 1, "status": 1, "marked_at": 1, "manually_corrected": 1}
+    ):
         sid = record.get("session_id")
         record_counts[sid] = record_counts.get(sid, 0) + 1
+        records_by_session.setdefault(sid, []).append(record)
         if record.get("status") == "PRESENT":
             present_counts[sid] = present_counts.get(sid, 0) + 1
 
@@ -631,6 +636,7 @@ async def list_all_sessions_endpoint(
                     roster_sizes.get(s["session_id"], 0), record_counts.get(s["session_id"], 0)
                 ),
                 present_count=present_counts.get(s["session_id"], 0),
+                was_taken=session_was_taken(s, records_by_session.get(s["session_id"], [])),
             )
         )
     return filtered

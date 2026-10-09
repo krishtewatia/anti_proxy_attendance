@@ -187,7 +187,7 @@ export function App() {
             user={currentUser}
             onLogout={handleLogout}
             onGoHome={goHome}
-            activeNavId={activeNavId}
+            activeNavId="sessions"
             onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}
           >

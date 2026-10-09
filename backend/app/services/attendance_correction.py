@@ -29,6 +29,7 @@ async def correct_attendance(
     new_presence_seconds: float,
     reason: str,
     corrected_by: str,
+    corrected_by_role: str = "TEACHER",
 ) -> AttendanceCorrectionResponse:
     """
     Execute an auditable correction for an existing attendance record.
@@ -125,7 +126,7 @@ async def correct_attendance(
     try:
         await record_audit_event(
             actor_user_id=corrected_by.strip(),
-            actor_role="TEACHER",
+            actor_role=corrected_by_role,
             action="ATTENDANCE_CORRECTED",
             resource_type="ATTENDANCE",
             resource_id=attendance_id,
@@ -137,6 +138,9 @@ async def correct_attendance(
                 "previous_presence_seconds": previous_presence_seconds,
                 "new_presence_seconds": float(new_presence_seconds),
                 "reason": reason.strip(),
+                # Who made it: the session's teacher, or an administrator.
+                "corrected_by_role": corrected_by_role,
+                "admin_correction": corrected_by_role == "ADMIN",
             },
         )
     except Exception:

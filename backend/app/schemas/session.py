@@ -53,3 +53,5 @@ class SessionResponse(BaseModel):
     teacher_name: Optional[str] = None
     total_students: Optional[int] = None
     present_count: Optional[int] = None
+    # False when the session was created but attendance was never taken.
+    was_taken: Optional[bool] = None

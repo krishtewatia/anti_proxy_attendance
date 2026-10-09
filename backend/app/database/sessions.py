@@ -84,11 +84,32 @@ async def update_session_status(session_id: str, status: str) -> bool:
     db = get_database()
     collection = db[SESSIONS_COLLECTION]
 
+    changes: dict = {"status": status}
+    if status == "ACTIVE":
+        # Kept so a session that was started is known to have been taken,
+        # even if nobody was marked present.
+        changes["started_at"] = datetime.now(timezone.utc)
     result = await collection.update_one(
         {"session_id": session_id},
-        {"$set": {"status": status}},
+        {"$set": changes},
     )
     return result.modified_count > 0
+
+
+def session_was_taken(session: dict, records: list[dict]) -> bool:
+    """True when attendance was actually taken in the session.
+
+    A session that was started counts. For sessions from before the start
+    time was stored, any record that was marked or corrected counts. A session
+    that was only created and then closed was never taken, and its 0 % is not
+    a turnout.
+    """
+    if session.get("started_at") or session.get("status") == "ACTIVE":
+        return True
+    return any(
+        r.get("status") == "PRESENT" or r.get("marked_at") or r.get("manually_corrected")
+        for r in records
+    )
 
 
 async def delete_session_in_db(session_id: str) -> bool:

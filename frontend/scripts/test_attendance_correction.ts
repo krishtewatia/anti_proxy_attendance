@@ -168,7 +168,8 @@ async function testAuditTrailHistoryStateAndFormatting() {
   const rawIso = "2026-10-01T04:56:45Z";
   const formattedTime = formatCorrectionTimestamp(rawIso);
   console.log(`  Timestamp format check: "${rawIso}" -> "${formattedTime}"`);
-  if (!formattedTime.includes("Oct 1") && !formattedTime.includes("10/1")) {
+  // Dates are written "1 Oct 2026" everywhere (a numeric 10/1 is ambiguous).
+  if (!formattedTime.startsWith("1 Oct 2026, ") || formattedTime.includes("/")) {
     throw new Error(`Unexpected timestamp format: ${formattedTime}`);
   }
   console.log("  ✅ Correct timestamp formatting verified.");

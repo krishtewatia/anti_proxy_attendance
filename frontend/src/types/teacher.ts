@@ -27,6 +27,9 @@ export interface TeacherSessionSummaryItem {
   present_count: number;
   attendance_percentage: number;
   status: string;
+  // False when the session was created but attendance was never taken.
+  was_taken?: boolean;
+  start_time?: string | null;
   created_at?: string;
 }
 

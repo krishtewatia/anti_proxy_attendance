@@ -18,6 +18,7 @@ const testSuites: TestSuite[] = [
   { name: "Classes and Subjects: Archive, Edit and Delete Rules", file: "test_catalog.ts", category: "Unit" },
   { name: "Admin Panel Fixes: Status, Layout, Home Link, Name", file: "test_admin_panel_fixes.ts", category: "Unit" },
   { name: "No Made-Up Data In The Interface", file: "test_no_fake_data.ts", category: "Unit" },
+  { name: "Session Page And List Fixes", file: "test_session_page_fixes.ts", category: "Unit" },
   { name: "Create Session Form Validation & Lifecycle", file: "test_create_session.ts", category: "Unit" },
   { name: "Attendance Correction Validation & Audit History", file: "test_attendance_correction.ts", category: "Unit" },
   { name: "Audit Trail Contracts & Verification", file: "test_audit_logs.ts", category: "Contract" },
@@ -30,7 +31,7 @@ const testSuites: TestSuite[] = [
 ];
 
 console.log("================================================================================");
-console.log("             RUNNING FRONTEND TEST CONSOLIDATION SUITE (19 MODULES)             ");
+console.log("             RUNNING FRONTEND TEST CONSOLIDATION SUITE (20 MODULES)             ");
 console.log("================================================================================");
 
 let passed = 0;

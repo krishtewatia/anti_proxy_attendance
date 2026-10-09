@@ -1,13 +1,13 @@
 /* Audit Logs Component Styles */
 
 .audit-logs-card {
-  background: var(--bg-card, rgba(17, 24, 39, 0.75));
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl, 1rem);
   padding: 1.75rem;
-  box-shadow: var(--shadow-card, 0 10px 25px -5px rgba(0, 0, 0, 0.3));
+  box-shadow: var(--shadow-card, 0 10px 25px -5px rgba(15, 23, 42, 0.12));
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -31,7 +31,7 @@
   flex-direction: column;
   gap: 0.75rem;
   padding-bottom: 1.25rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--erp-border);
 }
 
 .audit-header-top {
@@ -54,7 +54,7 @@
   border-radius: var(--radius-sm, 0.5rem);
   background: rgba(168, 85, 247, 0.15);
   border: 1px solid rgba(168, 85, 247, 0.3);
-  color: #c084fc;
+  color: #7e22ce;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -69,7 +69,7 @@
 .audit-title {
   font-size: 1.25rem;
   font-weight: 700;
-  color: var(--text-main, #f9fafb);
+  color: var(--text-main);
   margin: 0;
   letter-spacing: -0.015em;
 }
@@ -79,7 +79,7 @@
   align-items: center;
   padding: 0.2rem 0.6rem;
   background: rgba(168, 85, 247, 0.12);
-  color: #d8b4fe;
+  color: #7e22ce;
   border: 1px solid rgba(168, 85, 247, 0.25);
   border-radius: 9999px;
   font-size: 0.75rem;
@@ -88,7 +88,7 @@
 }
 
 .audit-subtitle {
-  color: var(--text-muted, #94a3b8);
+  color: var(--erp-text-body);
   font-size: 0.875rem;
   margin: 0;
   line-height: 1.5;
@@ -107,10 +107,10 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.45rem 0.85rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--erp-surface-subtle);
+  border: 1px solid var(--erp-border);
   border-radius: var(--radius-sm, 0.5rem);
-  color: var(--text-muted, #94a3b8);
+  color: var(--erp-text-body);
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
@@ -118,9 +118,9 @@
 }
 
 .audit-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.09);
-  color: var(--text-main, #f9fafb);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--erp-surface-subtle);
+  color: var(--text-main);
+  border-color: var(--erp-border);
 }
 
 .audit-btn:disabled {
@@ -150,8 +150,8 @@
 .audit-table-wrapper {
   overflow-x: auto;
   border-radius: var(--radius-md, 0.75rem);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid var(--erp-border);
+  background: var(--erp-surface);
 }
 
 .audit-table {
@@ -167,25 +167,25 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-muted, #94a3b8);
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--erp-text-body);
+  background: var(--erp-surface-subtle);
+  border-bottom: 1px solid var(--erp-border);
   white-space: nowrap;
 }
 
 .audit-table td {
   padding: 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  color: var(--text-main, #f9fafb);
+  border-bottom: 1px solid var(--erp-border);
+  color: var(--text-main);
   vertical-align: middle;
 }
 
 .audit-row:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--erp-surface-subtle);
 }
 
 .audit-row-expanded td {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--erp-surface-subtle);
   border-bottom-color: transparent;
 }
 
@@ -204,44 +204,44 @@
 
 .action-session-created {
   background: rgba(16, 185, 129, 0.12);
-  color: #34d399;
+  color: var(--erp-present-text);
   border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
 .action-roster-updated {
   background: rgba(59, 130, 246, 0.12);
-  color: #60a5fa;
+  color: var(--erp-primary);
   border: 1px solid rgba(59, 130, 246, 0.25);
 }
 
 .action-attendance-finalized {
   background: rgba(168, 85, 247, 0.12);
-  color: #c084fc;
+  color: #7e22ce;
   border: 1px solid rgba(168, 85, 247, 0.25);
 }
 
 .action-attendance-corrected {
   background: rgba(245, 158, 11, 0.12);
-  color: #fbbf24;
+  color: var(--erp-warning-text);
   border: 1px solid rgba(245, 158, 11, 0.25);
 }
 
 .action-user-registered {
   background: rgba(14, 165, 233, 0.12);
-  color: #38bdf8;
+  color: var(--erp-primary);
   border: 1px solid rgba(14, 165, 233, 0.25);
 }
 
 .action-user-login {
   background: rgba(148, 163, 184, 0.12);
-  color: #cbd5e1;
+  color: var(--erp-text-body);
   border: 1px solid rgba(148, 163, 184, 0.25);
 }
 
 .action-default {
-  background: rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--erp-surface-subtle);
+  color: var(--erp-text-body);
+  border: 1px solid var(--erp-border);
 }
 
 /* Resource Badges */
@@ -249,8 +249,8 @@
   display: inline-flex;
   align-items: center;
   padding: 0.2rem 0.5rem;
-  background: rgba(255, 255, 255, 0.05);
-  color: #94a3b8;
+  background: var(--erp-surface-subtle);
+  color: var(--erp-text-body);
   border-radius: var(--radius-xs, 0.25rem);
   font-size: 0.75rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -262,7 +262,7 @@
   align-items: center;
   padding: 0.2rem 0.5rem;
   background: rgba(99, 102, 241, 0.1);
-  color: #a5b4fc;
+  color: #4338ca;
   border: 1px solid rgba(99, 102, 241, 0.2);
   border-radius: var(--radius-xs, 0.25rem);
   font-size: 0.75rem;
@@ -278,13 +278,13 @@
 }
 
 .audit-time-main {
-  color: var(--text-main, #f9fafb);
+  color: var(--text-main);
   font-weight: 500;
   font-size: 0.8125rem;
 }
 
 .audit-time-sub {
-  color: var(--text-muted, #64748b);
+  color: var(--erp-text-body);
   font-size: 0.75rem;
 }
 
@@ -294,10 +294,10 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.35rem 0.75rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--erp-surface-subtle);
+  border: 1px solid var(--erp-border);
   border-radius: var(--radius-sm, 0.5rem);
-  color: #94a3b8;
+  color: var(--erp-text-body);
   font-size: 0.75rem;
   font-weight: 500;
   cursor: pointer;
@@ -305,14 +305,14 @@
 }
 
 .audit-details-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f9fafb;
-  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--erp-surface-subtle);
+  color: var(--erp-text-main);
+  border-color: var(--erp-border);
 }
 
 .audit-details-btn.active {
   background: rgba(168, 85, 247, 0.15);
-  color: #d8b4fe;
+  color: #7e22ce;
   border-color: rgba(168, 85, 247, 0.3);
 }
 
@@ -329,13 +329,13 @@
 /* Expanded Detail Row */
 .audit-expanded-cell {
   padding: 0 1rem 1.25rem 1rem !important;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--erp-surface-subtle);
 }
 
 .audit-detail-panel {
   padding: 1.25rem;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--erp-surface);
+  border: 1px solid var(--erp-border);
   border-radius: var(--radius-md, 0.75rem);
   display: flex;
   flex-direction: column;
@@ -369,14 +369,14 @@
 .audit-detail-label {
   font-size: 0.75rem;
   font-weight: 500;
-  color: var(--text-muted, #94a3b8);
+  color: var(--erp-text-body);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 
 .audit-detail-value {
   font-size: 0.875rem;
-  color: var(--text-main, #f9fafb);
+  color: var(--text-main);
   font-weight: 500;
 }
 
@@ -386,7 +386,7 @@
   border-left: 3px solid #f59e0b;
   border-radius: 0 var(--radius-sm, 0.5rem) var(--radius-sm, 0.5rem) 0;
   font-size: 0.875rem;
-  color: #fde68a;
+  color: var(--erp-warning-text);
   line-height: 1.5;
 }
 
@@ -395,19 +395,19 @@
   align-items: center;
   justify-content: space-between;
   padding-top: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--erp-border);
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--erp-text-body);
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
 .audit-id-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--erp-surface-subtle);
   padding: 0.15rem 0.4rem;
   border-radius: var(--radius-xs, 0.25rem);
-  color: #94a3b8;
+  color: var(--erp-text-body);
 }
 
 /* Status Pills in Details */
@@ -422,12 +422,12 @@
 
 .status-pill.present {
   background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
+  color: var(--erp-present-text);
 }
 
 .status-pill.absent {
   background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
+  color: var(--erp-absent-text);
 }
 
 /* Loading State */
@@ -438,7 +438,7 @@
   justify-content: center;
   padding: 3rem 1.5rem;
   gap: 1rem;
-  color: var(--text-muted, #94a3b8);
+  color: var(--erp-text-body);
 }
 
 .audit-loading-spinner {
@@ -459,17 +459,17 @@
   padding: 3.5rem 1.5rem;
   text-align: center;
   gap: 1rem;
-  background: rgba(15, 23, 42, 0.3);
+  background: var(--erp-surface);
   border-radius: var(--radius-md, 0.75rem);
-  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border: 1px dashed var(--erp-border);
 }
 
 .audit-empty-icon {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.04);
-  color: #64748b;
+  background: var(--erp-surface-subtle);
+  color: var(--erp-text-body);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -483,13 +483,13 @@
 .audit-empty-title {
   font-size: 1rem;
   font-weight: 600;
-  color: var(--text-main, #f9fafb);
+  color: var(--text-main);
   margin: 0;
 }
 
 .audit-empty-desc {
   font-size: 0.875rem;
-  color: var(--text-muted, #94a3b8);
+  color: var(--erp-text-body);
   margin: 0;
   max-width: 420px;
   line-height: 1.5;
@@ -504,13 +504,13 @@
   background: rgba(239, 68, 68, 0.08);
   border: 1px solid rgba(239, 68, 68, 0.25);
   border-radius: var(--radius-md, 0.75rem);
-  color: #fca5a5;
+  color: var(--erp-absent-text);
 }
 
 .audit-error-icon {
   width: 24px;
   height: 24px;
-  color: #ef4444;
+  color: var(--erp-absent-text);
   flex-shrink: 0;
 }
 
@@ -530,7 +530,7 @@
 
 .audit-error-msg {
   font-size: 0.8125rem;
-  color: #fca5a5;
+  color: var(--erp-absent-text);
   margin: 0;
 }
 

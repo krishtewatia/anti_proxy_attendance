@@ -213,7 +213,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
             }}
           >
             <div style={{ fontWeight: 600, fontSize: "0.95rem", color: role === "TEACHER" ? "#1d4ed8" : "#0f172a" }}>Teacher</div>
-            <div style={{ fontSize: "0.75rem", color: "#64748b" }}>Classroom Sessions</div>
+            <div style={{ fontSize: "0.75rem", color: "#64748b" }}>Attendance sessions</div>
           </div>
         </div>
       </div>

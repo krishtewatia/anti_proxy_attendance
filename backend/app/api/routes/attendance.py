@@ -52,6 +52,7 @@ async def _resolve_student_info(db) -> dict[str, dict]:
             mapping[ident] = {
                 "student_id": doc.get("student_id") or ident,
                 "name": doc.get("name") or doc.get("full_name") or ident,
+                "roll_number": doc.get("roll_number") or None,
             }
     return mapping
 
@@ -182,6 +183,7 @@ async def get_session_attendance(
                 identity=ident,
                 student_id=stu_id,
                 student_name=stu_name,
+                roll_number=s_info.get("roll_number"),
                 status=current_status,
                 presence_duration_seconds=float(rec.get("presence_duration_seconds", 0.0))
                 if rec

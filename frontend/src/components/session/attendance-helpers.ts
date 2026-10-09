@@ -1,3 +1,5 @@
+import { formatDateTime } from "../../utils/dates.ts";
+
 /**
  * Formatting utilities for session attendance display.
  */
@@ -27,17 +29,6 @@ export function formatPresencePercentage(pct: number): string {
 
 export function formatCorrectionTimestamp(isoString: string): string {
   if (!isoString) return "";
-  try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
-    return d.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    return isoString;
-  }
+  const formatted = formatDateTime(isoString);
+  return formatted === "—" ? isoString : formatted;
 }

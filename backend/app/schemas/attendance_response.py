@@ -11,6 +11,7 @@ class AttendanceSummaryItem(BaseModel):
     identity: str
     student_id: Optional[str] = None
     student_name: Optional[str] = None
+    roll_number: Optional[str] = None
     status: str = "ABSENT"  # "PRESENT" | "ABSENT"
 
     # Optional legacy fields for backward compatibility

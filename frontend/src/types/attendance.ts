@@ -23,6 +23,7 @@ export interface AttendanceSummaryItem {
   identity: string;
   student_id?: string;
   student_name?: string;
+  roll_number?: string | null;
   presence_duration_seconds: number;
   presence_percentage: number;
   required_presence_percentage: number;

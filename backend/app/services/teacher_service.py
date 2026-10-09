@@ -8,6 +8,7 @@ from app.database.session_roster import get_session_roster
 from app.database.sessions import (
     get_active_session_by_teacher,
     get_sessions_by_owner,
+    session_was_taken,
 )
 from app.core.account_status import ACCOUNT_APPROVED, ACCOUNT_PENDING
 from app.database.mongodb import get_database
@@ -142,6 +143,8 @@ async def _summarize_session(session: dict) -> TeacherSessionSummaryItem:
         present_count=present_cnt,
         attendance_percentage=pct,
         status=session.get("status", "ACTIVE"),
+        was_taken=session_was_taken(session, records),
+        start_time=session.get("start_time"),
         created_at=session.get("created_at"),
     )
 

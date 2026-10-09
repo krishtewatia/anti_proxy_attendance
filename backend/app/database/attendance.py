@@ -171,7 +171,7 @@ async def compute_student_attendance_metrics(
             subject_counts[subj]["present"] += 1
 
         dt = s.get("start_time") or s.get("created_at")
-        date_str = dt.strftime("%b %d, %Y") if hasattr(dt, "strftime") else str(dt)[:10]
+        date_str = f"{dt.day} {dt:%b %Y}" if hasattr(dt, "strftime") else str(dt)[:10]
 
         history.append(
             {
