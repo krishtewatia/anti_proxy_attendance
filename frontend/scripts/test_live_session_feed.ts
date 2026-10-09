@@ -1,5 +1,6 @@
 import { api, auth } from "../src/services/index.ts";
 import type { SessionLiveSnapshotResponse, StudentLiveItem } from "../src/types/index.ts";
+import { requireLiveBackend } from "./live_backend.ts";
 
 function testLiveFeedDataStructures() {
   console.log("--------------------------------------------------");
@@ -125,7 +126,7 @@ async function testLiveSessionSnapshotApi() {
   console.log("--------------------------------------------------");
 
   try {
-    const health = await api.checkHealth();
+    const health = await requireLiveBackend();
     console.log("Live backend healthy:", health);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

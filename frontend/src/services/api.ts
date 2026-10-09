@@ -37,6 +37,11 @@ export const getApiBaseUrl = (): string => {
   if (import.meta.env?.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
+  // Node (the test suites): an explicit address, never a guess.
+  const nodeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  if (nodeEnv?.VITE_API_BASE_URL) {
+    return nodeEnv.VITE_API_BASE_URL;
+  }
   if (typeof window !== "undefined" && window.location.hostname) {
     const proto = window.location.protocol || "http:";
     return `${proto}//${window.location.hostname}:8000`;

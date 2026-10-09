@@ -550,6 +550,20 @@ npm test
 npm run build
 ```
 
+The suites that talk to a real backend (they register accounts, create sessions and mark attendance) are skipped unless you name a throwaway backend and its administrator, so they never fill a development database with test accounts:
+
+```bash
+python scripts/smoke_e2e.py --keep --photos /path/to/photos
+```
+
+That leaves an isolated stack running and prints its address, administrator and service key. Then, from `frontend/`:
+
+```bash
+LIVE_TEST_ADMIN_EMAIL=... LIVE_TEST_ADMIN_PASSWORD=... LIVE_TEST_SERVICE_KEY=... VITE_API_BASE_URL=http://127.0.0.1:PORT npm test
+```
+
+Remove the stack afterwards with the `docker compose ... down -v` command the script printed.
+
 ### Run Vision Service Attendance Tests
 ```bash
 docker exec anti-proxy-vision-service python -m unittest discover tests/

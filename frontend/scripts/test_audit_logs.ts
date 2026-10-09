@@ -1,5 +1,6 @@
 import { api } from "../src/services/api.ts";
 import type { AuditAction, AuditEventResponse, AuditResourceType } from "../src/types/audit.ts";
+import { requireLiveBackend } from "./live_backend.ts";
 
 function testAuditDataContracts() {
   console.log("--------------------------------------------------");
@@ -90,7 +91,7 @@ async function testAuditApiClient() {
   }
 
   try {
-    const health = await api.checkHealth();
+    const health = await requireLiveBackend();
     console.log("Live backend healthy:", health);
   } catch (err: any) {
     console.log("ℹ Backend not currently running locally, skipping live network request:", err.message);

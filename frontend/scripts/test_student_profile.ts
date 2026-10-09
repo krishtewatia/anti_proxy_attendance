@@ -1,4 +1,5 @@
 import { api, auth } from "../src/services/index.ts";
+import { requireLiveBackend } from "./live_backend.ts";
 
 async function testStudentProfile() {
   console.log("==================================================");
@@ -8,7 +9,7 @@ async function testStudentProfile() {
   // 1. Health check live backend
   console.log("\n[1/7] Checking live backend connectivity...");
   try {
-    const health = await api.checkHealth();
+    const health = await requireLiveBackend();
     console.log("✅ Live backend healthy:", health);
   } catch (err: any) {
     console.log("ℹ Backend not currently running locally, skipping live network tests:", err.message);

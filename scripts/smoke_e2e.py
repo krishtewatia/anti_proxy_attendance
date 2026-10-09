@@ -841,7 +841,14 @@ def main() -> int:
             checks.check("throwaway stack started", False, exc)
         finally:
             if args.keep:
-                print(f"Stack '{project}' left running (--keep). Remove it with:")
+                # This stack and its generated administrator exist only until it is
+                # removed, so the credentials are shown for running other checks
+                # against it (for example the frontend's live suites).
+                kept_url = locals().get("base_url", "(not started)")
+                print(f"Stack '{project}' left running (--keep) at {kept_url}")
+                print(f"  administrator: {admin_email} / {admin_password}")
+                print(f"  service key  : {service_key}")
+                print("Remove it with:")
                 print(f"  docker compose -p {project} -f {COMPOSE_FILE} down -v")
             else:
                 stop_throwaway_stack(project, env, show_logs=checks.failed > 0)
