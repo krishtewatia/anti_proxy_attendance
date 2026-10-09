@@ -98,7 +98,8 @@ async def finalize_session_attendance(
 
         # Manual corrections are authoritative and must survive re-finalization
         if existing and existing.get("manually_corrected"):
-            final_records.append(existing)
+            # The row keeps its status; the ID and name shown are the current ones.
+            final_records.append({**existing, "student_id": stu_id, "student_name": stu_name})
             continue
 
         intervals: list[AttendanceInterval] = []

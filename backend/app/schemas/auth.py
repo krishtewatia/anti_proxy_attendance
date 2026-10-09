@@ -36,3 +36,12 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"]
     user: UserResponse
+    # True when the only thing this token may do is change the password.
+    must_change_password: bool = False
+
+
+class PasswordChangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)

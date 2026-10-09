@@ -56,6 +56,7 @@ flowchart LR
    - **`TEACHER`**: Can schedule sessions, monitor live feeds, finalize attendance, and apply manual corrections. Cannot access raw biometric galleries.
    - **`STUDENT`**: Can only view personal attendance records.
    - A new account of any role is `PENDING` until an administrator approves it, and a teacher's classes are assigned by an administrator. See [6.1](#61-teacher-accounts-could-be-self-registered).
+   - Account management is described in [section 7](#7-account-management-and-passwords).
 2. **Machine-to-Machine Isolation**:
    - Camera nodes authenticate via pre-shared service keys (`X-Camera-Token` or `Authorization: Bearer`).
    - Camera tokens grant access **exclusively** to the event ingestion endpoint (`POST /api/v1/events`). Camera tokens cannot access session records, user data, or administrative tools.
@@ -140,3 +141,33 @@ Gaps that are known and not yet fixed. Each entry says who decided what, and wha
 It now removes everything held about the student, as section 2 describes: account, profile, face template, stored photo, attendance records and their corrections, doorway events, and the student's entries on session rosters. It asks the vision service to reload its gallery, and writes one `STUDENT_DELETED` audit entry holding the student's ID and the counts of what was removed, but not the name, email or any image data. It refuses accounts that are not students, and `DELETE /api/v1/admin/teachers/{user_id}` likewise refuses accounts that are not teachers.
 
 Not removed, deliberately: earlier audit entries that mention the student's ID (the audit log is append-only), and the sessions themselves.
+
+---
+
+## 7. Account Management and Passwords
+
+Added 2026-10-09. Every route here requires an administrator, except changing your own password.
+
+**Passwords.**
+- Passwords are stored only as bcrypt hashes. No route returns a password or a hash, and administrators cannot see an existing password.
+- An account an administrator creates (student, teacher or administrator), the administrator created from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`, and any account whose password an administrator resets must choose a new password at the next sign-in. Until then every route answers 403 `password_change_required`; only `POST /api/v1/auth/change-password` works.
+- A reset generates a random temporary password and returns it once, in the response to the administrator who asked. It is stored only as a hash and is not written to the log or the audit trail.
+- Each user has a token version, carried in every token. Changing or resetting a password raises it in the same database update that stores the new hash, so every token issued before that is refused from then on. The caller of a password change gets a new token in the response.
+- An administrator cannot reset their own password this way; they use the change-password form, which requires the current password.
+
+**Editing accounts.**
+- A student's name, email, class and student ID, and a teacher's name, email, teacher ID, department, classes and subjects can be edited. There is no route that changes a role.
+- A student's ID is a label on the student record. Photos, face templates, session rosters and attendance records are keyed by an internal identity that never changes, and attendance views and CSV exports read the ID from the student record. Changing the ID is therefore a single-document update: nothing else is rewritten, and nothing can be left half-changed. The previous ID remains that student's internal identity, so it cannot be given to another student.
+- Removing a class from a teacher takes effect on their next request: they can no longer open a session for it.
+
+**Deleting accounts.**
+- Deleting a student removes everything held about them (section 6.2).
+- Deleting a teacher removes the account and profile only. The sessions they created and the attendance in them are kept as history. It is refused while one of their sessions is in progress.
+- An administrator can delete another administrator, never themself, and never the last one.
+
+**Audit.** Each action writes one entry: `ACCOUNT_CREATED`, `ACCOUNT_UPDATED` (the names of the fields that changed, not their values, plus class codes), `STUDENT_ID_CHANGED` (old and new ID), `PASSWORD_RESET`, `PASSWORD_CHANGED`, `TEACHER_DELETED`, `ADMIN_DELETED`. Entries hold IDs, roles and counts: no names, email addresses, passwords or images.
+
+**What remains.**
+- Tokens are not revoked individually: signing out on one device does not end a token (it expires after its lifetime). A password change or reset is the way to end every session at once.
+- There is no self-service "forgot password": a reset needs an administrator, since the system sends no email.
+- Password rules are a minimum length (8 characters; 12 for an administrator's first password). There is no check against known-breached passwords.

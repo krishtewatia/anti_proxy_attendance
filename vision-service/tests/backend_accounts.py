@@ -4,6 +4,10 @@ A teacher who registers is PENDING until an administrator approves them and
 assigns their classes, and a teacher can open a session only for an assigned
 class. These helpers give the backend process a first administrator and
 return an approved teacher's headers. Passwords are generated per run.
+
+An administrator created from the environment must replace that password
+before doing anything else, so the first use changes it and later uses log in
+with the replacement.
 """
 
 from __future__ import annotations
@@ -14,6 +18,37 @@ import time
 import requests
 
 TEST_CLASS_CODE = "DS-B"
+
+# (backend address, admin email) -> the password the administrator has now.
+_current_admin_passwords: dict[tuple[str, str], str] = {}
+
+
+def _admin_headers(backend_url: str, admin_email: str, admin_password: str) -> dict[str, str]:
+    """Log the administrator in, replacing the first password if that is still required."""
+    key = (backend_url, admin_email)
+    password = _current_admin_passwords.get(key, admin_password)
+    login = requests.post(
+        f"{backend_url}/api/v1/auth/login",
+        json={"email": admin_email, "password": password},
+        timeout=5.0,
+    )
+    if login.status_code != 200:
+        raise RuntimeError(f"Administrator login failed: {login.status_code}")
+    token = login.json()["access_token"]
+
+    if login.json().get("must_change_password"):
+        replacement = secrets.token_urlsafe(24)
+        changed = requests.post(
+            f"{backend_url}/api/v1/auth/change-password",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"current_password": password, "new_password": replacement},
+            timeout=5.0,
+        )
+        if changed.status_code != 200:
+            raise RuntimeError(f"Administrator password change failed: {changed.status_code}")
+        _current_admin_passwords[key] = replacement
+        token = changed.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
 
 
 def add_bootstrap_admin(env: dict[str, str]) -> tuple[str, str]:
@@ -43,14 +78,7 @@ def approved_teacher_headers(
     if registered.status_code != 201:
         raise RuntimeError(f"Teacher registration failed: {registered.status_code} {registered.text}")
 
-    admin_login = requests.post(
-        f"{backend_url}/api/v1/auth/login",
-        json={"email": admin_email, "password": admin_password},
-        timeout=5.0,
-    )
-    if admin_login.status_code != 200:
-        raise RuntimeError(f"Administrator login failed: {admin_login.status_code}")
-    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+    admin_headers = _admin_headers(backend_url, admin_email, admin_password)
 
     approved = requests.post(
         f"{backend_url}/api/v1/admin/approvals/{registered.json()['user_id']}/approve",

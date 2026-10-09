@@ -6,6 +6,8 @@ import { pendingBadgeText } from "../../utils/approvals.ts";
 interface AppLayoutProps {
   user: UserResponse;
   onLogout: () => void;
+  // Opens the change-password page; the button is hidden when not given.
+  onChangePassword?: () => void;
   activeNavId?: string;
   onSelectNav?: (navId: string) => void;
   // Counts to show next to navigation items, keyed by item id.
@@ -176,6 +178,15 @@ function getNavigationItems(role: UserRole): NavItem[] {
           ),
         },
         {
+          id: "admins",
+          label: "Administrators",
+          icon: (
+            <svg className="nav-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+            </svg>
+          ),
+        },
+        {
           id: "reports",
           label: "Reports",
           icon: (
@@ -213,6 +224,7 @@ function getNavigationItems(role: UserRole): NavItem[] {
 export const AppLayout: React.FC<AppLayoutProps> = ({
   user,
   onLogout,
+  onChangePassword,
   activeNavId = "dashboard",
   onSelectNav,
   navBadges,
@@ -265,6 +277,17 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               </span>
             </div>
           </div>
+
+          {onChangePassword && (
+            <button
+              type="button"
+              className="erp-btn-logout erp-btn-account"
+              onClick={onChangePassword}
+              title="Change your password"
+            >
+              <span>Change Password</span>
+            </button>
+          )}
 
           <button
             type="button"

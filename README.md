@@ -231,8 +231,10 @@ graph TD
 
 ### 3. Administrator Role
 - **Pending Approvals**: Review new student and teacher registrations and student photo changes. Approving a teacher assigns their classes; approving a student confirms their class. Rejecting removes everything the registration submitted. Registrations left untouched for 14 days are removed automatically.
-- **Student Directory**: View all registered students with profile photo thumbnails and biometric status.
-- **Teacher Assignment**: Assign specific branches and sections (`DS-B`, `CS-A`) and subjects to faculty members.
+- **Student Directory**: View all registered students with profile photo thumbnails and biometric status. Create, edit (name, email, class, student ID) and delete students.
+- **Teacher Management**: Create and edit teachers, and assign the classes (`DS-B`, `CS-A`) and subjects each one may take attendance for. Deleting a teacher keeps the sessions and attendance they recorded, and is refused while one of their sessions is in progress.
+- **Passwords**: An account an administrator creates, or whose password an administrator resets, must choose its own password at the next sign-in. A reset shows a temporary password once; nobody can read an existing password. Changing or resetting a password signs that account out everywhere.
+- **Administrators**: Add and remove administrator accounts. The last administrator cannot be removed and nobody can delete their own account.
 - **Curriculum Management**: Create academic departments, classes, and subjects.
 
 ---
@@ -410,7 +412,7 @@ BOOTSTRAP_ADMIN_EMAIL=you@example.edu
 BOOTSTRAP_ADMIN_PASSWORD=<at least 12 characters>
 ```
 
-The backend creates that administrator at start-up only if no administrator exists yet. There is no default password, an existing administrator is never changed, and the backend logs a warning for as long as the two values are still set after the account exists. Sign in, then approve teachers and students from **Pending Approvals**.
+The backend creates that administrator at start-up only if no administrator exists yet. There is no default password, an existing administrator is never changed, and the backend logs a warning for as long as the two values are still set after the account exists. At the first sign-in you are asked to replace that password with one of your own; nothing else works until you do. Then approve teachers and students from **Pending Approvals**.
 
 **Option B: the seed script (an admin, an approved teacher and the class catalog).** It needs `pymongo` and `bcrypt` on the machine you run it from:
 
@@ -480,9 +482,15 @@ Remove `--dry-run` to copy. Each photo is checked against the student it is name
 | `POST` | `/api/v1/admin/approvals/{user_id}/approve` | Admin | Approve a registration (assign a teacher's classes, confirm a student's class) |
 | `POST` | `/api/v1/admin/approvals/{user_id}/reject` | Admin | Reject a registration and remove everything it submitted |
 | `POST` | `/api/v1/auth/login` | Public | Authenticate and obtain JWT access token |
+| `POST` | `/api/v1/auth/change-password` | Any signed-in user | Change your own password; every earlier token stops working |
+| `POST` | `/api/v1/admin/users/{user_id}/reset-password` | Admin | Temporary password, shown once; the account must change it at the next sign-in |
+| `PATCH` | `/api/v1/admin/students/{user_id}` | Admin | Edit a student's name, email, class or student ID |
+| `PATCH` | `/api/v1/admin/teachers/{user_id}` | Admin | Edit a teacher's name, email, teacher ID, department, classes or subjects |
+| `DELETE` | `/api/v1/admin/teachers/{user_id}` | Admin | Delete a teacher; their sessions and attendance are kept |
+| `GET` `POST` `DELETE` | `/api/v1/admin/admins` | Admin | List, add and remove administrators (not yourself, not the last one) |
 | `POST` | `/api/v1/students/register` | Public | Self-service student registration with photo & biometrics |
 | `GET` | `/api/v1/students/me` | Student | Get authenticated student's profile & attendance metrics |
-| `GET` | `/api/v1/students/{student_id}/photo` | Public / Proxy | Serve student profile photograph (JPEG) |
+| `GET` | `/api/v1/students/{student_id}/photo` | The student, admins, and teachers who teach the student | Serve student profile photograph (JPEG) |
 | `POST` | `/api/v1/sessions` | Teacher | Create new active attendance session for class |
 | `GET` | `/api/v1/sessions/active` | Teacher | Query current active session for teacher |
 | `GET` | `/api/v1/attendance/{session_id}` | Teacher | Retrieve full student roster & live attendance statuses |
@@ -563,6 +571,14 @@ LIVE_TEST_ADMIN_EMAIL=... LIVE_TEST_ADMIN_PASSWORD=... LIVE_TEST_SERVICE_KEY=...
 ```
 
 Remove the stack afterwards with the `docker compose ... down -v` command the script printed.
+
+If an older version of these suites already left test accounts in your development database, list them (nothing is deleted without `--apply`):
+
+```bash
+docker compose exec backend python -m app.tools.cleanup_test_accounts
+```
+
+It lists student and teacher accounts that have no profile and created no session. Add `--include-test-pattern` to also list accounts whose email carries a test timestamp, together with the sessions they created. To delete exactly what was listed, repeat the command with `--apply --expect N`, where N is the number of accounts it showed. Administrators are never listed, and each removal is audited.
 
 ### Run Vision Service Attendance Tests
 ```bash

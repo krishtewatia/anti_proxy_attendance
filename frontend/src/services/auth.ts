@@ -8,6 +8,7 @@ import { api } from "./api.ts";
 
 const TOKEN_KEY = "anti_proxy_access_token";
 const USER_KEY = "anti_proxy_user";
+const MUST_CHANGE_KEY = "anti_proxy_must_change_password";
 
 class MemoryStorage {
   private store = new Map<string, string>();
@@ -70,6 +71,20 @@ export function clearStoredAuth(): void {
   const storage = getStorage();
   storage.removeItem(TOKEN_KEY);
   storage.removeItem(USER_KEY);
+  storage.removeItem(MUST_CHANGE_KEY);
+}
+
+// Whether the signed-in account has to choose a new password before anything else.
+export function mustChangePassword(): boolean {
+  return getStorage().getItem(MUST_CHANGE_KEY) === "1";
+}
+
+export function setMustChangePassword(required: boolean): void {
+  if (required) {
+    getStorage().setItem(MUST_CHANGE_KEY, "1");
+  } else {
+    getStorage().removeItem(MUST_CHANGE_KEY);
+  }
 }
 
 export function isAuthenticated(): boolean {
@@ -79,6 +94,15 @@ export function isAuthenticated(): boolean {
 export async function login(credentials: UserLogin): Promise<TokenResponse> {
   const response = await api.login(credentials);
   setStoredAuth(response.access_token, response.user);
+  setMustChangePassword(Boolean(response.must_change_password));
+  return response;
+}
+
+// Every earlier token stops working; the new one replaces the stored token.
+export async function changePassword(currentPassword: string, newPassword: string): Promise<TokenResponse> {
+  const response = await api.changePassword(currentPassword, newPassword);
+  setStoredAuth(response.access_token, response.user);
+  setMustChangePassword(Boolean(response.must_change_password));
   return response;
 }
 
@@ -92,6 +116,9 @@ export function logout(): void {
 
 export const auth = {
   login,
+  changePassword,
+  mustChangePassword,
+  setMustChangePassword,
   register,
   logout,
   getStoredUser,
