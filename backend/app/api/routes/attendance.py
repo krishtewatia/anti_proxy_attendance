@@ -6,7 +6,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from app.api.dependencies.auth import get_owned_session, require_teacher
+from app.api.dependencies.auth import (
+    get_owned_session,
+    require_teacher,
+    require_teacher_or_admin,
+)
 from app.api.dependencies.camera_auth import require_service_key
 from app.api.dependencies.rate_limiter import (
     frame_session_rate_limiter,
@@ -123,7 +127,7 @@ async def get_vision_gallery_endpoint():
 )
 async def get_session_attendance(
     session_id: str,
-    current_user: Annotated[dict, Depends(require_teacher)],
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
 ) -> AttendanceSessionResponse:
     """Return clean one-time attendance records for a session."""
     session = await get_owned_session(session_id, current_user)
@@ -207,7 +211,7 @@ async def get_session_attendance(
 )
 async def export_session_attendance_csv(
     session_id: str,
-    current_user: Annotated[dict, Depends(require_teacher)],
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
 ):
     """Export one-time attendance list as a CSV file for download."""
     session = await get_owned_session(session_id, current_user)

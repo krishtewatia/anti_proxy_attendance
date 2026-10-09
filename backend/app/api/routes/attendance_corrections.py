@@ -1,7 +1,11 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.dependencies.auth import get_owned_session, require_teacher
+from app.api.dependencies.auth import (
+    get_owned_session,
+    require_teacher,
+    require_teacher_or_admin,
+)
 from app.database.attendance import get_attendance_record
 from app.schemas.attendance_correction import (
     AttendanceCorrectionCreate,
@@ -110,7 +114,7 @@ async def correct_session_attendance(
 async def get_session_attendance_corrections(
     session_id: str,
     attendance_id: str,
-    current_user: Annotated[dict, Depends(require_teacher)],
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
 ) -> list[AttendanceCorrectionResponse]:
     """
     Retrieve read-only correction history for an attendance record.

@@ -1,3 +1,4 @@
+import { isSessionCompleted } from "../utils/sessions.ts";
 import React, { useEffect, useState } from "react";
 import { AuditLogs } from "../components/audit";
 import { CreateSessionModal } from "../components/session";
@@ -182,7 +183,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // Compute live aggregates from authentic backend session responses
   const scheduledCount = sessions.filter((s) => s.status === "SCHEDULED").length;
   const activeCount = sessions.filter((s) => s.status === "ACTIVE").length;
-  const completedCount = sessions.filter((s) => s.status === "COMPLETED").length;
+  const completedCount = sessions.filter((s) => isSessionCompleted(s.status)).length;
 
   return (
     <div className="teacher-dashboard">

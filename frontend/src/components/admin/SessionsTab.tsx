@@ -1,13 +1,26 @@
 import React, { useMemo, useState } from "react";
-import { type AdminTabProps } from "./adminShared.ts";
+import {
+  SESSION_STATUS_FILTERS,
+  matchesStatusFilter,
+  paginate,
+  sessionStatusBadgeClass,
+  sessionStatusLabel,
+  type SessionStatusFilter,
+} from "../../utils/sessions.ts";
+import { smallButton, type AdminTabProps } from "./adminShared.ts";
+
+const PAGE_SIZE = 15;
 
 export const SessionsTab: React.FC<AdminTabProps> = ({ sessions, reload }) => {
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState<SessionStatusFilter>("ALL");
+  const [page, setPage] = useState(1);
 
   const filteredSessions = useMemo(
-    () => sessions.filter((s) => statusFilter === "ALL" || s.status === statusFilter),
+    () => sessions.filter((s) => matchesStatusFilter(s.status, statusFilter)),
     [sessions, statusFilter],
   );
+  // The list is shown a page at a time, so the page never grows with the data.
+  const current = paginate(filteredSessions, page, PAGE_SIZE);
 
   return (
     <div>
@@ -24,13 +37,16 @@ export const SessionsTab: React.FC<AdminTabProps> = ({ sessions, reload }) => {
           <select
             id="admin-session-filter"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as SessionStatusFilter);
+              setPage(1);
+            }}
             className="erp-select-input"
             style={{ padding: "0.4rem 0.75rem", fontSize: "0.8125rem", width: "160px" }}
           >
-            <option value="ALL">All Sessions</option>
-            <option value="ACTIVE">Active</option>
-            <option value="COMPLETED">Completed</option>
+            {SESSION_STATUS_FILTERS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </div>
         <button type="button" className="erp-btn erp-btn-secondary" onClick={() => void reload()}>
@@ -53,14 +69,14 @@ export const SessionsTab: React.FC<AdminTabProps> = ({ sessions, reload }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredSessions.length === 0 ? (
+            {current.items.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ textAlign: "center", padding: "2rem", color: "var(--erp-text-muted)" }}>
                   No attendance sessions found.
                 </td>
               </tr>
             ) : (
-              filteredSessions.map((sess) => {
+              current.items.map((sess) => {
                 const sessAny = sess as unknown as Record<string, unknown>;
                 const totalStu = typeof sessAny.total_students === "number" ? sessAny.total_students : 4;
                 const presCount = typeof sessAny.present_count === "number" ? sessAny.present_count : (sess.status === "COMPLETED" ? 4 : 0);
@@ -74,15 +90,15 @@ export const SessionsTab: React.FC<AdminTabProps> = ({ sessions, reload }) => {
                     <td style={{ color: "#15803d", fontWeight: 600 }}>{presCount}</td>
                     <td style={{ color: "#b91c1c", fontWeight: 600 }}>{absCount}</td>
                     <td>
-                      <span className={`status-badge ${sess.status === "ACTIVE" ? "active" : "completed"}`}>
-                        {sess.status}
+                      <span className={`status-badge ${sessionStatusBadgeClass(sess.status)}`}>
+                        {sessionStatusLabel(sess.status)}
                       </span>
                     </td>
                     <td>
                       <a
                         href={`/dashboard/teacher/sessions/${sess.session_id}`}
                         className="erp-btn erp-btn-secondary"
-                        style={{ padding: "0.25rem 0.6rem", fontSize: "0.75rem" }}
+                        style={smallButton}
                       >
                         View
                       </a>
@@ -94,6 +110,37 @@ export const SessionsTab: React.FC<AdminTabProps> = ({ sessions, reload }) => {
           </tbody>
         </table>
       </div>
+
+      {current.total > 0 && (
+        <div className="erp-pagination" role="navigation" aria-label="Session pages">
+          <span className="erp-pagination-summary">
+            Showing {current.from}–{current.to} of {current.total}
+          </span>
+          <div className="erp-pagination-buttons">
+            <button
+              type="button"
+              className="erp-btn erp-btn-secondary"
+              style={smallButton}
+              disabled={current.page <= 1}
+              onClick={() => setPage(current.page - 1)}
+            >
+              ← Previous
+            </button>
+            <span className="erp-pagination-page">
+              Page {current.page} of {current.pageCount}
+            </span>
+            <button
+              type="button"
+              className="erp-btn erp-btn-secondary"
+              style={smallButton}
+              disabled={current.page >= current.pageCount}
+              onClick={() => setPage(current.page + 1)}
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

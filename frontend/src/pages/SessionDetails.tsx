@@ -1,3 +1,4 @@
+import { isSessionCompleted, sessionStatusLabel } from "../utils/sessions.ts";
 import React, { useEffect, useState } from "react";
 import { AuditLogs } from "../components/audit";
 import { AlwaysOnVideoFeed, SessionAttendance } from "../components/session";
@@ -311,12 +312,12 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
             <h2 className="session-course-title">{session.course_name}</h2>
             <span className={`status-badge status-${session.status.toLowerCase()}`}>
               <span className="status-dot" aria-hidden="true" />
-              {session.status}
+              {sessionStatusLabel(session.status)}
             </span>
           </div>
 
           <div className="session-header-actions">
-            {session.status !== "FINALIZED" ? (
+            {!isSessionCompleted(session.status) ? (
               <button
                 type="button"
                 className="btn-end-session"
@@ -411,8 +412,11 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
         </div>
       </article>
 
-      {/* Always-On Optical Video Feed (Laptop Webcam) */}
-      <AlwaysOnVideoFeed sessionId={session.session_id} classroomId={session.classroom_id} />
+      {/* The camera belongs to the teacher taking attendance. An administrator
+          opens a session to read it, so their webcam is never switched on. */}
+      {!isUserAdmin && !isSessionCompleted(session.status) && (
+        <AlwaysOnVideoFeed sessionId={session.session_id} classroomId={session.classroom_id} />
+      )}
 
       {/* Real-time Attendance Ledger & Verification */}
       <SessionAttendance
@@ -420,6 +424,7 @@ export const SessionDetails: React.FC<SessionDetailsProps> = ({
         sessionId={session.session_id}
         requiredPercentage={session.required_presence_percentage}
         onFinalize={handleEndSession}
+        readOnly={isUserAdmin}
       />
 
       {/* Session Audit Trail & Compliance Ledger */}

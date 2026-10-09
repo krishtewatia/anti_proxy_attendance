@@ -2,10 +2,14 @@ import React from "react";
 import type { UserResponse, UserRole } from "../../types";
 import "./layout.css";
 import { pendingBadgeText } from "../../utils/approvals.ts";
+import { getDashboardPath } from "../../utils/auth";
+import { APP_NAME, APP_TAGLINE } from "../../config/app.ts";
 
 interface AppLayoutProps {
   user: UserResponse;
   onLogout: () => void;
+  // Goes to the home page of the signed-in role (the logo and name are the link).
+  onGoHome?: () => void;
   // Opens the change-password page; the button is hidden when not given.
   onChangePassword?: () => void;
   activeNavId?: string;
@@ -224,6 +228,7 @@ function getNavigationItems(role: UserRole): NavItem[] {
 export const AppLayout: React.FC<AppLayoutProps> = ({
   user,
   onLogout,
+  onGoHome,
   onChangePassword,
   activeNavId = "dashboard",
   onSelectNav,
@@ -249,17 +254,28 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     <div className="erp-app-shell">
       {/* Institutional Top Navigation Bar */}
       <header className="erp-header">
-        <div className="erp-header-left">
+        {/* The logo and name lead to the home page of the signed-in role. */}
+        <a
+          className="erp-header-left erp-home-link"
+          href={getDashboardPath(user.role)}
+          aria-label={`${APP_NAME} home`}
+          onClick={(e) => {
+            if (onGoHome) {
+              e.preventDefault();
+              onGoHome();
+            }
+          }}
+        >
           <div className="erp-crest">
-            <svg fill="currentColor" viewBox="0 0 24 24" width="22" height="22">
+            <svg fill="currentColor" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
               <path d="M12 2L1 7l11 5 9-4.09V17h2V7L12 2zm0 13.54L4.82 12 12 8.73 19.18 12 12 15.54zM5 13.18v4L12 21l7-3.82v-4L12 17.5 5 13.18z"/>
             </svg>
           </div>
           <div className="erp-brand-text">
-            <span className="erp-brand-title">COLLEGE ERP</span>
-            <span className="erp-brand-subtitle">Academic Information & Attendance System</span>
+            <span className="erp-brand-title">{APP_NAME}</span>
+            <span className="erp-brand-subtitle">{APP_TAGLINE}</span>
           </div>
-        </div>
+        </a>
 
         <div className="erp-header-right">
           <div className="erp-term-badge">
@@ -293,7 +309,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             type="button"
             className="erp-btn-logout"
             onClick={onLogout}
-            title="Sign out of ERP portal"
+            title="Sign out"
           >
             <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
@@ -305,7 +321,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
       {/* Main ERP Layout: Left Sidebar + Content */}
       <div className="erp-body">
-        <aside className="erp-sidebar" aria-label="ERP Academic Navigation">
+        <aside className="erp-sidebar" aria-label="Main navigation">
           <div className="erp-sidebar-heading">Academic Portal</div>
           <nav>
             <ul className="erp-nav-list">
@@ -337,10 +353,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           </nav>
 
           <div className="erp-sidebar-footer">
-            <div className="erp-sidebar-institution">
-              Apex Institute of Technology
-              <div className="erp-sidebar-sub">Student Information System v3.0</div>
-            </div>
+            <div className="erp-sidebar-institution">{APP_NAME}</div>
           </div>
         </aside>
 

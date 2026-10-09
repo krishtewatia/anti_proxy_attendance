@@ -123,8 +123,31 @@ a:hover {
   background: var(--erp-surface);
   border: 1px solid var(--erp-border);
   border-radius: var(--erp-radius-md);
-  overflow: hidden;
+  /* A wide table scrolls inside its own box instead of widening the page. */
+  overflow-x: auto;
   box-shadow: var(--erp-shadow-xs);
+}
+
+.erp-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--erp-text-muted);
+}
+
+.erp-pagination-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.erp-pagination-page {
+  font-weight: 600;
+  color: var(--erp-text-body);
 }
 
 .erp-table {

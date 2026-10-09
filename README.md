@@ -234,6 +234,7 @@ graph TD
 - **Student Directory**: View all registered students with profile photo thumbnails and biometric status. Create, edit (name, email, class, student ID) and delete students.
 - **Teacher Management**: Create and edit teachers, and assign the classes (`DS-B`, `CS-A`) and subjects each one may take attendance for. Deleting a teacher keeps the sessions and attendance they recorded, and is refused while one of their sessions is in progress.
 - **Passwords**: An account an administrator creates, or whose password an administrator resets, must choose its own password at the next sign-in. A reset shows a temporary password once; nobody can read an existing password. Changing or resetting a password signs that account out everywhere.
+- **Attendance Sessions**: See every teacher's sessions and open any of them to read the roster, the attendance and its audit trail, and to finalize or delete it. Taking attendance and correcting a record stay with the session's teacher.
 - **Administrators**: Add and remove administrator accounts. The last administrator cannot be removed and nobody can delete their own account.
 - **Classes and Subjects**: Create, edit, archive, restore and delete classes and subjects. An archived class or subject is no longer offered for registration, new sessions or new assignments, and everything that already refers to it is kept. A class or subject that is in use cannot be renamed or deleted, only archived.
 
@@ -401,6 +402,8 @@ All four containers should report `healthy` or `Up`:
 - `anti-proxy-vision-service` (internal only: it has no published port and is called by the backend)
 
 The vision service and the frontend run only what their images contain, so after pulling new commits or switching branches start the stack with `--build` again. If `anti-proxy-vision-service` shows `Restarting`, its image is older than the code: rebuild it.
+
+The name shown in the web interface, the browser tab and the API title is `APP_NAME` in `.env` (default `Anti-Proxy Attendance System`). Change it and start the stack with `--build` again to rename the product; no code change is needed.
 
 ### 3. Create the Admin and Teacher Accounts
 Admin accounts cannot be created from the web portal. There are two ways to create the first one.

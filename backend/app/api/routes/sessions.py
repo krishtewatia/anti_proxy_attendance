@@ -6,7 +6,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.api.dependencies.auth import get_owned_session, require_teacher
+from app.api.dependencies.auth import (
+    get_owned_session,
+    require_teacher,
+    require_teacher_or_admin,
+)
 from app.database import get_database
 from app.database.attendance import upsert_attendance
 from app.database.session_roster import create_session_roster
@@ -14,6 +18,7 @@ from app.database.sessions import (
     create_session,
     delete_session_in_db,
     get_active_session_by_teacher,
+    get_all_sessions_in_db,
     get_sessions_by_owner,
     update_session_status,
 )
@@ -273,10 +278,13 @@ async def end_session_endpoint(
     response_model=list[SessionResponse],
 )
 async def list_teacher_sessions_endpoint(
-    current_user: Annotated[dict, Depends(require_teacher)],
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
 ) -> list[SessionResponse]:
-    """Retrieve all attendance sessions owned by the authenticated teacher."""
-    sessions = await get_sessions_by_owner(current_user["user_id"])
+    """A teacher's own sessions; every session for an administrator."""
+    if current_user.get("role") == "ADMIN":
+        sessions = await get_all_sessions_in_db()
+    else:
+        sessions = await get_sessions_by_owner(current_user["user_id"])
 
     return [
         SessionResponse(
@@ -303,7 +311,7 @@ async def list_teacher_sessions_endpoint(
 )
 async def get_session_details_endpoint(
     session_id: str,
-    current_user: Annotated[dict, Depends(require_teacher)],
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
 ) -> SessionResponse:
     """Retrieve details for a specific attendance session owned by the authenticated teacher."""
     session = await get_owned_session(session_id, current_user)
@@ -331,7 +339,7 @@ async def get_session_details_endpoint(
 )
 async def get_session_live_snapshot_endpoint(
     session_id: str,
-    current_user: Annotated[dict, Depends(require_teacher)],
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> SessionLiveSnapshotResponse:
     session = await get_owned_session(session_id, current_user)

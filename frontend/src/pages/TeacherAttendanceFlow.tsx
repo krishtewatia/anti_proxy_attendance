@@ -8,6 +8,7 @@ import type {
 } from "../types";
 import { getFaceOverlayStyle, hasSpoof } from "../utils/faceOverlay";
 import "./teacher-attendance-flow.css";
+import { sessionStatusBadgeClass, sessionStatusLabel } from "../utils/sessions.ts";
 
 interface TeacherAttendanceFlowProps {
   user: UserResponse;
@@ -723,7 +724,9 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                       {ps.attendance_percentage}%
                     </td>
                     <td>
-                      <span className="status-badge completed">Completed</span>
+                      <span className={`status-badge ${sessionStatusBadgeClass(ps.status)}`}>
+                        {sessionStatusLabel(ps.status)}
+                      </span>
                     </td>
                     <td>
                       <button
@@ -1131,7 +1134,9 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                     <td style={{ color: "#15803d", fontWeight: 600 }}>{ps.present_count}</td>
                     <td style={{ color: "#b91c1c", fontWeight: 600 }}>{absent}</td>
                     <td>
-                      <span className="status-badge completed">Completed</span>
+                      <span className={`status-badge ${sessionStatusBadgeClass(ps.status)}`}>
+                        {sessionStatusLabel(ps.status)}
+                      </span>
                     </td>
                     <td>
                       <button
