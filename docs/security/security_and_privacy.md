@@ -188,6 +188,10 @@ Added 2026-10-09. Every route that changes the catalog requires an administrator
 
 **Audit.** `CLASS_CREATED`, `CLASS_UPDATED`, `CLASS_ARCHIVED`, `CLASS_UNARCHIVED`, `CLASS_DELETED` and the same five for subjects, with the class code or subject ID, the names of changed fields, and usage counts.
 
+- A session and a teacher assignment accept only a subject that exists in the catalog and is active (added 2026-10-09). A subject a teacher already had before this rule stays when they are edited for something else; only a subject being added is checked.
+- `GET /api/v1/academic/classes/{class_code}/students` answers only an administrator or a teacher assigned to that class. Everyone else, including a student of that class, gets 403, and the answer is the same for a class that does not exist.
+- The browser client holds no service key. It used to carry a built-in default camera key for a doorway "simulator" in the session page; the key, the simulator and the ENTRY/EXIT buttons that depended on it were removed. Doorway events are sent only by cameras, with `VISION_SERVICE_API_KEY`.
+
 **What remains.**
-- Subject names are free text where a session or a teacher assignment is created: an archived subject is refused, but a name that is not in the catalog at all is still accepted.
-- `GET /api/v1/academic/classes/{class_code}/students` answers any signed-in user, including a student, with the names and IDs of the students of any class (no photos or email addresses). It should be limited to administrators and to teachers of that class.
+- `VISION_SERVICE_API_KEY` must be a random value in every deployment. The value that used to be built into the client is public (it is in this repository's history) and must not be used anywhere.
+- Sessions created before the subject rule may carry a subject that is not in the catalog; they are kept as they are.

@@ -4,7 +4,7 @@ import type {
   SessionRosterUpdate,
   VisionEventCreate,
 } from "../src/types/index.ts";
-import { requireLiveBackend } from "./live_backend.ts";
+import { ingestVisionEvent, requireLiveBackend } from "./live_backend.ts";
 
 async function runIntegrationTest() {
   console.log("==================================================");
@@ -79,7 +79,7 @@ async function runIntegrationTest() {
 
   // 5. Ingest vision events for student_alice
   // Alice enters at 10:05 and exits at 10:55 (50 mins = 83.3% > 75%)
-  console.log("\n[5/7] Testing api.ingestVisionEvent()...");
+  console.log("\n[5/7] Sending doorway events with the service key...");
   const entryEvent: VisionEventCreate = {
     event_id: `evt_entry_${Date.now()}`,
     camera_id: "CAM_ROOM_101_DOOR",
@@ -95,7 +95,7 @@ async function runIntegrationTest() {
       consistency_pct: 93.3,
     },
   };
-  const entryRes = await api.ingestVisionEvent(entryEvent);
+  const entryRes = await ingestVisionEvent(entryEvent);
   console.log("✅ Ingested ENTRY event:", entryRes);
 
   const exitEvent: VisionEventCreate = {
@@ -113,7 +113,7 @@ async function runIntegrationTest() {
       consistency_pct: 90.9,
     },
   };
-  const exitRes = await api.ingestVisionEvent(exitEvent);
+  const exitRes = await ingestVisionEvent(exitEvent);
   console.log("✅ Ingested EXIT event:", exitRes);
 
   // 6. Finalize session

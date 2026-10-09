@@ -17,8 +17,6 @@ import type {
   UserCreate,
   UserLogin,
   UserResponse,
-  VisionEventCreate,
-  VisionEventResponse,
   AcademicClass,
   AcademicStructureResponse,
   StudentAttendanceDashboardResponse,
@@ -284,44 +282,6 @@ export const api = {
 
   getStudentsDirectory(): Promise<StudentDirectoryItem[]> {
     return request<StudentDirectoryItem[]>("/api/v1/students/directory");
-  },
-
-  simulateTransitEvent(
-    identity: string,
-    direction: "ENTRY" | "EXIT",
-    cameraId: string = "CAM_ROOM_101_DOOR"
-  ): Promise<VisionEventResponse> {
-    const event: VisionEventCreate = {
-      event_id: `evt_sim_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      camera_id: cameraId,
-      track_id: Math.floor(Math.random() * 9000) + 1000,
-      identity,
-      direction,
-      timestamp: new Date().toISOString(),
-      evidence: {
-        peak_similarity: 0.95,
-        mean_similarity: 0.92,
-        supporting_frames: 18,
-        total_frames: 20,
-        consistency_pct: 90.0,
-      },
-    };
-    return this.ingestVisionEvent(event);
-  },
-
-  ingestVisionEvent(
-    event: VisionEventCreate,
-    apiKey: string = "test_vision_api_key_for_smoke_test_12345",
-  ): Promise<VisionEventResponse> {
-    const headers: Record<string, string> = {};
-    if (apiKey) {
-      headers["X-API-Key"] = apiKey;
-    }
-    return request<VisionEventResponse>("/api/v1/events", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(event),
-    });
   },
 
   getAuditEvents(params?: {

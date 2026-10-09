@@ -36,7 +36,7 @@ from app.core.account_status import ACCOUNT_APPROVED, is_approved
 from app.database.student_profiles import normalize_class_code
 from app.database.users import create_user
 from app.security.passwords import hash_password
-from app.services.academic_admin_service import archived_subjects, resolve_active_class
+from app.services.academic_admin_service import resolve_active_class, unavailable_subjects
 from app.services.approval_service import _clean_codes, _known_class_codes, delete_teacher_account
 from app.services.audit_service import record_audit_event
 from app.services.auth_service import set_password
@@ -366,9 +366,9 @@ async def update_teacher(
         current_subjects = profile.get("assigned_subjects") or []
         if subjects != current_subjects:
             added = [s for s in subjects if s not in current_subjects]
-            retired = await archived_subjects(db, added)
-            if retired:
-                raise AccountAdminError(f"Archived subject: {', '.join(retired)}", 400)
+            refused = await unavailable_subjects(db, added)
+            if refused:
+                raise AccountAdminError(f"Unknown or archived subject: {', '.join(refused)}", 400)
             changes["assigned_subjects"] = subjects
             changed_fields.append("assigned_subjects")
 

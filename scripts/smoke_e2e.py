@@ -455,13 +455,37 @@ def run_flow(
     # ---- session
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     later = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 7200))
+    # A session takes only a subject that is in the catalog and active.
+    status, subjects = api.call("GET", "/api/v1/academic/subjects", headers=auth)
+    subject = subjects[0].get("name", "") if status == 200 and subjects else ""
+    if not checks.check("the catalog has an active subject", bool(subject), status):
+        return
+    status, refused = api.post_json(
+        "/api/v1/sessions",
+        {
+            "course_name": f"Smoke test {suffix} (unknown subject)",
+            "classroom_id": "ROOM_SMOKE",
+            "class_code": class_code,
+            "subject": f"Not A Subject {suffix}",
+            "start_time": now,
+            "end_time": later,
+            "required_presence_percentage": 100.0,
+        },
+        auth,
+    )
+    checks.check(
+        "a session for a subject that is not in the catalog is refused",
+        status == 400,
+        describe_response(status, refused),
+    )
+
     status, session = api.post_json(
         "/api/v1/sessions",
         {
             "course_name": f"Smoke test {suffix}",
             "classroom_id": "ROOM_SMOKE",
             "class_code": class_code,
-            "subject": "Smoke",
+            "subject": subject,
             "start_time": now,
             "end_time": later,
             "required_presence_percentage": 100.0,
@@ -480,7 +504,7 @@ def run_flow(
             "course_name": f"Smoke test {suffix} (other class)",
             "classroom_id": "ROOM_SMOKE",
             "class_code": other_class_code,
-            "subject": "Smoke",
+            "subject": subject,
             "start_time": now,
             "end_time": later,
             "required_presence_percentage": 100.0,

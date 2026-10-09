@@ -78,20 +78,6 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({
     [sessionId],
   );
 
-  // 1-Click Manual Override for Active Session
-  const handleLiveMark = async (identity: string, direction: "ENTRY" | "EXIT") => {
-    setMarkingAction(`${identity}_${direction}`);
-    try {
-      await api.simulateTransitEvent(identity, direction);
-      await fetchAttendance(true);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(`Failed to update student state: ${msg}`);
-    } finally {
-      setMarkingAction(null);
-    }
-  };
-
   // 1-Click Quick Override for Finalized Session
   const handleFinalizedQuickMark = async (record: AttendanceSummaryItem, newStatus: "PRESENT" | "ABSENT") => {
     if (!record.attendance_id) return;
@@ -204,7 +190,7 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({
               <p className="attendance-subtitle">
                 {isFinalized
                   ? "Session finalized. All presence intervals computed with full audit logging."
-                  : "Continuous presence tracking. Recognitions from camera or simulator mark attendance in real-time."}
+                  : "Continuous presence tracking. Recognitions from the camera mark attendance in real-time."}
               </p>
             </div>
           </div>
@@ -394,7 +380,6 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({
                 <th scope="col">Real-Time Presence</th>
                 <th scope="col">% Progress</th>
                 <th scope="col">Live State</th>
-                <th scope="col">Teacher Override</th>
               </tr>
             </thead>
             <tbody>
@@ -461,28 +446,6 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({
                       </span>
                     </td>
 
-                    <td>
-                      <div style={{ display: "flex", gap: "0.4rem" }}>
-                        <button
-                          type="button"
-                          className="btn-mark-present-quick"
-                          onClick={() => handleLiveMark(student.identity, "ENTRY")}
-                          disabled={markingAction === `${student.identity}_ENTRY`}
-                          title="Instantly mark this student inside the classroom"
-                        >
-                          {markingAction === `${student.identity}_ENTRY` ? "..." : "+ Mark Present"}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-mark-absent-quick"
-                          onClick={() => handleLiveMark(student.identity, "EXIT")}
-                          disabled={markingAction === `${student.identity}_EXIT`}
-                          title="Record exit for this student"
-                        >
-                          {markingAction === `${student.identity}_EXIT` ? "..." : "− Mark Absent"}
-                        </button>
-                      </div>
-                    </td>
                   </tr>
                 );
               })}
@@ -496,7 +459,7 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({
         <div className="attendance-empty-container">
           <h3 className="attendance-empty-title">Waiting for Student Detections</h3>
           <p className="attendance-empty-desc">
-            Use the Video Feed above (Webcam or Simulator) to start streaming entrance events. Students will appear in this ledger in real-time.
+            Students appear in this ledger as the camera recognizes them.
           </p>
         </div>
       )}

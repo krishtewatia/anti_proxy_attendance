@@ -29,7 +29,7 @@ from app.core.account_status import (
 )
 from app.core.uploads import pending_photo_path, student_photo_path
 from app.database.student_profiles import normalize_class_code
-from app.services.academic_admin_service import archived_subjects, resolve_active_class
+from app.services.academic_admin_service import resolve_active_class, unavailable_subjects
 from app.services.audit_service import record_audit_event
 from app.services.student_biometric_service import PHOTO_CHANGE_REQUESTS_COLLECTION
 from app.services.student_deletion import _refresh_vision_gallery, delete_student_completely
@@ -178,9 +178,9 @@ async def approve_registration(
         if unknown:
             raise ApprovalError(f"Unknown or archived class: {', '.join(unknown)}", 400)
         subjects = [s.strip() for s in (assigned_subjects or []) if s and s.strip()]
-        retired = await archived_subjects(db, subjects)
-        if retired:
-            raise ApprovalError(f"Archived subject: {', '.join(retired)}", 400)
+        refused = await unavailable_subjects(db, subjects)
+        if refused:
+            raise ApprovalError(f"Unknown or archived subject: {', '.join(refused)}", 400)
         # An account registered through the bare account route has no profile
         # yet; the assignment creates one, since sessions depend on it.
         await db["teacher_profiles"].update_one(
