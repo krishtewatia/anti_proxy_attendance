@@ -20,6 +20,7 @@ from app.database.users import create_user
 from app.main import app
 from app.security.jwt import create_access_token
 from app.security.passwords import hash_password
+from tests.conftest import assign_teacher_classes
 
 
 @pytest.fixture
@@ -73,6 +74,7 @@ async def teacher_token(e2e_db):
         password_hash=hash_password("TeacherPass123!"),
         role="TEACHER",
     )
+    await assign_teacher_classes(user_id)
     token = create_access_token(user_id=user_id, role="TEACHER")
     return {"user_id": user_id, "headers": {"Authorization": f"Bearer {token}"}}
 
@@ -123,6 +125,7 @@ async def test_two_cameras_entry_and_exit_feed_one_session_attendance(
     session_payload = {
         "course_name": "Distributed Systems",
         "classroom_id": "ROOM_101",
+        "class_code": "DS-B",
         "start_time": "2026-10-01T10:00:00Z",
         "end_time": "2026-10-01T11:00:00Z",
         "required_presence_percentage": 75.0,

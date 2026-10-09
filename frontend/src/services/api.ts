@@ -31,10 +31,16 @@ import type {
   TeacherRegisterRequest,
 } from "../types";
 import { clearStoredAuth, getStoredToken } from "./auth.ts";
+import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
 
 export const getApiBaseUrl = (): string => {
   if (import.meta.env?.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
+  }
+  // Node (the test suites): an explicit address, never a guess.
+  const nodeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  if (nodeEnv?.VITE_API_BASE_URL) {
+    return nodeEnv.VITE_API_BASE_URL;
   }
   if (typeof window !== "undefined" && window.location.hostname) {
     const proto = window.location.protocol || "http:";
@@ -82,6 +88,9 @@ async function request<T>(
 
       if (typeof errorBody?.detail === "string") {
         detail = errorBody.detail;
+      } else if (typeof errorBody?.detail?.message === "string") {
+        // Structured errors, e.g. { code: "account_pending", message: "..." }
+        detail = errorBody.detail.message;
       }
     } catch {
       // Keep the default error message.
@@ -466,6 +475,47 @@ export const api = {
   },
 
   // Removes the account, profile, face template, photo, attendance records and roster entries.
+  // --- Registration approval (admin) ---
+
+  getPendingApprovals(): Promise<PendingApprovals> {
+    return request<PendingApprovals>("/api/v1/admin/approvals");
+  },
+
+  getPendingApprovalCounts(): Promise<PendingCounts> {
+    return request<PendingCounts>("/api/v1/admin/approvals/count");
+  },
+
+  approveRegistration(
+    userId: string,
+    decision: { assigned_classes?: string[]; assigned_subjects?: string[]; branch?: string; section?: string },
+  ): Promise<{ status: string; user_id: string }> {
+    return request<{ status: string; user_id: string }>(
+      `/api/v1/admin/approvals/${encodeURIComponent(userId)}/approve`,
+      { method: "POST", body: JSON.stringify(decision) },
+    );
+  },
+
+  rejectRegistration(userId: string): Promise<{ status: string; user_id: string }> {
+    return request<{ status: string; user_id: string }>(
+      `/api/v1/admin/approvals/${encodeURIComponent(userId)}/reject`,
+      { method: "POST" },
+    );
+  },
+
+  approvePhotoChange(identity: string): Promise<{ status: string; identity: string }> {
+    return request<{ status: string; identity: string }>(
+      `/api/v1/admin/approvals/photos/${encodeURIComponent(identity)}/approve`,
+      { method: "POST" },
+    );
+  },
+
+  rejectPhotoChange(identity: string): Promise<{ status: string; identity: string }> {
+    return request<{ status: string; identity: string }>(
+      `/api/v1/admin/approvals/photos/${encodeURIComponent(identity)}/reject`,
+      { method: "POST" },
+    );
+  },
+
   deleteAdminStudent(
     userId: string,
   ): Promise<{ status: string; user_id: string; student_id?: string; removed?: Record<string, number | boolean> }> {

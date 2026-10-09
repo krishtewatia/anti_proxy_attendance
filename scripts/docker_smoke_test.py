@@ -41,6 +41,10 @@ class SmokeTestFailure(Exception):
 LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
+# The class the smoke teacher is approved for and creates the session in.
+SMOKE_CLASS_CODE = os.getenv("SMOKE_CLASS_CODE", "DS-B")
+
+
 def log_step(step_num: int, title: str) -> None:
     print(f"\n[{step_num}/7] {title}...")
 
@@ -171,6 +175,33 @@ def run_smoke_test(
         teacher_user_id = reg_data["user_id"]
         print(f"Registered teacher: {teacher_email} (ID: {teacher_user_id})")
 
+        # A new registration is PENDING: an administrator has to approve the
+        # teacher and assign the class the session will be created for.
+        admin_email = os.getenv("SMOKE_ADMIN_EMAIL", "")
+        admin_password = os.getenv("SMOKE_ADMIN_PASSWORD", "")
+        if not admin_email or not admin_password:
+            raise SmokeTestFailure(
+                "Set SMOKE_ADMIN_EMAIL and SMOKE_ADMIN_PASSWORD: a new teacher needs an administrator's approval."
+            )
+        admin_status, admin_data = http_request(
+            f"{backend_url}/api/v1/auth/login",
+            method="POST",
+            data={"email": admin_email, "password": admin_password},
+        )
+        if admin_status != 200 or "access_token" not in admin_data:
+            raise SmokeTestFailure(f"Administrator login failed (HTTP {admin_status})")
+        approve_status, approve_data = http_request(
+            f"{backend_url}/api/v1/admin/approvals/{teacher_user_id}/approve",
+            method="POST",
+            headers={"Authorization": f"Bearer {admin_data['access_token']}"},
+            data={"assigned_classes": [SMOKE_CLASS_CODE]},
+        )
+        if approve_status != 200:
+            raise SmokeTestFailure(
+                f"Teacher approval failed (HTTP {approve_status}): {approve_data}"
+            )
+        print(f"Administrator approved the teacher for class {SMOKE_CLASS_CODE}.")
+
         # Step 3: Authenticate and retrieve JWT
         log_step(3, "Authenticating user via JWT login")
         login_url = f"{backend_url}/api/v1/auth/login"
@@ -197,6 +228,7 @@ def run_smoke_test(
             data={
                 "course_name": f"Smoke Test Course {unique_suffix}",
                 "classroom_id": classroom,
+                "class_code": SMOKE_CLASS_CODE,
                 "start_time": (now - timedelta(minutes=10)).isoformat(),
                 "end_time": (now + timedelta(minutes=50)).isoformat(),
                 "required_presence_percentage": 75.0,

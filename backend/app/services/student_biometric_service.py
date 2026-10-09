@@ -1,6 +1,7 @@
 """Student Biometric Registration & ArcFace Embedding Integration Service."""
 
 import base64
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -19,7 +20,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 VISION_VENV_PYTHON = PROJECT_ROOT / "vision-service" / ".venv" / "Scripts" / "python.exe"
 VISION_EXTRACT_SCRIPT = PROJECT_ROOT / "vision-service" / "extract_photo_embedding.py"
 
-from app.core.uploads import student_photo_path
+from app.core.account_status import TEMPLATE_ACTIVE, TEMPLATE_PENDING_REVIEW
+from app.core.uploads import pending_photo_path, student_photo_path
+from app.database.mongodb import get_database
+
+ENROLL_ACTIVE = "active"
+ENROLL_PENDING_REGISTRATION = "pending_registration"
+ENROLL_PENDING_CHANGE = "pending_change"
+PHOTO_CHANGE_REQUESTS_COLLECTION = "photo_change_requests"
 
 
 def get_vision_service_urls() -> list[str]:
@@ -43,8 +51,19 @@ async def extract_and_register_student_photo(
     enrolled_by: str = "self",
     student_name: str | None = None,
     student_id: str | None = None,
+    mode: str = ENROLL_ACTIVE,
 ) -> tuple[bool, str]:
-    """Process student photo, persist original file, extract real ArcFace embedding, and sync with vision gallery."""
+    """Process a student photo and store the face template.
+
+    ``mode`` decides what happens to the result:
+
+    * ENROLL_ACTIVE: the template is live at once and pushed to the vision
+      service. Used when an administrator enrolls a student.
+    * ENROLL_PENDING_REGISTRATION: the photo and template are stored for the
+      administrator to review, but the template is not used for recognition.
+    * ENROLL_PENDING_CHANGE: the student's current photo and template are left
+      untouched; the new ones are stored as a change request for review.
+    """
     try:
         raw_b64 = photo_base64.strip()
         if "," in raw_b64:
@@ -54,9 +73,14 @@ async def extract_and_register_student_photo(
         logger.error("Failed to decode base64 photo for %s: %s", identity, exc)
         return False, f"Invalid photo format: {exc}"
 
-    # 1. Persist original student photograph to persistent local storage
+    # 1. Persist original student photograph to persistent local storage.
+    #    A change request is kept apart from the photo currently in use.
     try:
-        photo_path = student_photo_path(identity)
+        photo_path = (
+            pending_photo_path(identity)
+            if mode == ENROLL_PENDING_CHANGE
+            else student_photo_path(identity)
+        )
     except ValueError:
         # The ID would not stay inside the uploads directory as a file name.
         return False, "Student ID may contain only letters, digits, '.', '_' and '-'."
@@ -142,6 +166,23 @@ async def extract_and_register_student_photo(
             "Could not extract face embedding from uploaded photo. Please upload a clear frontal face image.",
         )
 
+    if mode == ENROLL_PENDING_CHANGE:
+        # The template in use stays as it is until an administrator approves.
+        await get_database()[PHOTO_CHANGE_REQUESTS_COLLECTION].update_one(
+            {"identity": identity},
+            {
+                "$set": {
+                    "identity": identity,
+                    "requested_by": enrolled_by,
+                    "mean_embedding": embedding,
+                    "requested_at": datetime.now(timezone.utc),
+                }
+            },
+            upsert=True,
+        )
+        logger.info("Photo change for student '%s' stored for review", identity)
+        return True, "Your new photo was received and is waiting for admin approval."
+
     # Upsert into biometric_profiles collection in MongoDB
     await upsert_biometric_profile(
         identity=identity,
@@ -149,10 +190,18 @@ async def extract_and_register_student_photo(
         sample_count=1,
         quality_score=0.95,
         enrolled_by=enrolled_by,
+        review_status=(
+            TEMPLATE_PENDING_REVIEW if mode == ENROLL_PENDING_REGISTRATION else TEMPLATE_ACTIVE
+        ),
     )
 
     # Update student profile has_biometric flag
     await update_biometric_status(identity=identity, has_biometric=True)
+
+    if mode == ENROLL_PENDING_REGISTRATION:
+        # Not sent to the vision service: an unapproved face must not be recognized.
+        logger.info("Student '%s' face template stored for review", identity)
+        return True, "Photo received. It will be used once the registration is approved."
 
     # Synchronize student into live vision service gallery
     enrolled_in_vision = False

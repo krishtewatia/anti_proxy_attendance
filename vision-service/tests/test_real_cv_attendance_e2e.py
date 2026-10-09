@@ -44,6 +44,7 @@ BACKEND_URL = f"http://127.0.0.1:{TEST_PORT}"
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
+from backend_accounts import TEST_CLASS_CODE, add_bootstrap_admin, approved_teacher_headers
 from camera.file_source import FileVideoSource
 from events.event_dispatcher import EventDispatcher
 from pipeline.live_cv_pipeline import (
@@ -93,6 +94,7 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
         env["DATABASE_NAME"] = "anti_proxy_real_e2e_db"
         env["PYTHONPATH"] = str(BACKEND_ROOT)
         env["VISION_SERVICE_API_KEY"] = "test-real-cv-api-key-2026"
+        admin_email, admin_password = add_bootstrap_admin(env)
 
         cmd = [
             str(BACKEND_VENV_PYTHON),
@@ -129,29 +131,12 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
             cls.tearDownClass()
             raise RuntimeError(f"Backend failed to start on port {TEST_PORT} within 15 seconds.")
 
-        # 2. Register teacher and obtain bearer token
-        teacher_email = f"teacher.realcv.{time.time_ns()}@university.edu"
-        user_payload = {
-            "email": teacher_email,
-            "password": "TeacherPassword2026!",
-            "role": "TEACHER",
-        }
-        reg_resp = requests.post(f"{BACKEND_URL}/api/v1/auth/register", json=user_payload, timeout=3.0)
-        if reg_resp.status_code not in (201, 409):
+        # 2. A teacher the administrator has approved for the test class
+        try:
+            cls.auth_headers = approved_teacher_headers(BACKEND_URL, admin_email, admin_password)
+        except RuntimeError:
             cls.tearDownClass()
-            raise RuntimeError(f"Teacher registration failed: {reg_resp.status_code} {reg_resp.text}")
-
-        login_resp = requests.post(
-            f"{BACKEND_URL}/api/v1/auth/login",
-            json={"email": teacher_email, "password": "TeacherPassword2026!"},
-            timeout=3.0,
-        )
-        if login_resp.status_code != 200:
-            cls.tearDownClass()
-            raise RuntimeError(f"Teacher login failed: {login_resp.status_code} {login_resp.text}")
-
-        token_data = login_resp.json()
-        cls.auth_headers = {"Authorization": f"Bearer {token_data['access_token']}"}
+            raise
 
         # 3. Initialize real InsightFace FaceAnalysis + SCRFD-0.5G + Gallery
         try:
@@ -207,6 +192,7 @@ class TestRealCVAttendanceE2E(unittest.TestCase):
         payload = {
             "course_name": course_name,
             "classroom_id": classroom_id,
+            "class_code": TEST_CLASS_CODE,
             "start_time": start_time,
             "end_time": end_time,
             "required_presence_percentage": required_presence_percentage,

@@ -9,6 +9,7 @@ from app.database.users import create_user
 from app.main import app
 from app.security.jwt import create_access_token
 from app.security.passwords import hash_password
+from tests.conftest import assign_teacher_classes
 
 
 @pytest.fixture(autouse=True)
@@ -30,6 +31,7 @@ async def teacher_auth_headers():
         password_hash=hash_password("Password123!"),
         role="TEACHER",
     )
+    await assign_teacher_classes("teacher_session_test")
     token = create_access_token(user_id="teacher_session_test", role="TEACHER")
     return {"Authorization": f"Bearer {token}"}
 
@@ -48,6 +50,7 @@ async def test_create_session_api(teacher_auth_headers):
             json={
                 "course_name": "DevOps",
                 "classroom_id": "ROOM_101",
+                "class_code": "DS-B",
                 "start_time": "2026-09-29T10:00:00Z",
                 "end_time": "2026-09-29T11:00:00Z",
                 "required_presence_percentage": 75.0,
@@ -81,6 +84,7 @@ async def test_create_session_rejects_invalid_presence_percentage(teacher_auth_h
             json={
                 "course_name": "DevOps",
                 "classroom_id": "ROOM_101",
+                "class_code": "DS-B",
                 "start_time": "2026-09-29T10:00:00Z",
                 "end_time": "2026-09-29T11:00:00Z",
                 "required_presence_percentage": 150.0,

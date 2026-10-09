@@ -8,6 +8,7 @@ from app.database.audit import get_audit_events
 from app.schemas.auth import UserCreate
 from app.services import auth_service
 from app.services.auth_service import AuthenticationError, DuplicateUserError
+from tests.conftest import approve_account
 
 
 @pytest.fixture
@@ -46,7 +47,7 @@ async def test_teacher_registration_records_audit_event(setup_test_db):
     assert ev["action"] == "USER_REGISTERED"
     assert ev["resource_type"] == "USER"
     assert ev["resource_id"] == user.user_id
-    assert ev["metadata"] == {"email": "professor.turing@university.edu"}
+    assert ev["metadata"] == {"status": "PENDING"}
 
 
 @pytest.mark.anyio
@@ -65,7 +66,7 @@ async def test_student_registration_records_audit_event(setup_test_db):
     assert ev["actor_user_id"] == user.user_id
     assert ev["actor_role"] == "STUDENT"
     assert ev["action"] == "USER_REGISTERED"
-    assert ev["metadata"] == {"email": "alice.student@university.edu"}
+    assert ev["metadata"] == {"status": "PENDING"}
 
 
 @pytest.mark.anyio
@@ -100,7 +101,8 @@ async def test_user_login_records_audit_event(setup_test_db):
         UserCreate(email=email, password=password, role="TEACHER")
     )
 
-    # 2. Login
+    # 2. Login (once an administrator has approved the registration)
+    await approve_account(user.user_id)
     token_resp = await auth_service.authenticate_user(email=email, password=password)
     assert token_resp.access_token is not None
 
@@ -164,9 +166,10 @@ async def test_audit_failure_does_not_block_login(setup_test_db):
     email = "resilient.login@university.edu"
     password = "SecurePassword123!"
 
-    await auth_service.register_user(
+    registered = await auth_service.register_user(
         UserCreate(email=email, password=password, role="STUDENT")
     )
+    await approve_account(registered.user_id)
 
     with patch(
         "app.services.auth_service.record_audit_event",

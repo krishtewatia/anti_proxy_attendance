@@ -9,17 +9,20 @@ import type {
 } from "../types";
 import "./admin-dashboard.css";
 import { AuthenticatedImage } from "../components/common/AuthenticatedImage";
+import { ApprovalsTab } from "../components/admin/ApprovalsTab";
 
 interface Props {
   user: UserResponse;
   onLogout: () => void;
   onNavigate?: (path: string) => void;
   activeNavId?: string;
+  onPendingCountChange?: (total: number) => void;
 }
 
 export const AdminDashboard: React.FC<Props> = ({
   user,
   activeNavId: _activeNavId = "dashboard",
+  onPendingCountChange,
 }) => {
   const [activeTab, setActiveTab] = useState<string>(_activeNavId || "dashboard");
 
@@ -28,6 +31,28 @@ export const AdminDashboard: React.FC<Props> = ({
       setActiveTab(_activeNavId);
     }
   }, [_activeNavId]);
+
+  // Keep the "Pending Approvals" badge current while the admin panel is open.
+  useEffect(() => {
+    if (!onPendingCountChange) return;
+    let cancelled = false;
+    const refresh = () => {
+      api
+        .getPendingApprovalCounts()
+        .then((counts) => {
+          if (!cancelled) onPendingCountChange(counts.total);
+        })
+        .catch(() => {
+          /* the badge simply keeps its last value */
+        });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [onPendingCountChange]);
 
   // State
   const [students, setStudents] = useState<StudentProfileResponse[]>([]);
@@ -297,6 +322,17 @@ export const AdminDashboard: React.FC<Props> = ({
             ✕
           </button>
         </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* VIEW: PENDING APPROVALS                                              */}
+      {/* ==================================================================== */}
+      {activeTab === "approvals" && (
+        <ApprovalsTab
+          classCodes={(academic?.classes || []).map((c) => c.class_code)}
+          branches={academic?.branches || []}
+          onCountChange={onPendingCountChange}
+        />
       )}
 
       {/* ==================================================================== */}

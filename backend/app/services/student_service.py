@@ -22,7 +22,12 @@ from app.schemas.student import (
     SubjectAttendanceItem,
 )
 from app.security.passwords import hash_password
-from app.services.student_biometric_service import extract_and_register_student_photo
+from app.core.account_status import ACCOUNT_APPROVED, ACCOUNT_PENDING
+from app.services.student_biometric_service import (
+    ENROLL_ACTIVE,
+    ENROLL_PENDING_REGISTRATION,
+    extract_and_register_student_photo,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +86,14 @@ async def create_student_profile(
 async def register_student_account(
     req: StudentRegisterRequest,
     enrolled_by: str = "self",
+    approved: bool = False,
 ) -> StudentProfileResponse:
-    """Register a new student account, create academic profile, and process biometric photo."""
+    """Register a new student account, create academic profile, and process biometric photo.
+
+    A public registration (``approved=False``) is PENDING: the student cannot
+    log in and the face template is stored but not used until an administrator
+    approves it. An administrator creating the account passes ``approved=True``.
+    """
     # 1. Check existing user email
     existing_user = await get_user_by_email(req.email)
     if existing_user is not None:
@@ -108,6 +119,7 @@ async def register_student_account(
             enrolled_by=enrolled_by,
             student_name=req.name,
             student_id=req.student_id,
+            mode=ENROLL_ACTIVE if approved else ENROLL_PENDING_REGISTRATION,
         )
         if not ok:
             logger.error("Biometric enrollment rejected for %s: %s", req.student_id, msg)
@@ -124,6 +136,7 @@ async def register_student_account(
         email=req.email,
         password_hash=pw_hash,
         role="STUDENT",
+        status=ACCOUNT_APPROVED if approved else ACCOUNT_PENDING,
     )
 
     # 6. Upsert student profile

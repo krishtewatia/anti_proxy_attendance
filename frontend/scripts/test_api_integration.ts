@@ -4,6 +4,7 @@ import type {
   SessionRosterUpdate,
   VisionEventCreate,
 } from "../src/types/index.ts";
+import { requireLiveBackend } from "./live_backend.ts";
 
 async function runIntegrationTest() {
   console.log("==================================================");
@@ -14,7 +15,7 @@ async function runIntegrationTest() {
   console.log("\n[1/7] Testing api.checkHealth()...");
   let health;
   try {
-    health = await api.checkHealth();
+    health = await requireLiveBackend();
     console.log("✅ Health response:", health);
     if (health.status !== "healthy") {
       throw new Error(`Expected status 'healthy', got '${health.status}'`);

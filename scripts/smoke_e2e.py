@@ -3,7 +3,8 @@
 
 Runs the flow a teacher and two students go through, over HTTP only:
 
-    register students with a photo -> create and start a session ->
+    register a teacher and students -> an administrator approves them ->
+    create and start a session for the teacher's assigned class ->
     send camera frames with the teacher's token -> manual correction ->
     finalize -> CSV export
 
@@ -17,8 +18,14 @@ Two ways to run it:
     python scripts/smoke_e2e.py --photos /path/to/photos
 
     # 2. Against a running deployment (for example after a deploy):
-    SMOKE_TEACHER_EMAIL=... SMOKE_TEACHER_PASSWORD=... \\
+    SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... \\
         python scripts/smoke_e2e.py --base-url https://attendance.example.edu --photos /path/to/photos
+
+Registrations need an administrator's approval, so the run needs an admin
+account. The throwaway stack creates one for itself. Against a deployment,
+supply SMOKE_ADMIN_EMAIL and SMOKE_ADMIN_PASSWORD (and optionally
+SMOKE_TEACHER_EMAIL / SMOKE_TEACHER_PASSWORD for an existing approved teacher
+who is assigned the class given by --class-code).
 
 Photos are never read from the repository. ``--photos`` (default:
 ``$VISION_FIXTURES_DIR/recognition_benchmark``) must hold one folder per
@@ -262,12 +269,15 @@ def run_flow(
     people: list[list[bytes]],
     *,
     service_key: str | None,
+    admin_email: str | None,
+    admin_password: str | None,
     teacher_email: str | None,
     teacher_password: str | None,
     class_code: str,
     branch: str,
     section: str,
     student_prefix: str,
+    other_class_code: str,
     fresh_database: bool,
     model_wait_seconds: int,
     liveness_enforced: bool,
@@ -282,21 +292,72 @@ def run_flow(
 
     suffix = uuid.uuid4().hex[:6]
 
+    # ---- administrator: every registration below needs approval
+    admin_auth: dict[str, str] = {}
+    if admin_email and admin_password:
+        status, login = api.post_json(
+            "/api/v1/auth/login", {"email": admin_email, "password": admin_password}
+        )
+        if not checks.check(
+            "administrator logged in", status == 200, describe_response(status, login)
+        ):
+            return
+        admin_auth = {"Authorization": f"Bearer {login.get('access_token', '')}"}
+    else:
+        checks.skip(
+            "administrator logged in",
+            "no admin account supplied (SMOKE_ADMIN_EMAIL / SMOKE_ADMIN_PASSWORD)",
+        )
+
+    def approve(user_id: str, body: dict) -> tuple:
+        return api.post_json(f"/api/v1/admin/approvals/{user_id}/approve", body, admin_auth)
+
     # ---- teacher
     if teacher_email and teacher_password:
         checks.skip("teacher registered", "using the supplied smoke-test teacher account")
     else:
+        if not admin_auth:
+            checks.check(
+                "teacher registered", False, "a new teacher needs an administrator to approve it"
+            )
+            return
         teacher_email = f"smoke_teacher_{suffix}@smoke.test"
         teacher_password = secrets.token_urlsafe(18) + "aA1!"
-        status, _ = api.post_json(
-            "/api/v1/auth/register",
-            {"email": teacher_email, "password": teacher_password, "role": "TEACHER"},
+        status, registered = api.post_json(
+            "/api/v1/teachers/register",
+            {
+                "name": "Smoke Teacher",
+                "email": teacher_email,
+                "password": teacher_password,
+                "teacher_id": f"T-SMOKE-{suffix.upper()}",
+                "department": branch,
+                "assigned_classes": [class_code, other_class_code],
+                "assigned_subjects": ["Smoke"],
+            },
         )
-        checks.check("teacher registered", status in (200, 201), status)
+        checks.check(
+            "teacher registered", status in (200, 201), describe_response(status, registered)
+        )
+        status, pending = api.post_json(
+            "/api/v1/auth/login", {"email": teacher_email, "password": teacher_password}
+        )
+        checks.check(
+            "a new registration cannot log in before approval (403)",
+            status == 403 and "awaiting admin approval" in json.dumps(pending),
+            describe_response(status, pending),
+        )
+        status, approved = approve(
+            registered.get("user_id", ""), {"assigned_classes": [class_code]}
+        )
+        checks.check(
+            "administrator approves the teacher and assigns one class",
+            status == 200 and approved.get("assigned_classes") == [class_code.upper()],
+            describe_response(status, approved),
+        )
     status, login = api.post_json(
         "/api/v1/auth/login", {"email": teacher_email, "password": teacher_password}
     )
-    if not checks.check("teacher logged in", status == 200, status):
+    if not checks.check("teacher logged in", status == 200, describe_response(status, login)):
         return
     auth = {"Authorization": f"Bearer {login.get('access_token', '')}"}
 
@@ -334,6 +395,14 @@ def run_flow(
             )
             time.sleep(5)
         students.append(student_id)
+        if status == 201 and admin_auth:
+            approval_status, approved = approve(profile.get("user_id", ""), {})
+            if approval_status != 200:
+                checks.check(
+                    f"administrator approves student {label}",
+                    False,
+                    describe_response(approval_status, approved),
+                )
         if status == 409 and not fresh_database:
             checks.check(f"student {label} already registered by an earlier run", True, student_id)
         else:
@@ -367,6 +436,26 @@ def run_flow(
     if not checks.check("session created", status == 201 and bool(session_id), status):
         return
     frame_path = f"/api/v1/attendance/{session_id}/process-frame"
+
+    # A teacher may open a session only for a class an administrator assigned.
+    status, refused = api.post_json(
+        "/api/v1/sessions",
+        {
+            "course_name": f"Smoke test {suffix} (other class)",
+            "classroom_id": "ROOM_SMOKE",
+            "class_code": other_class_code,
+            "subject": "Smoke",
+            "start_time": now,
+            "end_time": later,
+            "required_presence_percentage": 100.0,
+        },
+        auth,
+    )
+    checks.check(
+        "session for a class not assigned to the teacher is refused (403)",
+        status == 403,
+        describe_response(status, refused),
+    )
 
     def frame(person: int, photo: int, check: str, headers: dict | None = None):
         """Send one frame for the named check. The backend answers 503 when the
@@ -626,6 +715,11 @@ def main() -> int:
     )
     parser.add_argument("--section", default="B", help="Section the students register under")
     parser.add_argument(
+        "--other-class-code",
+        default="CS-A",
+        help="A class the smoke teacher is NOT assigned, used to check that it is refused",
+    )
+    parser.add_argument(
         "--student-prefix",
         default="SMOKE",
         help="Prefix of the two smoke-test student IDs (default: SMOKE, giving SMOKEA and SMOKEB)",
@@ -687,6 +781,7 @@ def main() -> int:
         "branch": args.branch,
         "section": args.section,
         "student_prefix": args.student_prefix,
+        "other_class_code": args.other_class_code,
         "model_wait_seconds": args.model_wait,
         "liveness_enforced": args.liveness_mode == "enforce",
         "spoof_photos": spoof_photos,
@@ -703,6 +798,8 @@ def main() -> int:
             checks,
             people,
             service_key=None,
+            admin_email=os.environ.get("SMOKE_ADMIN_EMAIL"),
+            admin_password=os.environ.get("SMOKE_ADMIN_PASSWORD"),
             teacher_email=os.environ.get("SMOKE_TEACHER_EMAIL"),
             teacher_password=os.environ.get("SMOKE_TEACHER_PASSWORD"),
             fresh_database=False,
@@ -711,15 +808,21 @@ def main() -> int:
     else:
         project = f"smoke-{uuid.uuid4().hex[:8]}"
         service_key = secrets.token_hex(32)
+        # The throwaway stack creates its own first administrator from these.
+        admin_email = f"smoke_admin_{uuid.uuid4().hex[:6]}@smoke.test"
+        admin_password = secrets.token_urlsafe(24)
         env = {
             **os.environ,
             "SMOKE_JWT_SECRET_KEY": secrets.token_hex(32),
             "SMOKE_VISION_SERVICE_API_KEY": service_key,
             "SMOKE_RECOGNITION_SIGNING_KEY": secrets.token_hex(32),
             "SMOKE_LIVENESS_MODE": args.liveness_mode,
+            "SMOKE_BOOTSTRAP_ADMIN_EMAIL": admin_email,
+            "SMOKE_BOOTSTRAP_ADMIN_PASSWORD": admin_password,
         }
         if args.liveness_threshold:
             env["SMOKE_LIVENESS_THRESHOLD"] = args.liveness_threshold
+        base_url = ""
         try:
             base_url = start_throwaway_stack(project, env, build=not args.no_build)
             check_liveness_model_in_image(project, env, checks)
@@ -728,6 +831,8 @@ def main() -> int:
                 checks,
                 people,
                 service_key=service_key,
+                admin_email=admin_email,
+                admin_password=admin_password,
                 teacher_email=None,
                 teacher_password=None,
                 fresh_database=True,
@@ -737,7 +842,13 @@ def main() -> int:
             checks.check("throwaway stack started", False, exc)
         finally:
             if args.keep:
-                print(f"Stack '{project}' left running (--keep). Remove it with:")
+                # This stack and its generated administrator exist only until it is
+                # removed, so the credentials are shown for running other checks
+                # against it (for example the frontend's live suites).
+                print(f"Stack '{project}' left running (--keep) at {base_url or '(not started)'}")
+                print(f"  administrator: {admin_email} / {admin_password}")
+                print(f"  service key  : {service_key}")
+                print("Remove it with:")
                 print(f"  docker compose -p {project} -f {COMPOSE_FILE} down -v")
             else:
                 stop_throwaway_stack(project, env, show_logs=checks.failed > 0)

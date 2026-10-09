@@ -1,12 +1,15 @@
 import React from "react";
 import type { UserResponse, UserRole } from "../../types";
 import "./layout.css";
+import { pendingBadgeText } from "../../utils/approvals.ts";
 
 interface AppLayoutProps {
   user: UserResponse;
   onLogout: () => void;
   activeNavId?: string;
   onSelectNav?: (navId: string) => void;
+  // Counts to show next to navigation items, keyed by item id.
+  navBadges?: Record<string, number>;
   children: React.ReactNode;
 }
 
@@ -110,6 +113,15 @@ function getNavigationItems(role: UserRole): NavItem[] {
     case "ADMIN":
       return [
         {
+          id: "approvals",
+          label: "Pending Approvals",
+          icon: (
+            <svg className="nav-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          ),
+        },
+        {
           id: "dashboard",
           label: "Dashboard",
           icon: (
@@ -203,6 +215,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   onLogout,
   activeNavId = "dashboard",
   onSelectNav,
+  navBadges,
   children,
 }) => {
   const navItems = getNavigationItems(user.role);
@@ -285,6 +298,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                     >
                       {item.icon}
                       <span>{item.label}</span>
+                      {pendingBadgeText(navBadges?.[item.id]) && (
+                        <span
+                          className="erp-nav-badge"
+                          aria-label={`${navBadges?.[item.id]} waiting`}
+                        >
+                          {pendingBadgeText(navBadges?.[item.id])}
+                        </span>
+                      )}
                     </button>
                   </li>
                 );

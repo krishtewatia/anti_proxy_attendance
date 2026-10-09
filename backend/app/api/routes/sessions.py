@@ -68,15 +68,30 @@ async def create_session_endpoint(
         )
 
     # 2. Enforce: Teacher assigned classes check (Requirement 6 & 13)
+    #    A teacher may create a session only for a class an administrator has
+    #    assigned to them. No assigned classes, no class given, or another
+    #    class: refused. (This is what closes security gap 6.1.)
     if current_user.get("role") != "ADMIN":
         teacher_prof = await get_teacher_profile_by_user_id(current_user["user_id"])
-        if teacher_prof and teacher_prof.get("assigned_classes"):
-            allowed_classes = [c.upper() for c in teacher_prof["assigned_classes"]]
-            if session.class_code and session.class_code.upper() not in allowed_classes:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Class '{session.class_code}' is not assigned to you.",
-                )
+        allowed_classes = {
+            str(c).strip().upper() for c in (teacher_prof or {}).get("assigned_classes") or []
+        }
+        requested_class = (session.class_code or "").strip().upper()
+        if not allowed_classes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No classes are assigned to you yet. Ask an administrator to assign your classes.",
+            )
+        if not requested_class:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Choose one of your assigned classes for the session.",
+            )
+        if requested_class not in allowed_classes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Class '{session.class_code}' is not assigned to you.",
+            )
 
     # 3. Create session document
     created_session = await create_session(

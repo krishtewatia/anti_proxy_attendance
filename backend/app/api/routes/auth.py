@@ -1,7 +1,10 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.api.dependencies.rate_limiter import check_registration_rate_limit
 
 from app.schemas.auth import TokenResponse, UserCreate, UserLogin, UserResponse
 from app.services.auth_service import (
+    AccountPendingError,
     AuthenticationError,
     DuplicateUserError,
     authenticate_user,
@@ -15,6 +18,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     "/register",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(check_registration_rate_limit)],
 )
 async def register(user: UserCreate) -> UserResponse:
     try:
@@ -36,6 +40,11 @@ async def login(credentials: UserLogin) -> TokenResponse:
             email=credentials.email,
             password=credentials.password,
         )
+    except AccountPendingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "account_pending", "message": str(exc)},
+        ) from exc
     except AuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

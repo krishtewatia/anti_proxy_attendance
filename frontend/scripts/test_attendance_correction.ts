@@ -8,6 +8,7 @@ import type {
   AttendanceCorrectionResponse,
   AttendanceSummaryItem,
 } from "../src/types/index.ts";
+import { requireLiveBackend } from "./live_backend.ts";
 
 function testCorrectionFormValidationAndPayload() {
   console.log("==================================================");
@@ -324,7 +325,7 @@ async function testLiveApiCorrectionFlow() {
   console.log("==================================================");
 
   try {
-    const health = await api.checkHealth();
+    const health = await requireLiveBackend();
     console.log("  Live backend connected:", health.status);
   } catch (err: any) {
     console.log("  ℹ Live backend not running locally, skipping live network call:", err.message);

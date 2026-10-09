@@ -3,6 +3,7 @@ import {
   formatPresencePercentage,
 } from "../src/components/session/attendance-helpers.ts";
 import { api, auth } from "../src/services/index.ts";
+import { requireLiveBackend } from "./live_backend.ts";
 
 function testFormattingHelpers() {
   console.log("--------------------------------------------------");
@@ -52,7 +53,7 @@ async function testLiveAttendanceApi() {
   console.log("--------------------------------------------------");
 
   try {
-    const health = await api.checkHealth();
+    const health = await requireLiveBackend();
     console.log("Live backend healthy:", health);
   } catch (err: any) {
     console.log("ℹ Backend not currently running locally, skipping live network test:", err.message);

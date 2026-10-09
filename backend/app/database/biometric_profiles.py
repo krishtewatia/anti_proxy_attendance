@@ -13,6 +13,7 @@ async def upsert_biometric_profile(
     sample_count: int,
     quality_score: float,
     enrolled_by: str,
+    review_status: str = "ACTIVE",
 ) -> tuple[dict[str, Any], bool]:
     """Insert or update a student biometric profile.
 
@@ -32,6 +33,7 @@ async def upsert_biometric_profile(
                     "sample_count": sample_count,
                     "quality_score": quality_score,
                     "enrolled_by": enrolled_by,
+                    "review_status": review_status,
                     "updated_at": now,
                 }
             },
@@ -45,6 +47,8 @@ async def upsert_biometric_profile(
         "sample_count": sample_count,
         "quality_score": quality_score,
         "enrolled_by": enrolled_by,
+        # PENDING_REVIEW templates are never served to the vision service.
+        "review_status": review_status,
         "created_at": now,
         "updated_at": now,
     }

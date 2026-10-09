@@ -73,3 +73,12 @@ class _SettingLimiter(SlidingWindowRateLimiter):
 # Frame path: one budget per session and one per teacher.
 frame_session_rate_limiter = _SettingLimiter("FRAME_RATE_LIMIT_PER_MINUTE")
 frame_teacher_rate_limiter = _SettingLimiter("TEACHER_FRAME_RATE_LIMIT_PER_MINUTE")
+
+# Public registration: one budget per client address, shared by the three
+# registration routes, so a flood of sign-ups cannot fill the approval queue.
+registration_rate_limiter = _SettingLimiter("REGISTRATION_RATE_LIMIT_PER_MINUTE")
+
+
+async def check_registration_rate_limit(request: Request) -> None:
+    client_host = request.client.host if request.client else "unknown"
+    await registration_rate_limiter.check(f"register:{client_host}")

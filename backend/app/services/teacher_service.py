@@ -9,6 +9,8 @@ from app.database.sessions import (
     get_active_session_by_teacher,
     get_sessions_by_owner,
 )
+from app.core.account_status import ACCOUNT_APPROVED, ACCOUNT_PENDING
+from app.database.mongodb import get_database
 from app.database.teacher_profiles import (
     get_teacher_profile_by_teacher_id,
     get_teacher_profile_by_user_id,
@@ -30,8 +32,16 @@ class DuplicateTeacherError(Exception):
     """Raised when a teacher email or ID already exists."""
 
 
-async def register_teacher_account(req: TeacherRegisterRequest) -> TeacherProfileResponse:
-    """Create a new teacher account with assigned classes and subjects."""
+async def register_teacher_account(
+    req: TeacherRegisterRequest, approved: bool = False
+) -> TeacherProfileResponse:
+    """Create a teacher account.
+
+    A public registration (``approved=False``) is PENDING and gets no classes:
+    whatever the form asked for is kept only as a request for the
+    administrator to see. Classes are assigned by an administrator, at
+    approval or when the administrator creates the account (``approved=True``).
+    """
     existing_user = await get_user_by_email(req.email)
     if existing_user is not None:
         raise DuplicateTeacherError(f"A user with email '{req.email}' already exists")
@@ -47,17 +57,30 @@ async def register_teacher_account(req: TeacherRegisterRequest) -> TeacherProfil
         email=req.email,
         password_hash=pw_hash,
         role="TEACHER",
+        status=ACCOUNT_APPROVED if approved else ACCOUNT_PENDING,
     )
 
+    assigned_classes = req.assigned_classes if approved else []
+    assigned_subjects = req.assigned_subjects if approved else []
     _ = await upsert_teacher_profile(
         user_id=user_id,
         teacher_id=req.teacher_id,
         name=req.name,
         email=req.email,
         department=req.department,
-        assigned_classes=req.assigned_classes,
-        assigned_subjects=req.assigned_subjects,
+        assigned_classes=assigned_classes,
+        assigned_subjects=assigned_subjects,
     )
+    if not approved:
+        await get_database()["teacher_profiles"].update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "requested_classes": req.assigned_classes,
+                    "requested_subjects": req.assigned_subjects,
+                }
+            },
+        )
 
     return TeacherProfileResponse(
         user_id=user_id,
@@ -65,8 +88,8 @@ async def register_teacher_account(req: TeacherRegisterRequest) -> TeacherProfil
         name=req.name,
         email=req.email,
         department=req.department,
-        assigned_classes=req.assigned_classes,
-        assigned_subjects=req.assigned_subjects,
+        assigned_classes=assigned_classes,
+        assigned_subjects=assigned_subjects,
     )
 
 

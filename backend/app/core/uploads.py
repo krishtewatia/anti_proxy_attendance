@@ -89,3 +89,21 @@ def student_photo_path(student_id: str) -> Path:
     if path.resolve().parent != directory.resolve():
         raise ValueError("student ID is not usable as a file name")
     return path
+
+
+PENDING_PHOTOS_SUBDIR = "pending_review"
+
+
+def pending_photo_path(identity: str) -> Path:
+    """Path of a replacement photo that is waiting for an administrator's review."""
+    if (
+        not isinstance(identity, str)
+        or not _SAFE_PHOTO_STEM.fullmatch(identity)
+        or ".." in identity
+    ):
+        raise ValueError("student ID is not usable as a file name")
+    directory = resolve_uploads_root() / PENDING_PHOTOS_SUBDIR
+    path = directory / f"{identity}.jpg"
+    if path.resolve().parent != directory.resolve():
+        raise ValueError("student ID is not usable as a file name")
+    return path

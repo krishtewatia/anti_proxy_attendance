@@ -16,6 +16,7 @@ from app.security.config import JWT_ALGORITHM, JWT_SECRET_KEY
 from app.security.jwt import create_access_token
 from app.security.passwords import hash_password
 from app.services.session_enrollment import enroll_session_roster
+from tests.conftest import assign_teacher_classes
 
 
 @pytest.fixture(autouse=True)
@@ -45,6 +46,7 @@ async def rbac_fixture():
         password_hash=pw_hash,
         role="TEACHER",
     )
+    await assign_teacher_classes("user_teacher_rbac")
     student = await create_user(
         user_id="user_student_rbac",
         email="student.rbac@test.com",
@@ -63,6 +65,7 @@ async def rbac_fixture():
         password_hash=pw_hash,
         role="TEACHER",
     )
+    await assign_teacher_classes("user_inactive_rbac")
 
     db = mongodb.get_database()
     await db["users"].update_one(
@@ -227,6 +230,7 @@ async def test_rbac_create_session(rbac_fixture):
     payload = {
         "course_name": "DevSecOps",
         "classroom_id": "ROOM_101",
+        "class_code": "DS-B",
         "start_time": "2026-09-29T10:00:00Z",
         "end_time": "2026-09-29T11:00:00Z",
         "required_presence_percentage": 75.0,

@@ -28,6 +28,38 @@ def uploads_in_a_temporary_directory(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("UPLOADS_DIR", str(tmp_path_factory.mktemp("uploads")))
 
 
+TEST_CLASS_CODE = "DS-B"
+
+
+async def approve_account(user_id: str) -> None:
+    """What an administrator's approval does to a registration, without the admin API."""
+    await mongodb.get_database()["users"].update_one(
+        {"user_id": user_id}, {"$set": {"status": "APPROVED"}}
+    )
+
+
+async def assign_teacher_classes(user_id: str, classes: tuple[str, ...] = (TEST_CLASS_CODE,)) -> None:
+    """Give a teacher the classes an administrator would assign; sessions need one."""
+    await mongodb.get_database()["teacher_profiles"].update_one(
+        {"user_id": user_id},
+        {
+            "$set": {"user_id": user_id, "assigned_classes": list(classes)},
+            "$setOnInsert": {"teacher_id": f"T-{user_id}", "assigned_subjects": []},
+        },
+        upsert=True,
+    )
+
+
+@pytest.fixture(autouse=True)
+def fresh_registration_rate_limit():
+    """Each test starts with an empty registration budget (the limiter is process-wide)."""
+    from app.api.dependencies.rate_limiter import registration_rate_limiter
+
+    registration_rate_limiter.reset()
+    yield
+    registration_rate_limiter.reset()
+
+
 @pytest.fixture
 def register_test_camera(monkeypatch):
     """Register cameras in the real camera registry and return their auth headers.
