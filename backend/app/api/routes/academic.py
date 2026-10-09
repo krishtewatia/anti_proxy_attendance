@@ -37,6 +37,22 @@ async def get_academic_structure_endpoint(
 
 
 @router.get(
+    "/public/classes",
+    summary="Classes a new student or teacher can choose when registering (no sign-in)",
+)
+async def list_public_classes_endpoint() -> list[dict]:
+    """The active classes, for the registration form. Codes and names only."""
+    return [
+        {
+            "class_code": c["class_code"],
+            "branch": c.get("branch", ""),
+            "section": c.get("section", ""),
+        }
+        for c in await list_all_classes()
+    ]
+
+
+@router.get(
     "/classes",
     response_model=list[AcademicClass],
     summary="List all academic classes",

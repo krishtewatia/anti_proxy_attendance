@@ -29,6 +29,7 @@ from app.core.account_status import (
 )
 from app.core.uploads import pending_photo_path, student_photo_path
 from app.database.student_profiles import normalize_class_code
+from app.services.academic_admin_service import archived_subjects, resolve_active_class
 from app.services.audit_service import record_audit_event
 from app.services.student_biometric_service import PHOTO_CHANGE_REQUESTS_COLLECTION
 from app.services.student_deletion import _refresh_vision_gallery, delete_student_completely
@@ -161,6 +162,7 @@ async def approve_registration(
     assigned_subjects: Optional[list[str]] = None,
     branch: Optional[str] = None,
     section: Optional[str] = None,
+    class_code: Optional[str] = None,
 ) -> dict[str, Any]:
     user = await _pending_user(db, user_id)
     role = user.get("role")
@@ -176,6 +178,9 @@ async def approve_registration(
         if unknown:
             raise ApprovalError(f"Unknown or archived class: {', '.join(unknown)}", 400)
         subjects = [s.strip() for s in (assigned_subjects or []) if s and s.strip()]
+        retired = await archived_subjects(db, subjects)
+        if retired:
+            raise ApprovalError(f"Archived subject: {', '.join(retired)}", 400)
         # An account registered through the bare account route has no profile
         # yet; the assignment creates one, since sessions depend on it.
         await db["teacher_profiles"].update_one(
@@ -204,12 +209,25 @@ async def approve_registration(
         if profile is not None:
             new_branch = (branch or profile.get("branch") or "").strip()
             new_section = (section or profile.get("section") or "").strip().upper()
-            if not new_branch or not new_section:
+            if not class_code and not (new_branch and new_section):
                 raise ApprovalError("Confirm the student's branch and section to approve", 400)
-            class_code = normalize_class_code(new_branch, new_section)
-            known = await _known_class_codes(db)
-            if known and class_code.upper() not in known:
-                raise ApprovalError(f"Unknown or archived class: {class_code}", 400)
+            # With nothing chosen by the administrator, the class the student
+            # registered for is the one being confirmed.
+            chosen = await resolve_active_class(
+                db,
+                class_code=class_code
+                or (None if (branch or section) else profile.get("class_code")),
+                branch=new_branch,
+                section=new_section,
+            )
+            if chosen is not None:
+                new_branch, new_section = chosen["branch"], chosen["section"]
+                class_code = chosen["class_code"]
+            else:
+                wanted = class_code or normalize_class_code(new_branch, new_section)
+                if class_code or await _known_class_codes(db):
+                    raise ApprovalError(f"Unknown or archived class: {wanted}", 400)
+                class_code = wanted
             await db["student_profiles"].update_one(
                 {"user_id": user_id},
                 {

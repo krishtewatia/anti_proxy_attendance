@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../services";
+import { classLabel, type PublicClass } from "../../utils/catalog.ts";
 
 interface RegisterFormProps {
   onSuccess: (registeredEmail: string) => void;
@@ -21,8 +22,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   // Student-specific fields
   const [studentId, setStudentId] = useState("");
   const [rollNumber, setRollNumber] = useState("");
-  const [branch, setBranch] = useState("Data Science");
-  const [section, setSection] = useState("B");
+  const [classCode, setClassCode] = useState("");
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
@@ -30,28 +30,31 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   const [teacherId, setTeacherId] = useState("");
   const [department, setDepartment] = useState("Data Science");
 
-  // Dynamic academic branches & sections
-  const [branches, setBranches] = useState<string[]>(["Data Science", "Computer Science", "AI & ML"]);
-  const [sections, setSections] = useState<string[]>(["A", "B", "C"]);
+  // The classes that exist and are open for registration (from the server).
+  const [classes, setClasses] = useState<PublicClass[]>([]);
+  const [classesLoaded, setClassesLoaded] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Attempt to load live academic structure for dropdowns
-    api.getAcademicStructure()
-      .then((struct) => {
-        if (struct.branches && struct.branches.length > 0) {
-          setBranches(struct.branches.map((b) => b.name));
-          const currentB = struct.branches.find((b) => b.name === "Data Science") || struct.branches[0];
-          if (currentB && currentB.sections) {
-            setSections(currentB.sections);
-          }
-        }
+    let cancelled = false;
+    api
+      .getPublicClasses()
+      .then((list) => {
+        if (cancelled) return;
+        setClasses(list);
+        setClassCode((current) => current || (list[0]?.class_code ?? ""));
       })
       .catch(() => {
-        // Fallback to default lists
+        // The form then says the class list could not be loaded.
+      })
+      .finally(() => {
+        if (!cancelled) setClassesLoaded(true);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,6 +116,11 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
           setLoading(false);
           return;
         }
+        if (!classCode) {
+          setErrorMessage("Please choose your class.");
+          setLoading(false);
+          return;
+        }
 
         await api.registerStudent({
           name: trimmedName,
@@ -120,8 +128,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
           password,
           student_id: studentId.trim(),
           roll_number: rollNumber.trim(),
-          branch,
-          section,
+          class_code: classCode,
           photo_base64: photoBase64 || undefined,
         });
       } else {
@@ -137,8 +144,9 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
           password,
           teacher_id: teacherId.trim(),
           department,
-          assigned_classes: [`${branch === "Data Science" ? "DS" : "CS"}-${section}`],
-          assigned_subjects: ["Machine Learning"],
+          // Classes and subjects are assigned by an administrator at approval.
+          assigned_classes: [],
+          assigned_subjects: [],
         });
       }
 
@@ -272,37 +280,30 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "0.75rem", marginBottom: "0.85rem" }}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="register-branch">Branch</label>
-              <select
-                id="register-branch"
-                className="auth-input"
-                value={branch}
-                onChange={(e) => setBranch(e.target.value)}
-                disabled={loading}
-                style={{ background: "#ffffff", color: "#0f172a" }}
-              >
-                {branches.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="register-section">Section</label>
-              <select
-                id="register-section"
-                className="auth-input"
-                value={section}
-                onChange={(e) => setSection(e.target.value)}
-                disabled={loading}
-                style={{ background: "#ffffff", color: "#0f172a" }}
-              >
-                {sections.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
+          <div className="form-group" style={{ marginBottom: "0.85rem" }}>
+            <label className="form-label" htmlFor="register-class">Class</label>
+            <select
+              id="register-class"
+              className="auth-input"
+              value={classCode}
+              onChange={(e) => setClassCode(e.target.value)}
+              disabled={loading || classes.length === 0}
+              style={{ background: "#ffffff", color: "#0f172a" }}
+            >
+              {classes.length === 0 && (
+                <option value="">
+                  {classesLoaded ? "No classes are available" : "Loading classes..."}
+                </option>
+              )}
+              {classes.map((item) => (
+                <option key={item.class_code} value={item.class_code}>{classLabel(item)}</option>
+              ))}
+            </select>
+            {classesLoaded && classes.length === 0 && (
+              <small style={{ color: "#b45309", fontSize: "0.75rem" }}>
+                The class list could not be loaded. Try again in a moment, or ask an administrator.
+              </small>
+            )}
           </div>
 
           {/* Biometric Photo Upload */}

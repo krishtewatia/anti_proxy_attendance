@@ -25,6 +25,7 @@ class StudentUpdateRequest(BaseModel):
     roll_number: Optional[str] = Field(default=None, min_length=2, max_length=64)
     branch: Optional[str] = Field(default=None, min_length=1, max_length=64)
     section: Optional[str] = Field(default=None, min_length=1, max_length=16)
+    class_code: Optional[str] = Field(default=None, min_length=2, max_length=20)
 
 
 class TeacherUpdateRequest(BaseModel):

@@ -171,3 +171,23 @@ Added 2026-10-09. Every route here requires an administrator, except changing yo
 - Tokens are not revoked individually: signing out on one device does not end a token (it expires after its lifetime). A password change or reset is the way to end every session at once.
 - There is no self-service "forgot password": a reset needs an administrator, since the system sends no email.
 - Password rules are a minimum length (8 characters; 12 for an administrator's first password). There is no check against known-breached passwords.
+
+---
+
+## 8. Classes and Subjects
+
+Added 2026-10-09. Every route that changes the catalog requires an administrator.
+
+- A class or subject is `ACTIVE` or `ARCHIVED`. Archiving hides it from registration, from new sessions and from new assignments. Students in the class, teachers who already have it, and past sessions and their attendance are all kept, and it can be restored.
+- A class cannot be archived while one of its sessions is in progress.
+- A class or subject is deleted only when nothing refers to it (no student, no teacher assignment, no session). Otherwise the request is refused and names what uses it.
+- Once something refers to a class, its code, branch and section are fixed; likewise a subject's name. Students, teachers and sessions hold those values, so changing them would detach the history without anyone noticing.
+- Creating a class or subject that already exists is refused (it used to overwrite the existing one silently). One class per branch and section.
+- Registration, approval and the admin forms accept only an active class. A teacher can be given only active classes; one they already have stays theirs after it is archived, but they cannot open a new session for it.
+- `GET /api/v1/academic/public/classes` needs no sign-in: the registration form has to list the classes before the person has an account. It returns the code, branch and section of active classes and nothing else. It is the only public route added, and the test that lists every public route was updated to name it.
+
+**Audit.** `CLASS_CREATED`, `CLASS_UPDATED`, `CLASS_ARCHIVED`, `CLASS_UNARCHIVED`, `CLASS_DELETED` and the same five for subjects, with the class code or subject ID, the names of changed fields, and usage counts.
+
+**What remains.**
+- Subject names are free text where a session or a teacher assignment is created: an archived subject is refused, but a name that is not in the catalog at all is still accepted.
+- `GET /api/v1/academic/classes/{class_code}/students` answers any signed-in user, including a student, with the names and IDs of the students of any class (no photos or email addresses). It should be limited to administrators and to teachers of that class.

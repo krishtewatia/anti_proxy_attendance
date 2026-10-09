@@ -25,8 +25,10 @@ export interface StudentRegisterRequest {
   password: string;
   student_id: string;
   roll_number: string;
-  branch: string;
-  section: string;
+  // The class by its code; branch and section are the older way to name it.
+  class_code?: string;
+  branch?: string;
+  section?: string;
   photo_base64?: string;
 }
 

@@ -297,6 +297,8 @@ PUBLIC_ROUTES = {
     ("POST", "/auth/register"),
     ("POST", "/api/v1/students/register"),
     ("POST", "/api/v1/teachers/register"),
+    # The registration form lists the active classes before anyone has an account.
+    ("GET", "/api/v1/academic/public/classes"),
 }
 # get_authenticated_user is the token check itself; get_current_user builds on it.
 AUTH_DEPENDENCIES = {

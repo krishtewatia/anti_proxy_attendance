@@ -117,19 +117,26 @@ async def seed_academic_data_if_empty() -> None:
             await sub_coll.update_one({"subject_id": s["subject_id"]}, {"$set": doc}, upsert=True)
 
 
-async def list_all_classes() -> list[dict[str, Any]]:
-    """Retrieve all academic classes."""
+# A class or subject with no status is ACTIVE; ARCHIVED ones are hidden from
+# registration, new sessions and new assignments.
+ACTIVE_ONLY = {"status": {"$ne": "ARCHIVED"}}
+
+
+async def list_all_classes(include_archived: bool = False) -> list[dict[str, Any]]:
+    """Retrieve academic classes (active ones unless ``include_archived``)."""
     await seed_academic_data_if_empty()
     db = get_database()
-    cursor = db[ACADEMIC_CLASSES_COLLECTION].find({}, {"_id": 0}).sort("class_code", 1)
+    query = {} if include_archived else ACTIVE_ONLY
+    cursor = db[ACADEMIC_CLASSES_COLLECTION].find(query, {"_id": 0}).sort("class_code", 1)
     return await cursor.to_list(length=None)
 
 
-async def list_all_subjects() -> list[dict[str, Any]]:
-    """Retrieve all academic subjects."""
+async def list_all_subjects(include_archived: bool = False) -> list[dict[str, Any]]:
+    """Retrieve academic subjects (active ones unless ``include_archived``)."""
     await seed_academic_data_if_empty()
     db = get_database()
-    cursor = db[SUBJECTS_COLLECTION].find({}, {"_id": 0}).sort("name", 1)
+    query = {} if include_archived else ACTIVE_ONLY
+    cursor = db[SUBJECTS_COLLECTION].find(query, {"_id": 0}).sort("name", 1)
     return await cursor.to_list(length=None)
 
 
@@ -155,45 +162,3 @@ async def get_academic_structure() -> dict[str, Any]:
         "classes": classes,
         "subjects": subjects,
     }
-
-
-async def add_academic_class(
-    class_code: str, branch: str, section: str, semester: int | None = None
-) -> dict[str, Any]:
-    """Admin function to create a new academic class."""
-    db = get_database()
-    doc = {
-        "class_id": f"cls_{class_code.lower().replace('-', '_')}",
-        "class_code": class_code.upper().strip(),
-        "branch": branch.strip(),
-        "section": section.upper().strip(),
-        "semester": semester,
-        "created_at": datetime.now(timezone.utc),
-    }
-    await db[ACADEMIC_CLASSES_COLLECTION].update_one(
-        {"class_code": doc["class_code"]},
-        {"$set": doc},
-        upsert=True,
-    )
-    return doc
-
-
-async def add_subject(
-    name: str, code: str | None = None, branch: str | None = None
-) -> dict[str, Any]:
-    """Admin function to create a new academic course/subject."""
-    db = get_database()
-    sub_id = f"sub_{name.lower().replace(' ', '_')}"
-    doc = {
-        "subject_id": sub_id,
-        "name": name.strip(),
-        "code": code.strip() if code else None,
-        "branch": branch.strip() if branch else None,
-        "created_at": datetime.now(timezone.utc),
-    }
-    await db[SUBJECTS_COLLECTION].update_one(
-        {"subject_id": sub_id},
-        {"$set": doc},
-        upsert=True,
-    )
-    return doc

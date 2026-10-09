@@ -23,6 +23,10 @@ from app.schemas.attendance import AttendanceRecord
 from app.schemas.live_session import SessionLiveSnapshotResponse
 from app.schemas.session import SessionCreate, SessionResponse
 from app.schemas.session_roster import SessionRoster
+from app.services.academic_admin_service import (
+    AcademicAdminError,
+    refuse_archived_session_target,
+)
 from app.services.audit_service import record_audit_event
 from app.services.live_session_service import compute_session_live_snapshot
 
@@ -92,6 +96,14 @@ async def create_session_endpoint(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Class '{session.class_code}' is not assigned to you.",
             )
+
+    # An archived class or subject takes no new sessions (existing ones are kept).
+    try:
+        await refuse_archived_session_target(
+            get_database(), class_code=session.class_code, subject=session.subject
+        )
+    except AcademicAdminError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     # 3. Create session document
     created_session = await create_session(

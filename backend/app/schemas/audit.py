@@ -40,6 +40,16 @@ AuditAction = Literal[
     "TEACHER_DELETED",
     "ADMIN_DELETED",
     "TEST_ACCOUNT_REMOVED",
+    "CLASS_CREATED",
+    "CLASS_UPDATED",
+    "CLASS_ARCHIVED",
+    "CLASS_UNARCHIVED",
+    "CLASS_DELETED",
+    "SUBJECT_CREATED",
+    "SUBJECT_UPDATED",
+    "SUBJECT_ARCHIVED",
+    "SUBJECT_UNARCHIVED",
+    "SUBJECT_DELETED",
 ]
 
 AuditResourceType = Literal[
@@ -52,6 +62,7 @@ AuditResourceType = Literal[
     "SECURITY",
     "CAMERA",
     "SYSTEM",
+    "ACADEMIC",
 ]
 
 

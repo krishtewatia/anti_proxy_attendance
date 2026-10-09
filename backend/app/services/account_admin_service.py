@@ -36,6 +36,7 @@ from app.core.account_status import ACCOUNT_APPROVED, is_approved
 from app.database.student_profiles import normalize_class_code
 from app.database.users import create_user
 from app.security.passwords import hash_password
+from app.services.academic_admin_service import archived_subjects, resolve_active_class
 from app.services.approval_service import _clean_codes, _known_class_codes, delete_teacher_account
 from app.services.audit_service import record_audit_event
 from app.services.auth_service import set_password
@@ -210,6 +211,7 @@ async def update_student(
     roll_number: Optional[str] = None,
     branch: Optional[str] = None,
     section: Optional[str] = None,
+    class_code: Optional[str] = None,
 ) -> dict[str, Any]:
     user = await _account(db, user_id, "STUDENT")
     profile = await db["student_profiles"].find_one({"user_id": user_id})
@@ -230,19 +232,26 @@ async def update_student(
         changes["roll_number"] = roll_number.strip()
         changed_fields.append("roll_number")
 
-    if branch is not None or section is not None:
+    if class_code is not None or branch is not None or section is not None:
         new_branch = (branch if branch is not None else profile.get("branch") or "").strip()
         new_section = (
             (section if section is not None else profile.get("section") or "").strip().upper()
         )
-        if not new_branch or not new_section:
+        if not class_code and not (new_branch and new_section):
             raise AccountAdminError("A student needs both a branch and a section", 400)
-        class_code = normalize_class_code(new_branch, new_section)
-        if class_code != profile.get("class_code"):
-            known = await _known_class_codes(db)
-            if known and class_code.upper() not in known:
-                raise AccountAdminError(f"Unknown or archived class: {class_code}", 400)
-            changes.update({"branch": new_branch, "section": new_section, "class_code": class_code})
+        chosen = await resolve_active_class(
+            db, class_code=class_code, branch=new_branch, section=new_section
+        )
+        if chosen is not None:
+            new_branch, new_section = chosen["branch"], chosen["section"]
+            new_code = chosen["class_code"]
+        else:
+            new_code = (class_code or normalize_class_code(new_branch, new_section)).upper()
+        if new_code != profile.get("class_code"):
+            # Moving a student needs an active class; staying where they are does not.
+            if chosen is None and (class_code or await _known_class_codes(db)):
+                raise AccountAdminError(f"Unknown or archived class: {new_code}", 400)
+            changes.update({"branch": new_branch, "section": new_section, "class_code": new_code})
             changed_fields.append("class")
 
     if student_id is not None and student_id.strip() != old_student_id:
@@ -342,8 +351,11 @@ async def update_teacher(
 
     if assigned_classes is not None:
         classes = _clean_codes(assigned_classes)
-        if classes != (profile.get("assigned_classes") or []):
-            unknown = sorted(set(classes) - await _known_class_codes(db))
+        current_classes = profile.get("assigned_classes") or []
+        if classes != current_classes:
+            # A class the teacher already has may stay after it is archived;
+            # only a class being added has to be active.
+            unknown = sorted(set(classes) - set(current_classes) - await _known_class_codes(db))
             if unknown:
                 raise AccountAdminError(f"Unknown or archived class: {', '.join(unknown)}", 400)
             changes["assigned_classes"] = classes
@@ -351,7 +363,12 @@ async def update_teacher(
 
     if assigned_subjects is not None:
         subjects = [s.strip() for s in assigned_subjects if s and s.strip()]
-        if subjects != (profile.get("assigned_subjects") or []):
+        current_subjects = profile.get("assigned_subjects") or []
+        if subjects != current_subjects:
+            added = [s for s in subjects if s not in current_subjects]
+            retired = await archived_subjects(db, added)
+            if retired:
+                raise AccountAdminError(f"Archived subject: {', '.join(retired)}", 400)
             changes["assigned_subjects"] = subjects
             changed_fields.append("assigned_subjects")
 
