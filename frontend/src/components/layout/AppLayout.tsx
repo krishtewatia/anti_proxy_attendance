@@ -278,10 +278,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         </a>
 
         <div className="erp-header-right">
-          <div className="erp-term-badge">
-            Academic Session 2025–26 • Term II
-          </div>
-
           <div className="erp-user-profile">
             <div className="erp-user-avatar">
               {user.email.charAt(0).toUpperCase()}

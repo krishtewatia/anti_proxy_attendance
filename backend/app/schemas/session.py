@@ -46,5 +46,10 @@ class SessionResponse(BaseModel):
 
     required_presence_percentage: float = 100.0
 
-    status: str  # "SCHEDULED", "ACTIVE", "FINALIZED", "COMPLETED"
+    status: str  # "SCHEDULED", "ACTIVE", "FINALIZED"
     created_by: str
+
+    # Filled in by the administrator's session list only.
+    teacher_name: Optional[str] = None
+    total_students: Optional[int] = None
+    present_count: Optional[int] = None

@@ -580,6 +580,25 @@ async def list_all_sessions_endpoint(
 ) -> list[SessionResponse]:
     sessions = await get_all_sessions_in_db()
 
+    # Real figures for each row: who took the session, how many students were
+    # on its roster and how many were marked present.
+    db = get_database()
+    teacher_names = {
+        doc["user_id"]: doc.get("name") or ""
+        async for doc in db["teacher_profiles"].find({}, {"user_id": 1, "name": 1})
+    }
+    roster_sizes = {
+        doc["session_id"]: len(doc.get("identities") or [])
+        async for doc in db["session_rosters"].find({}, {"session_id": 1, "identities": 1})
+    }
+    record_counts: dict[str, int] = {}
+    present_counts: dict[str, int] = {}
+    async for record in db["attendance_records"].find({}, {"session_id": 1, "status": 1}):
+        sid = record.get("session_id")
+        record_counts[sid] = record_counts.get(sid, 0) + 1
+        if record.get("status") == "PRESENT":
+            present_counts[sid] = present_counts.get(sid, 0) + 1
+
     filtered = []
     for s in sessions:
         if branch and s.get("branch") and s["branch"].lower() != branch.lower():
@@ -607,9 +626,67 @@ async def list_all_sessions_endpoint(
                 required_presence_percentage=s["required_presence_percentage"],
                 status=s["status"],
                 created_by=s["created_by"],
+                teacher_name=teacher_names.get(s["created_by"]) or None,
+                total_students=max(
+                    roster_sizes.get(s["session_id"], 0), record_counts.get(s["session_id"], 0)
+                ),
+                present_count=present_counts.get(s["session_id"], 0),
             )
         )
     return filtered
+
+
+# --- 6. REPORTS ---
+
+ATTENDANCE_SHORTAGE_THRESHOLD = 75.0
+
+
+@router.get(
+    "/reports/summary",
+    summary="Attendance figures across all finalized sessions",
+)
+async def admin_reports_summary(
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> dict:
+    """Counted from finalized sessions only. Percentages are null when there is nothing to count."""
+    db = get_database()
+    finalized = [
+        doc
+        async for doc in db["sessions"].find(
+            {"status": "FINALIZED"}, {"session_id": 1, "class_code": 1}
+        )
+    ]
+    session_ids = [doc["session_id"] for doc in finalized]
+
+    total = present = 0
+    per_student: dict[str, list[int]] = {}
+    if session_ids:
+        async for record in db["attendance_records"].find(
+            {"session_id": {"$in": session_ids}}, {"identity": 1, "status": 1}
+        ):
+            is_present = record.get("status") == "PRESENT"
+            total += 1
+            present += 1 if is_present else 0
+            tally = per_student.setdefault(str(record.get("identity")), [0, 0])
+            tally[0] += 1 if is_present else 0
+            tally[1] += 1
+
+    below = sum(
+        1
+        for marked, counted in per_student.values()
+        if counted and (marked / counted * 100) < ATTENDANCE_SHORTAGE_THRESHOLD
+    )
+    return {
+        "finalized_sessions": len(finalized),
+        "classes_with_sessions": len(
+            {doc.get("class_code") for doc in finalized if doc.get("class_code")}
+        ),
+        "attendance_records": total,
+        "average_turnout_percentage": round(present / total * 100, 1) if total else None,
+        "students_counted": len(per_student),
+        "students_below_threshold": below,
+        "threshold_percentage": ATTENDANCE_SHORTAGE_THRESHOLD,
+    }
 
 
 @router.post(

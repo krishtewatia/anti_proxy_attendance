@@ -176,7 +176,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     <div className="erp-student-attendance-view">
       <div className="erp-page-header">
         <h1 className="erp-page-title">My Attendance Breakdown</h1>
-        <p className="erp-page-subtitle">Academic Year 2025–26 • Subject-wise presence & shortage criteria</p>
+        <p className="erp-page-subtitle">Subject-wise presence & shortage criteria</p>
       </div>
 
       <div className="erp-table-container">

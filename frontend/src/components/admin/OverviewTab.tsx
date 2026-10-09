@@ -3,8 +3,10 @@ import { sessionStatusBadgeClass, sessionStatusLabel } from "../../utils/session
 import { type AdminData } from "./adminShared.ts";
 
 export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic, sessions }) => {
-  const activeClassesCount = academic?.classes?.length || 8;
+  const activeClassesCount = academic?.classes?.length ?? 0;
   const activeSessions = sessions.filter((s) => s.status === "ACTIVE");
+  const today = new Date().toDateString();
+  const todaysSessions = sessions.filter((s) => new Date(s.start_time).toDateString() === today);
 
   return (
     <div>
@@ -17,7 +19,7 @@ export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic,
         <div className="erp-metric-card">
           <span className="erp-metric-label">Total Students</span>
           <span className="erp-metric-value">{students.length}</span>
-          <span className="erp-metric-subtext">Active enrolled students</span>
+          <span className="erp-metric-subtext">Approved student accounts</span>
         </div>
         <div className="erp-metric-card">
           <span className="erp-metric-label">Total Teachers</span>
@@ -27,12 +29,12 @@ export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic,
         <div className="erp-metric-card">
           <span className="erp-metric-label">Active Classes</span>
           <span className="erp-metric-value">{activeClassesCount}</span>
-          <span className="erp-metric-subtext">Registered academic sections</span>
+          <span className="erp-metric-subtext">Classes open for registration</span>
         </div>
         <div className="erp-metric-card">
           <span className="erp-metric-label">Today's Sessions</span>
-          <span className="erp-metric-value">{sessions.length}</span>
-          <span className="erp-metric-subtext">Attendance sessions logged</span>
+          <span className="erp-metric-value">{todaysSessions.length}</span>
+          <span className="erp-metric-subtext">{sessions.length} sessions in total</span>
         </div>
       </div>
 
@@ -55,7 +57,7 @@ export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic,
                 {activeSessions.map((s) => (
                   <tr key={s.session_id}>
                     <td style={{ fontWeight: 600 }}>{s.course_name}</td>
-                    <td>{s.class_code || "DS-B"}</td>
+                    <td>{s.class_code || "—"}</td>
                     <td>{s.classroom_id}</td>
                     <td>
                       <span className="status-badge active">In Progress</span>
@@ -88,7 +90,7 @@ export const OverviewTab: React.FC<AdminData> = ({ students, teachers, academic,
                 {sessions.slice(0, 5).map((s) => (
                   <tr key={s.session_id}>
                     <td style={{ fontWeight: 600 }}>{s.course_name}</td>
-                    <td>{s.class_code || "DS-B"}</td>
+                    <td>{s.class_code || "—"}</td>
                     <td>{s.classroom_id}</td>
                     <td>{new Date(s.start_time).toLocaleDateString()}</td>
                     <td>

@@ -30,6 +30,7 @@ import type {
 } from "../types";
 import { clearStoredAuth, getStoredToken, setMustChangePassword } from "./auth.ts";
 import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
+import type { ReportsSummary } from "../utils/reports.ts";
 import type { AdminAccount, StudentEditFields, TeacherEditFields } from "../utils/accounts.ts";
 import type {
   AdminClassRow,
@@ -659,6 +660,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     });
+  },
+
+  getAdminReportsSummary(): Promise<ReportsSummary> {
+    return request<ReportsSummary>("/api/v1/admin/reports/summary");
   },
 
   getAdminSessions(filters?: {
