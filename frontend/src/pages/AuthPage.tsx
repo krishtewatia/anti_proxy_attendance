@@ -12,10 +12,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
-  const handleRegisterSuccess = (registeredEmail: string) => {
+  const handleRegisterSuccess = () => {
     setActiveTab("login");
     setSuccessBanner(
-      `Account created for ${registeredEmail}! You can now sign in with your password.`
+      "Registration received. An administrator must approve your account before you can sign in.",
     );
   };
 

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { auth } from "../../services";
 import type { TokenResponse } from "../../types";
+import { isPendingApprovalError } from "../../utils/approvals.ts";
 
 interface LoginFormProps {
   onSuccess: (response: TokenResponse) => void;
@@ -52,7 +53,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
 
-      if (message.includes("401") || message.toLowerCase().includes("invalid email or password")) {
+      if (isPendingApprovalError(message)) {
+        setErrorMessage(
+          "Your registration is awaiting admin approval. You will be able to sign in once an administrator has approved it.",
+        );
+      } else if (message.includes("401") || message.toLowerCase().includes("invalid email or password")) {
         setErrorMessage("Invalid email or password.");
       } else if (message.includes("422") || message.toLowerCase().includes("validation")) {
         setErrorMessage("Please check the information entered.");

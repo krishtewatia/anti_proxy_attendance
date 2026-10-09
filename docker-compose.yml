@@ -84,6 +84,11 @@ services:
       DEMO_MODE: ${DEMO_MODE:-false}
       DEMO_CAMERA_ID: ${DEMO_CAMERA_ID:-CAM_ROOM_101_DOOR}
       UPLOADS_DIR: /data/uploads
+      # First administrator: used only when no administrator exists yet. There
+      # is no default; remove both from .env once the account has been created.
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      REGISTRATION_RATE_LIMIT_PER_MINUTE: ${REGISTRATION_RATE_LIMIT_PER_MINUTE:-5}
     ports:
       - "8000:8000"
     healthcheck:

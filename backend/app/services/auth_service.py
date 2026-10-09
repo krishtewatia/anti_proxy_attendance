@@ -8,6 +8,7 @@ from app.database.users import (
 )
 from app.schemas.auth import TokenResponse, UserCreate, UserResponse
 from app.security.jwt import create_access_token
+from app.core.account_status import ACCOUNT_APPROVED, ACCOUNT_PENDING, account_status
 from app.security.passwords import hash_password, verify_password
 from app.services.audit_service import record_audit_event
 
@@ -20,6 +21,10 @@ class AuthenticationError(Exception):
 
 class DuplicateUserError(Exception):
     """Raised when a user with the requested email already exists."""
+
+
+class AccountPendingError(Exception):
+    """The credentials are correct but an administrator has not approved the account yet."""
 
 
 async def register_user(user: UserCreate) -> UserResponse:
@@ -38,6 +43,8 @@ async def register_user(user: UserCreate) -> UserResponse:
             email=user.email,
             password_hash=password_hash,
             role=user.role,
+            # Public registration: nobody can log in until an administrator approves.
+            status=ACCOUNT_PENDING,
         )
     except DuplicateUserRecordError as exc:
         raise DuplicateUserError("A user with this email already exists") from exc
@@ -50,7 +57,7 @@ async def register_user(user: UserCreate) -> UserResponse:
             action="USER_REGISTERED",
             resource_type="USER",
             resource_id=created_user["user_id"],
-            metadata={"email": created_user["email"]},
+            metadata={"status": ACCOUNT_PENDING},
         )
     except Exception as exc:
         logger.error("Failed to record audit event for USER_REGISTERED: %s", exc)
@@ -78,6 +85,13 @@ async def authenticate_user(
 
     if not verify_password(password, user["password_hash"]):
         raise AuthenticationError("Invalid email or password")
+
+    # Checked only after the password, so the message cannot be used to find
+    # out whether an email is registered.
+    if account_status(user) != ACCOUNT_APPROVED:
+        raise AccountPendingError(
+            "Your registration is awaiting admin approval. You can log in once it has been approved."
+        )
 
     access_token = create_access_token(
         user_id=user["user_id"],

@@ -5,11 +5,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from app.api.dependencies.rate_limiter import check_registration_rate_limit
 from app.api.dependencies.auth import (
     get_current_user,
     require_student,
     require_teacher_or_admin,
 )
+from app.core.account_status import template_is_active
 from app.database.biometric_profiles import list_all_biometric_profiles
 from app.database.mongodb import get_database
 from app.database.users import get_all_users
@@ -20,7 +22,10 @@ from app.schemas.student import (
     StudentProfileResponse,
     StudentRegisterRequest,
 )
-from app.services.student_biometric_service import extract_and_register_student_photo
+from app.services.student_biometric_service import (
+    ENROLL_PENDING_CHANGE,
+    extract_and_register_student_photo,
+)
 from app.services.student_service import (
     DuplicateStudentProfileError,
     StudentAuthorizationError,
@@ -46,6 +51,7 @@ class PhotoUploadRequest(BaseModel):
     response_model=StudentProfileResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Self-service student account registration with academic profile and biometric photo",
+    dependencies=[Depends(check_registration_rate_limit)],
 )
 async def register_student_endpoint(
     payload: StudentRegisterRequest,
@@ -181,7 +187,12 @@ async def upload_student_photo_endpoint(
     payload: PhotoUploadRequest,
     current_user: Annotated[dict, Depends(require_student)],
 ) -> dict:
-    """Upload photo, run face detection & ArcFace embedding extraction, and update biometric gallery."""
+    """Upload a new photo. It is stored for an administrator to review.
+
+    The photo and face template in use stay as they are until the change is
+    approved. A student could otherwise replace their face with someone
+    else's and have that person marked present in their place.
+    """
     profile = await get_student_profile_response(current_user["user_id"])
     if not profile:
         raise HTTPException(
@@ -195,6 +206,7 @@ async def upload_student_photo_endpoint(
         enrolled_by=current_user["user_id"],
         student_name=profile.name,
         student_id=profile.student_id,
+        mode=ENROLL_PENDING_CHANGE,
     )
     if not ok:
         raise HTTPException(
@@ -202,20 +214,12 @@ async def upload_student_photo_endpoint(
             detail=msg,
         )
 
-    photo_url = f"/api/v1/students/{profile.student_id}/photo"
-    db = get_database()
-    await db["student_profiles"].update_one(
-        {"user_id": current_user["user_id"]},
-        {
-            "$set": {
-                "photo_base64": payload.photo_base64,
-                "photo_url": photo_url,
-                "has_biometric": True,
-            }
-        },
-    )
-
-    return {"status": "success", "message": msg, "has_biometric": True, "photo_url": photo_url}
+    return {
+        "status": "pending_review",
+        "message": msg,
+        "has_biometric": profile.has_biometric,
+        "photo_url": profile.photo_url,
+    }
 
 
 # --- Legacy Endpoints for Backward Compatibility ---
@@ -282,7 +286,8 @@ async def get_students_directory(
     current_user: Annotated[dict, Depends(require_teacher_or_admin)],
 ) -> list[dict]:
     """Returns directory of students with biometric status."""
-    student_users = await get_all_users(role="STUDENT")
+    # Registrations still waiting for approval are not students yet.
+    student_users = [u for u in await get_all_users(role="STUDENT") if u.get("status") != "PENDING"]
     bio_profiles = await list_all_biometric_profiles()
     db = get_database()
     student_profiles_cursor = db["student_profiles"].find({}, {"_id": 0})
@@ -310,6 +315,10 @@ async def get_students_directory(
 
     for bio in bio_profiles:
         ident = bio["identity"]
+        # A template still under review belongs to a registration (or a photo
+        # change) an administrator has not approved; it is not listed.
+        if not template_is_active(bio):
+            continue
         if ident in candidates:
             candidates[ident]["has_biometric"] = True
         else:

@@ -5,6 +5,7 @@ from mongomock_motor import AsyncMongoMockClient
 from app.database import mongodb
 from app.main import app
 from app.security.jwt import decode_access_token
+from tests.conftest import approve_account
 
 
 @pytest.fixture(autouse=True)
@@ -152,6 +153,16 @@ async def test_login_api_success():
         )
         assert reg_res.status_code == 201
         registered_id = reg_res.json()["user_id"]
+
+        # A new registration cannot log in until an administrator approves it
+        pending_res = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "login.user@example.com", "password": "correctSecretPassword123!"},
+        )
+        assert pending_res.status_code == 403
+        assert pending_res.json()["detail"]["code"] == "account_pending"
+        assert "awaiting admin approval" in pending_res.json()["detail"]["message"]
+        await approve_account(registered_id)
 
         # Login
         login_res = await client.post(

@@ -157,7 +157,9 @@ async def admin_create_student(
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> StudentProfileResponse:
     try:
-        return await register_student_account(payload, enrolled_by=current_user["user_id"])
+        return await register_student_account(
+            payload, enrolled_by=current_user["user_id"], approved=True
+        )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -224,7 +226,7 @@ async def admin_create_teacher(
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> TeacherProfileResponse:
     try:
-        return await register_teacher_account(payload)
+        return await register_teacher_account(payload, approved=True)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

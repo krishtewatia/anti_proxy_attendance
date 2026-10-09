@@ -21,6 +21,7 @@ from app.database.users import create_user
 from app.main import app
 from app.security.jwt import create_access_token
 from app.security.passwords import hash_password
+from tests.conftest import assign_teacher_classes
 
 
 @pytest.fixture(autouse=True)
@@ -57,6 +58,7 @@ async def test_cv_to_attendance_e2e_flow(register_test_camera):
         password_hash=hash_password("TeacherSecure2026!"),
         role="TEACHER",
     )
+    await assign_teacher_classes(teacher_id)
     token = create_access_token(user_id=teacher_id, role="TEACHER")
     auth_headers = {"Authorization": f"Bearer {token}"}
 
@@ -74,6 +76,7 @@ async def test_cv_to_attendance_e2e_flow(register_test_camera):
             json={
                 "course_name": "CS401 - Advanced Computer Vision",
                 "classroom_id": "ROOM_101",
+                "class_code": "DS-B",
                 "start_time": session_start,
                 "end_time": session_end,
                 "required_presence_percentage": 70.0,

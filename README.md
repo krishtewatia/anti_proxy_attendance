@@ -217,17 +217,20 @@ graph TD
 ```
 
 ### 1. Student Role
-- **Self-Service Registration**: Upload personal photograph, student ID, roll number, department, and section.
+- **Self-Service Registration**: Upload personal photograph, student ID, roll number, department, and section. The registration waits for an administrator's approval; until then the student cannot sign in and their face is not recognized.
+- **Photo Changes**: A new photo is stored for review. The photo in use stays in effect until an administrator approves the new one.
 - **Student Profile**: View official academic profile photo, department credentials, and biometric status.
 - **Attendance Analytics**: View aggregate attendance percentage, subject-wise attendance breakdown, and complete attendance history.
 
 ### 2. Teacher Role
-- **Assigned Classes**: Teachers can only start sessions for classes explicitly assigned to them by administrators.
+- **Registration**: A teacher can register, but cannot sign in until an administrator approves the account and assigns its classes.
+- **Assigned Classes**: Teachers can only start sessions for classes explicitly assigned to them by administrators. A session for any other class, or with no class, is refused.
 - **One-Click Attendance**: Initiate an attendance session with automatic student roster population (`ABSENT` by default).
 - **Live Recognition Feed**: Monitor recognized students in real time with audio-visual confirmation.
 - **Session Finalization & Export**: Finalize attendance records and download clean CSV reports (`<Course>_attendance_<session_id>.csv`).
 
 ### 3. Administrator Role
+- **Pending Approvals**: Review new student and teacher registrations and student photo changes. Approving a teacher assigns their classes; approving a student confirms their class. Rejecting removes everything the registration submitted. Registrations left untouched for 14 days are removed automatically.
 - **Student Directory**: View all registered students with profile photo thumbnails and biometric status.
 - **Teacher Assignment**: Assign specific branches and sections (`DS-B`, `CS-A`) and subjects to faculty members.
 - **Curriculum Management**: Create academic departments, classes, and subjects.
@@ -398,7 +401,18 @@ All four containers should report `healthy` or `Up`:
 The vision service and the frontend run only what their images contain, so after pulling new commits or switching branches start the stack with `--build` again. If `anti-proxy-vision-service` shows `Restarting`, its image is older than the code: rebuild it.
 
 ### 3. Create the Admin and Teacher Accounts
-Admin accounts cannot be created from the web portal, so bootstrap them once with the seed script. It needs `pymongo` and `bcrypt` on the machine you run it from:
+Admin accounts cannot be created from the web portal. There are two ways to create the first one.
+
+**Option A: from the environment (no seed data).** Set these two values in `.env`, start the stack, then remove them again:
+
+```bash
+BOOTSTRAP_ADMIN_EMAIL=you@example.edu
+BOOTSTRAP_ADMIN_PASSWORD=<at least 12 characters>
+```
+
+The backend creates that administrator at start-up only if no administrator exists yet. There is no default password, an existing administrator is never changed, and the backend logs a warning for as long as the two values are still set after the account exists. Sign in, then approve teachers and students from **Pending Approvals**.
+
+**Option B: the seed script (an admin, an approved teacher and the class catalog).** It needs `pymongo` and `bcrypt` on the machine you run it from:
 
 ```bash
 pip install pymongo bcrypt
@@ -461,7 +475,10 @@ Remove `--dry-run` to copy. Each photo is checked against the student it is name
 
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/auth/register` | Public | Register general user account |
+| `POST` | `/api/v1/auth/register` | Public, rate-limited | Register an account. It is `PENDING` until an administrator approves it |
+| `GET` | `/api/v1/admin/approvals` | Admin | Registrations and photo changes waiting for approval |
+| `POST` | `/api/v1/admin/approvals/{user_id}/approve` | Admin | Approve a registration (assign a teacher's classes, confirm a student's class) |
+| `POST` | `/api/v1/admin/approvals/{user_id}/reject` | Admin | Reject a registration and remove everything it submitted |
 | `POST` | `/api/v1/auth/login` | Public | Authenticate and obtain JWT access token |
 | `POST` | `/api/v1/students/register` | Public | Self-service student registration with photo & biometrics |
 | `GET` | `/api/v1/students/me` | Student | Get authenticated student's profile & attendance metrics |
@@ -576,10 +593,12 @@ By default it builds the images, starts a throwaway stack under a random Compose
 To check a running deployment instead (for example after a deploy):
 
 ```bash
-SMOKE_TEACHER_EMAIL=... SMOKE_TEACHER_PASSWORD=... python scripts/smoke_e2e.py --base-url https://your-host --photos /path/to/photos
+SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... python scripts/smoke_e2e.py --base-url https://your-host --photos /path/to/photos
 ```
 
-In that mode the script registers two smoke-test students once (`SMOKEA` and `SMOKEB`), reuses them on later runs, and creates one new session per run. Nothing is deleted. The exit code is 0 only if every check passes.
+Registrations need an administrator's approval, so the run needs an admin account to approve the teacher and students it registers. The throwaway stack creates its own. Against a deployment, supply an administrator as above; optionally add `SMOKE_TEACHER_EMAIL` and `SMOKE_TEACHER_PASSWORD` to reuse an approved teacher who is assigned the class given by `--class-code`.
+
+In that mode the script registers a smoke-test teacher per run and two smoke-test students once (`SMOKEA` and `SMOKEB`), reuses the students on later runs, and creates one new session per run. Nothing is deleted. The exit code is 0 only if every check passes.
 
 ---
 
@@ -642,7 +661,6 @@ The default stays `observe` until the threshold has been calibrated on a measure
 ## Known Limitations
 
 - **Single Active Session per Teacher**: Teachers are restricted to one active attendance session at a time.
-- **Teacher accounts can be self-registered (deferred by owner)**: anyone who can reach the API can register as a teacher, and a teacher with no assigned classes can create a session for any class and so see its roster and photos. Planned fix: admin-created teacher accounts, and sessions only for assigned classes. Details in [docs/security/security_and_privacy.md](docs/security/security_and_privacy.md#61-teacher-accounts-can-be-self-registered). It must be fixed before any deployment outside a local machine.
 - **Liveness is not yet enforced by default**: the gate runs in observe mode until its threshold is calibrated, so a held-up photo is logged but still marked unless `LIVENESS_MODE=enforce` is set. It has been measured on one person and one camera only.
 - **2D Facial Recognition**: The standard ArcFace pipeline uses 2D RGB frames without depth-sensing hardware; extreme angles or severe lighting variations can reduce match confidence.
 - **Client Processing**: Browser frame extraction frequency depends on the client machine's processing power.

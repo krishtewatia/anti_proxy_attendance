@@ -17,6 +17,7 @@ async def create_user(
     email: str,
     password_hash: str,
     role: str,
+    status: str = "APPROVED",
 ) -> dict:
     db = get_database()
     collection = db[USERS_COLLECTION]
@@ -26,6 +27,8 @@ async def create_user(
         "email": email.lower(),
         "password_hash": password_hash,
         "role": role,
+        # PENDING for public registrations until an administrator approves them.
+        "status": status,
         "is_active": True,
         "created_at": datetime.now(timezone.utc),
     }

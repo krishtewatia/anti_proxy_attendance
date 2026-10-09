@@ -15,6 +15,7 @@ from app.schemas.session import SessionCreate
 from app.security.jwt import create_access_token
 from app.security.passwords import hash_password
 from app.services.session_enrollment import enroll_session_roster
+from tests.conftest import assign_teacher_classes
 
 
 @pytest.fixture(autouse=True)
@@ -44,6 +45,7 @@ async def test_database_unique_email_constraint():
         password_hash=pw_hash,
         role="TEACHER",
     )
+    await assign_teacher_classes("user_email_1")
 
     # Second user directly inserted via repository with case variation
     with pytest.raises(DuplicateUserRecordError, match="already exists"):
@@ -65,12 +67,14 @@ async def ownership_context():
         password_hash=pw_hash,
         role="TEACHER",
     )
+    await assign_teacher_classes("teacher_a_id")
     teacher_b = await create_user(
         user_id="teacher_b_id",
         email="teacher_b@test.com",
         password_hash=pw_hash,
         role="TEACHER",
     )
+    await assign_teacher_classes("teacher_b_id")
     student = await create_user(
         user_id="student_id",
         email="student@test.com",
@@ -133,6 +137,7 @@ async def test_session_creation_assigns_authenticated_creator(ownership_context)
             json={
                 "course_name": "Cloud Computing",
                 "classroom_id": "ROOM_B",
+                "class_code": "DS-B",
                 "start_time": "2026-09-29T14:00:00Z",
                 "end_time": "2026-09-29T15:00:00Z",
                 "required_presence_percentage": 75.0,
@@ -382,6 +387,7 @@ async def test_list_sessions_ownership_matrix(ownership_context):
             json={
                 "course_name": "Machine Learning",
                 "classroom_id": "ROOM_ML",
+                "class_code": "DS-B",
                 "start_time": "2026-09-30T10:00:00Z",
                 "end_time": "2026-09-30T11:00:00Z",
                 "required_presence_percentage": 75.0,

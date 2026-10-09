@@ -174,14 +174,33 @@ async def get_students_by_class(
         query = {"branch": branch}
 
     cursor = db[STUDENT_PROFILES_COLLECTION].find(query, {"_id": 0}).sort("roll_number", 1)
-    return await cursor.to_list(length=None)
+    return await exclude_pending_students(await cursor.to_list(length=None))
+
+
+async def pending_user_ids() -> set[str]:
+    """User IDs of registrations an administrator has not approved yet."""
+    db = get_database()
+    cursor = db["users"].find({"status": "PENDING"}, {"user_id": 1})
+    return {doc["user_id"] async for doc in cursor}
+
+
+async def exclude_pending_students(students: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop students whose registration is still waiting for approval.
+
+    A pending student must not appear on a roster, in a class list or in a
+    directory: until approved they are not a student of the institution.
+    """
+    pending = await pending_user_ids()
+    if not pending:
+        return students
+    return [s for s in students if s.get("user_id") not in pending]
 
 
 async def list_all_students_full() -> list[dict[str, Any]]:
     """Retrieve all student profiles across all classes."""
     db = get_database()
     cursor = db[STUDENT_PROFILES_COLLECTION].find({}, {"_id": 0}).sort("name", 1)
-    return await cursor.to_list(length=None)
+    return await exclude_pending_students(await cursor.to_list(length=None))
 
 
 async def update_biometric_status(identity: str, has_biometric: bool) -> bool:

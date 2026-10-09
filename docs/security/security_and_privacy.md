@@ -55,7 +55,7 @@ flowchart LR
    - **`ADMIN`**: Can enroll students, view system audit logs, and register cameras. Cannot alter finalized attendance without audit logging.
    - **`TEACHER`**: Can schedule sessions, monitor live feeds, finalize attendance, and apply manual corrections. Cannot access raw biometric galleries.
    - **`STUDENT`**: Can only view personal attendance records.
-   > Teacher accounts are currently open to self-registration, which weakens the `TEACHER` boundary above. See [6.1](#61-teacher-accounts-can-be-self-registered).
+   - A new account of any role is `PENDING` until an administrator approves it, and a teacher's classes are assigned by an administrator. See [6.1](#61-teacher-accounts-could-be-self-registered).
 2. **Machine-to-Machine Isolation**:
    - Camera nodes authenticate via pre-shared service keys (`X-Camera-Token` or `Authorization: Bearer`).
    - Camera tokens grant access **exclusively** to the event ingestion endpoint (`POST /api/v1/events`). Camera tokens cannot access session records, user data, or administrative tools.
@@ -113,32 +113,23 @@ Instead of relying on a fragile, CPU-heavy neural liveness classifier, the syste
 
 Gaps that are known and not yet fixed. Each entry says who decided what, and what the fix will be.
 
-### 6.1 Teacher accounts can be self-registered
+### 6.1 Teacher accounts could be self-registered
 
-**Status: deferred by owner (2026-10-08). No code change yet.**
+**Status: fixed (2026-10-09).**
 
-**What the gap is**
-- `POST /api/v1/auth/register` accepts the role `TEACHER`, and `POST /api/v1/teachers/register` is public. Anyone who can reach the API can create a teacher account. (The role `ADMIN` cannot be self-registered.)
-- When a session is created, the "class must be assigned to you" check only applies to teachers who have assigned classes. A teacher with none can create a session for any class, and the session's roster is filled from that class.
+**What the gap was.** Anyone who could reach the API could register as a teacher and use the account at once, and a teacher with no assigned classes could create a session for any class. So an outsider could register, create a session for a class, and then see that class's roster, load its students' photos, and mark and export attendance.
 
-**What it allows**
-A person with no connection to the institution can register as a teacher, create a session for any class, and then:
-- see that class's roster (names, student IDs, roll numbers),
-- load the profile photo of every student on it, because "the student is on a roster of one of my sessions" is one of the rules that grants photo access,
-- mark, correct and finalize attendance for that session, and export it.
+**What closes it.**
+- **Every registration is `PENDING` until an administrator approves it.** Student, teacher and bare account registration stay public, but a pending account cannot log in (the login answers "awaiting admin approval", and only after the correct password, so the message cannot be used to probe for accounts) and a token issued for a pending account is refused.
+- **An administrator assigns a teacher's classes at approval.** Whatever the registration form asked for is kept only as a request.
+- **A teacher can create a session only for an assigned class.** No assigned classes, no class given, or a class that is not assigned: 403. Administrators are exempt.
+- **A teacher can add a registered student to a roster only from an assigned class.** Without this, a class-less roster edit would have been a way around the rule above.
+- **A pending student is not a student yet.** Their photo and face template are stored for the administrator to review, but the template is not served to the vision service, and they do not appear on rosters, class lists or directories.
+- **A photo change needs approval too.** An approved student who uploads a new photo keeps their current photo and template until an administrator approves the new one. Otherwise approval could be bypassed afterwards by swapping in someone else's face.
+- **Rejecting removes everything.** A rejected registration is purged with the same code as deleting a student (photo, template and all), leaving one audit entry with IDs only. No stub is kept, so the person can register again. A registration nobody acts on is purged the same way after 14 days.
+- **Public registration is rate-limited** per client address (5 per minute by default, across the three registration routes).
 
-Embeddings are not exposed by this: they are served only to an administrator and to the internal vision service.
-
-**What limits it today**
-- The system runs locally for demonstration; it is not deployed on a public network.
-- Session creation, corrections and finalization are written to the audit log with the teacher's user ID.
-
-**Planned fix**
-1. Teacher accounts are created only by an administrator. Remove `TEACHER` from the roles accepted by public registration and put `POST /api/v1/teachers/register` behind the admin role.
-2. A teacher can create a session only for a class assigned to them. A teacher with no assigned classes can create none.
-3. Tests for both, and the public-route allowlist in `backend/tests/test_photo_route_auth.py` shrinks by one entry.
-
-**Must be fixed before** the system is deployed anywhere reachable by people outside the project (the AWS deployment phase).
+**What remains.** Approval is a human check: it is as good as the administrator's attention. The first administrator is created from two environment variables with no default password, and must be removed from the environment afterwards (the backend warns while they are still set).
 
 ### 6.2 Deleting a student did not remove everything
 

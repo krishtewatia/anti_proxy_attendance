@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.dependencies.rate_limiter import check_registration_rate_limit
 from app.api.dependencies.auth import require_teacher
 from app.schemas.teacher import (
     TeacherDashboardResponse,
@@ -28,6 +29,7 @@ router = APIRouter(
     response_model=TeacherProfileResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new teacher account",
+    dependencies=[Depends(check_registration_rate_limit)],
 )
 async def register_teacher_endpoint(
     payload: TeacherRegisterRequest,

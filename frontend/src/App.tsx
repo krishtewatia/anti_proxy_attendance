@@ -15,6 +15,8 @@ export function App() {
     auth.getStoredUser()
   );
   const [activeNavId, setActiveNavId] = useState<string>("dashboard");
+  // Registrations and photo changes waiting for an administrator (admin badge).
+  const [pendingApprovals, setPendingApprovals] = useState<number>(0);
   const [currentPath, setCurrentPath] = useState<string>(() => {
     if (typeof window !== "undefined") {
       return window.location.pathname || "/";
@@ -170,12 +172,14 @@ export function App() {
             onLogout={handleLogout}
             activeNavId={activeNavId}
             onSelectNav={handleNavSelect}
+            navBadges={{ approvals: pendingApprovals }}
           >
             <AdminDashboard
               user={currentUser}
               onLogout={handleLogout}
               onNavigate={navigate}
               activeNavId={activeNavId}
+              onPendingCountChange={setPendingApprovals}
             />
           </AppLayout>
         )}

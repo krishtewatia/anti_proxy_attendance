@@ -12,6 +12,7 @@ from app.api.dependencies.rate_limiter import (
     frame_session_rate_limiter,
     frame_teacher_rate_limiter,
 )
+from app.core.account_status import template_is_active
 from app.core.config import settings
 from app.database.attendance import (
     get_attendance_by_session,
@@ -82,11 +83,27 @@ async def get_vision_gallery_endpoint():
     student_map = await _resolve_student_info(db)
     cursor = db["biometric_profiles"].find({})
     bio_docs = await cursor.to_list(length=None)
+    # A face is recognizable only once an administrator has approved both the
+    # account and the template (a registration or photo change under review
+    # is never served).
+    pending_users = {
+        doc["user_id"] async for doc in db["users"].find({"status": "PENDING"}, {"user_id": 1})
+    }
+    pending_identities: set[str] = set()
+    if pending_users:
+        async for prof in db["student_profiles"].find(
+            {"user_id": {"$in": sorted(pending_users)}}, {"identity": 1, "student_id": 1}
+        ):
+            pending_identities.update(
+                str(v) for v in (prof.get("identity"), prof.get("student_id")) if v
+            )
     items = []
     for doc in bio_docs:
         ident = doc.get("identity")
         emb = doc.get("mean_embedding")
         if not ident or not emb:
+            continue
+        if not template_is_active(doc) or ident in pending_identities:
             continue
         s_info = student_map.get(ident, {})
         items.append(

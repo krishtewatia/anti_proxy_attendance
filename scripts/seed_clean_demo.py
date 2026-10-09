@@ -278,6 +278,7 @@ def seed_database(
         "password_hash": admin_hash,
         "role": "ADMIN",
         "is_active": True,
+        "status": "APPROVED",
         "created_at": now,
         "updated_at": now,
     }
@@ -292,6 +293,7 @@ def seed_database(
         "password_hash": teacher_hash,
         "role": "TEACHER",
         "is_active": True,
+        "status": "APPROVED",
         "created_at": now,
         "updated_at": now,
     }
@@ -343,6 +345,7 @@ def seed_database(
                 "password_hash": student_hash,
                 "role": "STUDENT",
                 "is_active": True,
+                "status": "APPROVED",
                 "created_at": now,
                 "updated_at": now,
             }
@@ -375,6 +378,8 @@ def seed_database(
                 "sample_count": sample_count,
                 "quality_score": 0.95,
                 "status": "ENROLLED",
+                # Seeded templates are live: the seeded students are approved.
+                "review_status": "ACTIVE",
                 "enrolled_by": TEACHER_USER_ID,
                 "created_at": now,
                 "updated_at": now,

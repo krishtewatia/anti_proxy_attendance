@@ -46,6 +46,11 @@ class Settings:
     # Frame path protection (browser -> backend -> vision service)
     FRAME_MAX_BYTES: int = int(os.getenv("FRAME_MAX_BYTES", str(5 * 1024 * 1024)))
     FRAME_RATE_LIMIT_PER_MINUTE: int = int(os.getenv("FRAME_RATE_LIMIT_PER_MINUTE", "300"))
+    # Public registration: requests per client address per minute, across the
+    # three registration routes together.
+    REGISTRATION_RATE_LIMIT_PER_MINUTE: int = int(
+        os.getenv("REGISTRATION_RATE_LIMIT_PER_MINUTE", "5")
+    )
     TEACHER_FRAME_RATE_LIMIT_PER_MINUTE: int = int(
         os.getenv("TEACHER_FRAME_RATE_LIMIT_PER_MINUTE", "600")
     )

@@ -42,6 +42,7 @@ BACKEND_VENV_PYTHON = BACKEND_ROOT / ".venv" / "Scripts" / "python.exe"
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
+from backend_accounts import TEST_CLASS_CODE, add_bootstrap_admin, approved_teacher_headers
 from camera.base import VideoFrame, VideoSourceType
 from events.event_dispatcher import EventDispatcher
 from pipeline.live_cv_pipeline import (
@@ -75,6 +76,7 @@ class TestCVFastAPIE2E(unittest.TestCase):
         env["PORT"] = "8123"
         env["PYTHONPATH"] = str(BACKEND_ROOT)
         env["VISION_SERVICE_API_KEY"] = TEST_SERVICE_KEY
+        admin_email, admin_password = add_bootstrap_admin(env)
 
         cmd = [
             str(BACKEND_VENV_PYTHON),
@@ -111,33 +113,14 @@ class TestCVFastAPIE2E(unittest.TestCase):
             cls.tearDownClass()
             raise RuntimeError("Backend failed to start on port 8123 within 15 seconds.")
 
-        # 1. Register teacher and obtain bearer token
-        teacher_email = f"teacher.cv.e2e.{time.time_ns()}@university.edu"
-        user_payload = {
-            "email": teacher_email,
-            "password": "TeacherPassword2026!",
-            "role": "TEACHER",
-        }
-        reg_resp = requests.post(f"{cls.backend_url}/api/v1/auth/register", json=user_payload, timeout=3.0)
-        if reg_resp.status_code not in (201, 409):
-            raise RuntimeError(f"Teacher registration failed: {reg_resp.status_code} {reg_resp.text}")
-
-        login_resp = requests.post(
-            f"{cls.backend_url}/api/v1/auth/login",
-            json={"email": teacher_email, "password": "TeacherPassword2026!"},
-            timeout=3.0,
-        )
-        if login_resp.status_code != 200:
-            raise RuntimeError(f"Teacher login failed: {login_resp.status_code} {login_resp.text}")
-
-        token_data = login_resp.json()
-        token = token_data["access_token"]
-        cls.auth_headers = {"Authorization": f"Bearer {token}"}
+        # 1. A teacher the administrator has approved for the test class
+        cls.auth_headers = approved_teacher_headers(cls.backend_url, admin_email, admin_password)
 
         # 2. Create session in ROOM_101
         session_payload = {
             "course_name": "CS401 - Advanced Computer Vision",
             "classroom_id": "ROOM_101",
+            "class_code": TEST_CLASS_CODE,
             "start_time": "2026-10-20T10:00:00Z",
             "end_time": "2026-10-20T11:00:00Z",
             "required_presence_percentage": 70.0,

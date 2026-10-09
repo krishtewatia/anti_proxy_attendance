@@ -26,7 +26,7 @@ import httpx
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.config import settings
-from app.core.uploads import student_photo_path
+from app.core.uploads import pending_photo_path, student_photo_path
 from app.services.audit_service import record_audit_event
 from app.services.vision_client import vision_service_headers
 
@@ -142,6 +142,16 @@ async def delete_student_completely(
         )
 
     photos = _delete_photo_files(keys)
+    if key_list:
+        await db["photo_change_requests"].delete_many({"identity": {"$in": key_list}})
+        for key in key_list:
+            try:
+                waiting = pending_photo_path(key)
+                if waiting.is_file():
+                    waiting.unlink()
+                    photos += 1
+            except (ValueError, OSError):
+                pass
     profile_deleted = (
         await db["student_profiles"].delete_one({"user_id": user_id})
     ).deleted_count > 0

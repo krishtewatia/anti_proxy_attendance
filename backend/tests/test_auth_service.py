@@ -8,6 +8,7 @@ from app.database.users import create_user, get_user_by_email
 from app.schemas.auth import UserCreate
 from app.security.jwt import decode_access_token
 from app.security.passwords import hash_password, verify_password
+from tests.conftest import approve_account
 from app.services.auth_service import (
     AuthenticationError,
     DuplicateUserError,
@@ -92,6 +93,7 @@ async def test_authenticate_user_success():
         role="TEACHER",
     )
     registered = await register_user(req)
+    await approve_account(registered.user_id)
 
     token_res = await authenticate_user(
         email="AUTH.USER@example.com",

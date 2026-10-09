@@ -1,4 +1,6 @@
+import asyncio
 from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI
 
 from app.api.routes import events_router
@@ -10,6 +12,7 @@ from app.api.routes.session_roster import router as session_roster_router
 from app.api.routes.session_finalization import (
     router as session_finalization_router,
 )
+from app.api.routes.approvals import router as approvals_router
 from app.api.routes.audit import router as audit_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.enrollment import router as enrollment_router
@@ -26,6 +29,8 @@ from app.database.academic import seed_academic_data_if_empty
 from app.core.config import settings
 from app.core.logging_security import setup_security_logging
 from app.core.uploads import resolve_uploads_root
+from app.services.account_bootstrap import bootstrap_first_admin, migrate_account_status
+from app.services.approval_service import purge_stale_registrations
 from app.security.config import (
     JWT_SECRET_KEY,
     is_insecure_recognition_key_allowed,
@@ -64,9 +69,32 @@ async def lifespan(app: FastAPI):
         await seed_academic_data_if_empty()
     except Exception:
         pass
+
+    # Accounts: mark records that predate approval, create the first
+    # administrator if asked to, and clear out registrations nobody acted on.
+    db = get_database()
+    await migrate_account_status(db)
+    await bootstrap_first_admin(db)
+    purge_task = asyncio.create_task(_purge_stale_registrations_periodically())
     yield
+    purge_task.cancel()
     # Shutdown: close active client connection
     close_client()
+
+
+STALE_REGISTRATION_CHECK_SECONDS = 6 * 60 * 60
+
+
+async def _purge_stale_registrations_periodically() -> None:
+    """Remove registrations left PENDING for more than 14 days, now and every few hours."""
+    while True:
+        try:
+            await purge_stale_registrations(get_database())
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.getLogger(__name__).exception("Stale registration purge failed")
+        await asyncio.sleep(STALE_REGISTRATION_CHECK_SECONDS)
 
 
 from fastapi import FastAPI, Request, status
@@ -112,6 +140,7 @@ async def enforce_payload_size_limit(request: Request, call_next):
 # Register API v1 routes
 app.include_router(events_router, prefix="/api/v1")
 app.include_router(attendance_router)
+app.include_router(approvals_router)
 app.include_router(attendance_corrections_router)
 app.include_router(session_roster_router)
 app.include_router(session_finalization_router)
