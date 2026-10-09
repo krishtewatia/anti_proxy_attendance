@@ -822,6 +822,7 @@ def main() -> int:
         }
         if args.liveness_threshold:
             env["SMOKE_LIVENESS_THRESHOLD"] = args.liveness_threshold
+        base_url = ""
         try:
             base_url = start_throwaway_stack(project, env, build=not args.no_build)
             check_liveness_model_in_image(project, env, checks)
@@ -844,8 +845,7 @@ def main() -> int:
                 # This stack and its generated administrator exist only until it is
                 # removed, so the credentials are shown for running other checks
                 # against it (for example the frontend's live suites).
-                kept_url = locals().get("base_url", "(not started)")
-                print(f"Stack '{project}' left running (--keep) at {kept_url}")
+                print(f"Stack '{project}' left running (--keep) at {base_url or '(not started)'}")
                 print(f"  administrator: {admin_email} / {admin_password}")
                 print(f"  service key  : {service_key}")
                 print("Remove it with:")

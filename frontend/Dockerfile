@@ -24,6 +24,11 @@ RUN npm run build
 # ------------------------------------------------------------------------------
 FROM nginxinc/nginx-unprivileged:1.30-alpine AS runtime
 
+# Pick up fixed versions of base-image packages that have known HIGH/CRITICAL
+# vulnerabilities (the container scan fails on any that has a fix available).
+USER root
+RUN apk upgrade --no-cache
+
 # Copy custom Nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
