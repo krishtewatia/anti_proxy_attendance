@@ -9,7 +9,7 @@ PYTHON ?= python
 TF := $(PYTHON) infra/scripts/tf.py
 SECRETS := $(PYTHON) infra/scripts/manage_secrets.py
 
-.PHONY: help up stop start status plan logs destroy secrets secrets-list secrets-remove-bootstrap sweep
+.PHONY: help up stop start status plan logs deploy github-vars destroy secrets secrets-list secrets-remove-bootstrap sweep
 
 help:
 	@echo "make up       create or update the deployment (asks before changing anything)"
@@ -18,6 +18,8 @@ help:
 	@echo "make status   what exists and whether it is running"
 	@echo "make plan     show what 'make up' would change, change nothing"
 	@echo "make logs     start-up log and container list from the instance"
+	@echo "make deploy   switch the running instance to the current origin/main"
+	@echo "make github-vars  print the repository variables the deploy pipeline needs"
 	@echo "make destroy  remove everything, including the stored secrets"
 	@echo "make secrets  create any missing secret in SSM Parameter Store"
 	@echo "make secrets-list              names and dates of the stored secrets"
@@ -59,3 +61,9 @@ secrets-remove-bootstrap:
 
 sweep:
 	$(PYTHON) infra/scripts/sweep.py
+
+deploy:
+	$(TF) deploy
+
+github-vars:
+	$(TF) github-vars

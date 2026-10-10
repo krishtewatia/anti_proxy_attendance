@@ -7,6 +7,8 @@
     python infra/scripts/tf.py status    what exists and whether the site answers
     python infra/scripts/tf.py plan      show what `up` would change, change nothing
     python infra/scripts/tf.py logs      last lines of the start-up log and the container list
+    python infra/scripts/tf.py deploy    switch the running instance to the current origin/main
+    python infra/scripts/tf.py github-vars   the repository variables the deploy pipeline needs
     python infra/scripts/tf.py destroy   remove everything, including the secrets
 
 `up` and `destroy` show Terraform's plan and ask before changing anything.
@@ -132,21 +134,27 @@ def show_logs() -> int:
     out = outputs()
     if not out.get("instance_id"):
         fail("nothing has been created yet.")
+    commands = [
+        "journalctl --unit antiproxy --no-pager --lines 40",
+        "docker ps --all --format 'table {{.Names}} {{.Status}}'",
+        "docker stats --no-stream --format 'table {{.Name}} {{.MemUsage}}'",
+        "free -m | head -3",
+    ]
+    return run_on_instance(out, "AWS-RunShellScript", {"commands": commands}, wait_seconds=60)
+
+
+def run_on_instance(out: dict[str, str], document: str, parameters: dict, *, wait_seconds: int) -> int:
+    """Run an SSM document on the instance and print what it printed."""
     region = out.get("aws_region")
     sent = aws(
         "ssm", "send-command",
         "--instance-ids", out["instance_id"],
-        "--document-name", "AWS-RunShellScript",
-        "--parameters",
-        json.dumps({"commands": [
-            "journalctl --unit antiproxy --no-pager --lines 40",
-            "docker ps --all --format 'table {{.Names}}	{{.Status}}'",
-            "free -m | head -3",
-        ]}),
+        "--document-name", document,
+        "--parameters", json.dumps(parameters),
         region=region,
     )
     command_id = json.loads(sent.stdout)["Command"]["CommandId"]
-    for _ in range(30):
+    for _ in range(max(1, wait_seconds // 2)):
         time.sleep(2)
         result = aws(
             "ssm", "get-command-invocation",
@@ -181,7 +189,7 @@ def bring_up(*, auto_approve: bool) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["up", "stop", "start", "status", "plan", "logs", "destroy"])
+    parser.add_argument("command", choices=["up", "stop", "start", "status", "plan", "logs", "deploy", "github-vars", "destroy"])
     command = parser.parse_args().command
     prepare()
 
@@ -227,6 +235,30 @@ def main() -> int:
 
     if command == "logs":
         return show_logs()
+
+    if command == "deploy":
+        out = outputs()
+        if not out.get("instance_id"):
+            fail("nothing has been created yet.")
+        sha = release_sha()
+        print(f"Deploying {sha} ...")
+        return run_on_instance(out, out["deploy_document"], {"ReleaseSha": [sha]}, wait_seconds=900)
+
+    if command == "github-vars":
+        out = outputs()
+        if not out.get("deploy_role_arn"):
+            fail("nothing has been created yet.")
+        print("Repository variables for the deploy pipeline (none of them is a secret):\n")
+        for name, value in (
+            ("AWS_DEPLOY_ROLE_ARN", out["deploy_role_arn"]),
+            ("AWS_REGION", out["aws_region"]),
+            ("AWS_INSTANCE_ID", out["instance_id"]),
+            ("AWS_DEPLOY_DOCUMENT", out["deploy_document"]),
+            ("SITE_URL", out["site_url"]),
+        ):
+            print(f'gh variable set {name} --body "{value}"')
+        print("\nTo switch automatic deployment off again:  gh variable delete AWS_DEPLOY_ROLE_ARN")
+        return 0
 
     if command == "destroy":
         before = outputs()
