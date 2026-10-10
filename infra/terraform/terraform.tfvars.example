@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (ignored by git) and fill in. Nothing here is secret.
+
+# "on_demand": started and stopped by hand, and stopped automatically every night.
+# "always_on": runs until stopped by hand.
+run_mode = "on_demand"
+
+site_host = "your-subdomain.duckdns.org"
+
+# Atlas console -> Organization Settings -> Organization ID
+atlas_org_id = "000000000000000000000000"
+
+# Trial runs: uncomment to use Let's Encrypt's staging service, whose
+# certificates browsers do not trust but which has no weekly limit.
+# acme_ca = "https://acme-staging-v02.api.letsencrypt.org/directory"

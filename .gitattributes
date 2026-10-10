@@ -1,0 +1,4 @@
+# Files that run on Linux must keep LF line endings on every checkout.
+*.sh text eol=lf
+infra/terraform/files/* text eol=lf
+docker/Caddyfile text eol=lf

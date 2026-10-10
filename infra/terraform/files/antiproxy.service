@@ -1,0 +1,17 @@
+[Unit]
+Description=Anti-Proxy Attendance System (Docker Compose stack)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/antiproxy/start.sh
+# Secrets not written yet, or the network not ready: try again.
+Restart=on-failure
+RestartSec=60
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target
