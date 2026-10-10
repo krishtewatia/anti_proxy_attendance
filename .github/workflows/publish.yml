@@ -3,6 +3,7 @@ name: Publish Images
 # Builds the three service images from main and pushes them to GitHub Container
 # Registry, but only after every required check has passed for that commit.
 # The images hold no secrets, no student data and no face gallery.
+# When a deployment exists, the same run then deploys them and checks the site.
 
 on:
   push:
@@ -128,3 +129,84 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  # ============================================================================
+  # 3. Deploy the new images, then check the site from outside
+  #
+  # Runs only when the deployment exists (repository variable
+  # AWS_DEPLOY_ROLE_ARN is set). No AWS key is stored anywhere: the job proves
+  # its identity to AWS with a short-lived GitHub token (OIDC), and the role it
+  # receives can only run one fixed deploy command on the one instance.
+  # ============================================================================
+  deploy:
+    name: Deploy And Check
+    needs: publish
+    if: vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      INSTANCE_ID: ${{ vars.AWS_INSTANCE_ID }}
+      DEPLOY_DOCUMENT: ${{ vars.AWS_DEPLOY_DOCUMENT }}
+      SITE_URL: ${{ vars.SITE_URL }}
+      RELEASE: ${{ github.sha }}
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Get short-lived AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-deploy-${{ github.run_id }}
+
+      # In on-demand mode the instance is often stopped. That is not a failure:
+      # it starts the release it was last given, and `make deploy` brings it
+      # up to date.
+      - name: Is the instance running?
+        id: instance
+        run: |
+          state=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].State.Name' --output text)
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          if [ "$state" != "running" ]; then
+            echo "::notice::The instance is $state, so nothing was deployed. Run 'make deploy' after starting it."
+          fi
+
+      - name: Deploy this commit
+        if: steps.instance.outputs.state == 'running'
+        run: |
+          command_id=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "$DEPLOY_DOCUMENT" \
+            --parameters "ReleaseSha=$RELEASE" \
+            --query 'Command.CommandId' --output text)
+          for attempt in $(seq 1 90); do
+            sleep 10
+            status=$(aws ssm get-command-invocation --command-id "$command_id" \
+              --instance-id "$INSTANCE_ID" --query 'Status' --output text 2>/dev/null || echo Pending)
+            case "$status" in
+              Success|Failed|TimedOut|Cancelled) break ;;
+            esac
+          done
+          # The deploy script prints release ids and container states, never a secret.
+          aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+            --query 'StandardOutputContent' --output text | tail -n 40
+          if [ "$status" != "Success" ]; then
+            aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+              --query 'StandardErrorContent' --output text | tail -n 40
+            echo "Deploy ended with status: $status"
+            exit 1
+          fi
+
+      # Needs no photos, no account and no secret, and creates nothing on the site.
+      - name: Check the site from outside
+        if: steps.instance.outputs.state == 'running'
+        run: python3 scripts/smoke_e2e.py --base-url "$SITE_URL" --checks-only

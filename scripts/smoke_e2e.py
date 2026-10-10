@@ -46,6 +46,13 @@ of photos of a printed or on-screen face; default
 checks that a spoof is blocked and nobody is marked for it. That check is
 skipped unless the stack enforces liveness.
 
+``--checks-only`` (with ``--base-url``) is the check a deployment pipeline can
+run: it needs no photos, no account and no secret, creates nothing on the
+deployment, and verifies what is visible from outside: the site and its
+health check answer over HTTPS, plain HTTP is redirected, protected routes
+refuse a request without a token, removed routes stay removed, and none of
+the internal ports is reachable.
+
 ``--prod-rehearsal`` starts the throwaway stack from the production Compose
 file instead (``docker-compose.prod.yml`` with
 ``docker/docker-compose.prod.rehearsal.yml``): every request goes through
@@ -66,6 +73,7 @@ import os
 from pathlib import Path
 import secrets
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -315,6 +323,108 @@ def stop_throwaway_stack(project: str, env: dict[str, str], show_logs: bool) -> 
         print("\n----- last container log lines -----\n" + (logs.stdout or ""), flush=True)
     compose(project, env, "down", "-v", "--remove-orphans", capture=True)
     print(f"Throwaway stack '{project}' removed.", flush=True)
+
+
+# ------------------------------------------------------------------ outside view
+
+
+def port_open(host: str, port: int) -> bool:
+    sock = socket.socket()
+    sock.settimeout(3)
+    try:
+        return sock.connect_ex((host, port)) == 0
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+
+def run_outside_checks(api: Api, checks: Checks) -> None:
+    """What anybody on the internet can see of a deployment. Creates nothing."""
+    parts = urllib.parse.urlsplit(api.base_url)
+    host = parts.hostname or ""
+
+    for _ in range(30):
+        if api.call("GET", "/health", timeout=10)[0] == 200:
+            break
+        time.sleep(5)
+    if not checks.check(
+        "the health check answers", api.call("GET", "/health", timeout=10)[0] == 200
+    ):
+        return
+    status, _ = api.call("GET", "/", raw=True)
+    checks.check("the web application is served", status == 200, status)
+
+    if parts.scheme == "https":
+        # The certificate was verified by the calls above; now the plain-HTTP side.
+        conn = http.client.HTTPConnection(host, 80, timeout=10)
+        try:
+            conn.request("GET", "/health")
+            response = conn.getresponse()
+            location = response.getheader("Location", "")
+            redirected = response.status in (301, 302, 307, 308) and location.startswith("https://")
+            checks.check("plain HTTP is redirected to HTTPS", redirected, response.status)
+        except OSError as exc:
+            checks.check("plain HTTP is redirected to HTTPS", False, type(exc).__name__)
+        finally:
+            conn.close()
+        # Certificates are verified (explicit default context); the rule named
+        # here is about Python 2.
+        # nosemgrep: python.lang.security.audit.httpsconnection-detected.httpsconnection-detected
+        conn = http.client.HTTPSConnection(
+            host, parts.port, timeout=10, context=ssl.create_default_context()
+        )
+        try:
+            conn.request("GET", "/health")
+            hsts = conn.getresponse().getheader("Strict-Transport-Security", "")
+            checks.check(
+                "HTTPS responses carry Strict-Transport-Security", "max-age=" in hsts, hsts[:40]
+            )
+        except OSError as exc:
+            checks.check(
+                "HTTPS responses carry Strict-Transport-Security", False, type(exc).__name__
+            )
+        finally:
+            conn.close()
+    else:
+        checks.skip("plain HTTP is redirected to HTTPS", "the base URL is not https")
+        checks.skip("HTTPS responses carry Strict-Transport-Security", "the base URL is not https")
+
+    for path in (
+        "/api/v1/admin/sessions",
+        "/api/v1/admin/reports/summary",
+        "/api/v1/students/dashboard",
+        "/api/v1/teachers/dashboard",
+        "/api/v1/attendance/any-session",
+        "/api/v1/attendance/any-session/export",
+        "/api/v1/students/any-student/photo",
+        "/api/v1/sessions",
+    ):
+        status, _ = api.call("GET", path)
+        checks.check(f"{path} without a token is rejected", status in (401, 403), status)
+
+    status, _ = api.post_json(
+        "/api/v1/auth/login", {"email": "nobody@smoke.invalid", "password": "not-a-real-password"}
+    )
+    checks.check("a wrong sign-in is rejected (401)", status == 401, status)
+
+    status, _ = api.call("GET", "/api/v1/attendance/vision-gallery")
+    checks.check("/vision-gallery without the service key is rejected (401)", status == 401, status)
+    status, _ = api.post_json("/api/v1/attendance/mark", {})
+    checks.check("removed route /api/v1/attendance/mark is gone", status in (404, 405), status)
+    status, _ = api.call("GET", "/uploads/student_profiles/anything.jpg", raw=True)
+    checks.check("photos are not served as static files (404)", status == 404, status)
+
+    for port, what in (
+        (8000, "backend"),
+        (8080, "frontend"),
+        (8088, "vision service"),
+        (27017, "database"),
+        (22, "SSH"),
+    ):
+        checks.check(
+            f"the {what} port ({port}) is not reachable from here", not port_open(host, port)
+        )
 
 
 # ------------------------------------------------------------------ the flow
@@ -874,7 +984,27 @@ def main() -> int:
         default=240,
         help="Seconds to wait for the first successful recognition (model loading)",
     )
+    parser.add_argument(
+        "--checks-only",
+        action="store_true",
+        help="With --base-url: only the checks that need no photos, no account and no secret "
+        "(what a deployment pipeline runs). Creates nothing on the deployment",
+    )
     args = parser.parse_args()
+
+    if args.checks_only:
+        if not args.base_url:
+            print("ERROR: --checks-only needs --base-url.", file=sys.stderr)
+            return 2
+        try:
+            deployed = Api(args.base_url)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        outside = Checks()
+        run_outside_checks(deployed, outside)
+        print(f"\n{outside.passed} passed, {outside.failed} failed, {outside.skipped} skipped")
+        return 0 if outside.failed == 0 else 1
 
     photos_arg = args.photos
     if not photos_arg and os.environ.get("VISION_FIXTURES_DIR"):

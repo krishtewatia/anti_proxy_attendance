@@ -19,6 +19,7 @@ Paid plan.
 | AWS | EC2 `t3.small`, 20 GB encrypted gp3 volume, auto-assigned public address | credits |
 | AWS | IAM role for the instance: Systems Manager, and read its own parameters | free |
 | AWS | Nightly automatic stop (`on_demand` mode only) | free |
+| AWS | GitHub OIDC provider, deploy role, deploy command document | free |
 | AWS | SSM Parameter Store SecureString parameters (by `make secrets`, not Terraform) | free |
 | Atlas | Project, M0 cluster in Mumbai, access list with the instance's address | free |
 
@@ -147,6 +148,43 @@ make logs      # start-up log, container states, memory
 ```
 
 After `make start` the same URL works again within a few minutes.
+
+## Automatic deployment from GitHub
+
+After every merge to `main` the *Publish Images* workflow waits for the ten
+required checks, pushes the images, and then, if the deployment exists,
+deploys that commit and checks the site.
+
+- No AWS key is stored in GitHub. The job proves its identity with a
+  short-lived GitHub token (OIDC). AWS accepts it only from workflows on this
+  repository's `main` branch.
+- The role it receives can do one thing: run the `antiproxy-prod-deploy`
+  document on the one instance. That document takes a full commit id and runs
+  `/opt/antiproxy/deploy.sh` with it; it cannot run anything else.
+- If the instance is stopped, the job says so and ends successfully.
+- The check afterwards is `scripts/smoke_e2e.py --base-url <site> --checks-only`:
+  it needs no photos, no account and no secret, and creates nothing on the
+  site. The full flow with face photos is run from a laptop:
+
+  ```bash
+  SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=...     python scripts/smoke_e2e.py --base-url https://<site_host> --photos /path/to/photos
+  ```
+
+  That run leaves two smoke-test students and a session behind; use it before
+  real data is entered, or delete them afterwards from the admin panel.
+
+Switch it on once the deployment exists:
+
+```bash
+make github-vars
+```
+
+prints five `gh variable set ...` commands (role ARN, region, instance id,
+document name, site URL; none is a secret). Run them. To switch automatic
+deployment off: `gh variable delete AWS_DEPLOY_ROLE_ARN`.
+
+`make deploy` deploys the current `origin/main` by hand, for example after
+`make start` when merges happened while the instance was stopped.
 
 ## After the evaluation
 
