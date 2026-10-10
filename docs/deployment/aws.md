@@ -20,6 +20,8 @@ Paid plan.
 | AWS | IAM role for the instance: Systems Manager, and read its own parameters | free |
 | AWS | Nightly automatic stop (`on_demand` mode only) | free |
 | AWS | GitHub OIDC provider, deploy role, deploy command document | free |
+| AWS | Private S3 bucket for backups (encrypted, 14-day expiry) | cents, from credits |
+| AWS | Two budgets with email alerts | free |
 | AWS | SSM Parameter Store SecureString parameters (by `make secrets`, not Terraform) | free |
 | Atlas | Project, M0 cluster in Mumbai, access list with the instance's address | free |
 
@@ -185,6 +187,50 @@ deployment off: `gh variable delete AWS_DEPLOY_ROLE_ARN`.
 
 `make deploy` deploys the current `origin/main` by hand, for example after
 `make start` when merges happened while the instance was stopped.
+
+## Backups
+
+The Atlas free tier has no backups, so the instance makes its own every day
+at 21:00 India time (or at the next start if it was stopped then): a
+`mongodump` of the database and an archive of the uploaded photos, copied to
+a private S3 bucket.
+
+- The bucket blocks all public access, accepts TLS only, encrypts everything
+  at rest and deletes anything older than 14 days. The photos are biometric
+  data; they leave the instance only for this bucket.
+- The instance can add backups but cannot read, list or delete them.
+- The database address reaches `mongodump` through a root-only file in
+  memory, never on a command line.
+
+`make backup` takes one immediately and lists what is stored.
+
+To restore (from the managing machine, with the Atlas access list
+temporarily allowing its address):
+
+```bash
+aws s3 cp s3://<backup_bucket>/<timestamp>/database.archive.gz .
+mongorestore --uri "<connection string>" --archive=database.archive.gz --gzip --drop
+```
+
+The photos archive unpacks into the `anti_proxy_uploads` Docker volume on the
+instance. Rehearse a restore once before real data is entered.
+
+## Alerts
+
+Two budgets email `alert_email`:
+
+| Budget | Alerts |
+|---|---|
+| Credit use (usage at list price, before credits) | at $25, $50 and $75 |
+| Actual spend (after credits) | at $1, actual or forecast |
+
+On a Free plan the second cannot fire, because nothing is charged; it is
+there in case the plan ever changes. The first is the one to watch: when the
+credits run out, a Free plan account is closed.
+
+One more alert is a console setting, not Terraform: Billing and Cost
+Management → Billing preferences → Alert preferences → turn on
+**AWS Free Tier alerts**.
 
 ## After the evaluation
 

@@ -1,0 +1,10 @@
+[Unit]
+Description=Anti-Proxy Attendance System backup (database dump and uploaded photos)
+After=antiproxy.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# After a start the database first has to accept this instance's new address.
+ExecStartPre=/bin/sleep 300
+ExecStart=/opt/antiproxy/backup.sh

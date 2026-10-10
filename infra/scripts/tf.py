@@ -8,6 +8,7 @@
     python infra/scripts/tf.py plan      show what `up` would change, change nothing
     python infra/scripts/tf.py logs      last lines of the start-up log and the container list
     python infra/scripts/tf.py deploy    switch the running instance to the current origin/main
+    python infra/scripts/tf.py backup    take a backup now and list the stored backups
     python infra/scripts/tf.py github-vars   the repository variables the deploy pipeline needs
     python infra/scripts/tf.py destroy   remove everything, including the secrets
 
@@ -189,7 +190,7 @@ def bring_up(*, auto_approve: bool) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["up", "stop", "start", "status", "plan", "logs", "deploy", "github-vars", "destroy"])
+    parser.add_argument("command", choices=["up", "stop", "start", "status", "plan", "logs", "deploy", "backup", "github-vars", "destroy"])
     command = parser.parse_args().command
     prepare()
 
@@ -243,6 +244,23 @@ def main() -> int:
         sha = release_sha()
         print(f"Deploying {sha} ...")
         return run_on_instance(out, out["deploy_document"], {"ReleaseSha": [sha]}, wait_seconds=900)
+
+    if command == "backup":
+        out = outputs()
+        if not out.get("instance_id"):
+            fail("nothing has been created yet.")
+        code = run_on_instance(
+            out, "AWS-RunShellScript", {"commands": ["/opt/antiproxy/backup.sh"]}, wait_seconds=600
+        )
+        listing = aws(
+            "s3api", "list-objects-v2", "--bucket", out["backup_bucket"],
+            "--query", "Contents[].[Key, Size, LastModified]",
+            region=out.get("aws_region"), check=False,
+        )
+        print(f"Stored in s3://{out['backup_bucket']}:")
+        for key, size, modified in json.loads(listing.stdout or "null") or []:
+            print(f"  {modified[:19]}  {size:>10}  {key}")
+        return code
 
     if command == "github-vars":
         out = outputs()

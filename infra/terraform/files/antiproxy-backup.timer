@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly backup of the Anti-Proxy Attendance System
+
+[Timer]
+# 21:00 India time. If the instance was stopped then, the backup runs at the
+# next start instead.
+OnCalendar=*-*-* 15:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

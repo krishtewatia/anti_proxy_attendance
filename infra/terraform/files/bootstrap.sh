@@ -29,8 +29,19 @@ curl --fail --silent --show-error --location --retry 5 \
 echo "$COMPOSE_SHA256  $PLUGIN_DIR/docker-compose" | sha256sum --check --quiet
 chmod 755 "$PLUGIN_DIR/docker-compose"
 
+# MongoDB database tools (mongodump, mongorestore) for the nightly backup,
+# pinned and checked against the published checksum.
+TOOLS="mongodb-database-tools-amazon2023-x86_64-$MONGO_TOOLS_VERSION"
+curl --fail --silent --show-error --location --retry 5 \
+  -o "/tmp/$TOOLS.tgz" "https://fastdl.mongodb.org/tools/db/$TOOLS.tgz"
+echo "$MONGO_TOOLS_SHA256  /tmp/$TOOLS.tgz" | sha256sum --check --quiet
+tar --extract --gzip --file "/tmp/$TOOLS.tgz" --directory /tmp
+install --mode 755 "/tmp/$TOOLS/bin/mongodump" "/tmp/$TOOLS/bin/mongorestore" /usr/local/bin/
+rm -rf "/tmp/$TOOLS" "/tmp/$TOOLS.tgz"
+
 systemctl enable --now docker
 systemctl daemon-reload
 systemctl enable antiproxy.service
+systemctl enable --now antiproxy-backup.timer
 # Not waited for: it keeps retrying until the secrets have been written.
 systemctl start --no-block antiproxy.service
