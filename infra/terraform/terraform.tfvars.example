@@ -6,6 +6,9 @@ run_mode = "on_demand"
 
 site_host = "your-subdomain.duckdns.org"
 
+# Budget alerts are emailed here.
+alert_email = "you@example.com"
+
 # Atlas console -> Organization Settings -> Organization ID
 atlas_org_id = "000000000000000000000000"
 

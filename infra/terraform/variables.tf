@@ -156,3 +156,35 @@ variable "atlas_allowed_ip" {
   type        = string
   default     = ""
 }
+
+# ------------------------------------------------------------------------------
+# Alerts and backups
+# ------------------------------------------------------------------------------
+
+variable "alert_email" {
+  description = "Where the budget alerts are sent."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.alert_email))
+    error_message = "alert_email must be an email address."
+  }
+}
+
+variable "credit_budget_usd" {
+  description = "Credits available to the account, in dollars."
+  type        = number
+  default     = 95
+}
+
+variable "credit_alert_thresholds_usd" {
+  description = "Email when this much of the credits has been used (usage before credits are applied)."
+  type        = list(number)
+  default     = [25, 50, 75]
+}
+
+variable "backup_retention_days" {
+  description = "Backups older than this are deleted from the bucket."
+  type        = number
+  default     = 14
+}

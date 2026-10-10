@@ -6,6 +6,11 @@ locals {
   compose_version = "v5.6.0"
   compose_sha256  = "40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a"
 
+  # Pinned MongoDB database tools (mongodump for the nightly backup), checked
+  # against the checksum MongoDB publishes for this archive.
+  mongo_tools_version = "100.19.1"
+  mongo_tools_sha256  = "0cdd6fe932291be6f4fa9eb0d148c392bf529e085151d677522378aebb03bcd3"
+
   # Settings the instance needs that are not secret. Secrets are never here:
   # the instance reads them from SSM Parameter Store when it starts.
   config_env = join("\n", [
@@ -20,6 +25,9 @@ locals {
     "SWAP_MB=${var.swap_mb}",
     "COMPOSE_VERSION=${local.compose_version}",
     "COMPOSE_SHA256=${local.compose_sha256}",
+    "MONGO_TOOLS_VERSION=${local.mongo_tools_version}",
+    "MONGO_TOOLS_SHA256=${local.mongo_tools_sha256}",
+    "BACKUP_BUCKET=${aws_s3_bucket.backups.bucket}",
     "",
   ])
 
@@ -27,6 +35,7 @@ locals {
     "start.sh"     = "0750"
     "deploy.sh"    = "0750"
     "bootstrap.sh" = "0750"
+    "backup.sh"    = "0750"
     "load_env.py"  = "0640"
     "duckdns.py"   = "0640"
   }
@@ -50,6 +59,16 @@ locals {
             path        = "/etc/systemd/system/antiproxy.service"
             permissions = "0644"
             content     = replace(file("${path.module}/files/antiproxy.service"), "\r\n", "\n")
+          },
+          {
+            path        = "/etc/systemd/system/antiproxy-backup.service"
+            permissions = "0644"
+            content     = replace(file("${path.module}/files/antiproxy-backup.service"), "\r\n", "\n")
+          },
+          {
+            path        = "/etc/systemd/system/antiproxy-backup.timer"
+            permissions = "0644"
+            content     = replace(file("${path.module}/files/antiproxy-backup.timer"), "\r\n", "\n")
           },
         ],
         [
@@ -149,7 +168,9 @@ resource "aws_instance" "app" {
   # stopped instance costs nothing but its volume.
   associate_public_ip_address = true
 
-  user_data = local.user_data
+  # Compressed: the limit is 16 KB and the scripts come close to it. cloud-init
+  # unpacks it by itself.
+  user_data_base64 = base64gzip(local.user_data)
   # Changing a script here must not destroy the instance and its volume.
   user_data_replace_on_change = false
 
@@ -179,7 +200,7 @@ resource "aws_instance" "app" {
 
   lifecycle {
     # A newer Amazon Linux image must not replace the running instance.
-    ignore_changes = [ami, user_data]
+    ignore_changes = [ami, user_data, user_data_base64]
   }
 }
 
