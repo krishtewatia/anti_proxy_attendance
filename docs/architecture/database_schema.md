@@ -2,7 +2,7 @@
 
 ## 1. Database Overview
 
-The Anti-Proxy Attendance System utilizes **MongoDB 7.0** as its primary persistent datastore. The application interacts with MongoDB asynchronously via the `motor` driver and Pydantic schema validation. For lightweight unit and integration testing without a running MongoDB daemon, the application transparently falls back to an in-memory client (`mongomock-motor`).
+The Anti-Proxy Attendance System utilizes **MongoDB 8.0** as its primary persistent datastore. The application interacts with MongoDB asynchronously via the `motor` driver and Pydantic schema validation. For lightweight unit and integration testing without a running MongoDB daemon, the application transparently falls back to an in-memory client (`mongomock-motor`).
 
 ```mermaid
 erDiagram

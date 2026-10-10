@@ -28,7 +28,7 @@ Even if an impostor flashes a photo to trigger an `ENTRY` at 10:00 AM, the lack 
    - **Boundary Engine**: Spatial line-crossing detection with a 14-pixel deadband to eliminate threshold chatter.
    - **Outbox Resilience**: Durable SQLite outbox with exponential backoff, ensuring zero event loss during network outages.
 2. **High-Performance Core (`backend`)**:
-   - Asynchronous FastAPI backend backed by MongoDB 7.0 (with in-memory mongomock fallback).
+   - Asynchronous FastAPI backend backed by MongoDB 8.0 (with in-memory mongomock fallback).
    - Machine-to-machine service authentication using timing-safe tokens (`X-Camera-Token`), payload size enforcement (64 KB), and IP rate limiting (600 req/min).
    - Session Roster and Presence Engine enforcing 75% attendance thresholding and graceful handling of missing exits.
    - Immutable audit logging for every teacher override and administrative adjustment.
