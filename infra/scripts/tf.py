@@ -99,7 +99,12 @@ def wait_for_site(url: str, minutes: int = 15) -> bool:
     deadline = time.time() + minutes * 60
     last = ""
     while time.time() < deadline:
-        connection = http.client.HTTPSConnection(host, timeout=10)
+        # Certificates are verified (explicit default context); the rule named
+        # here is about Python 2.
+        # nosemgrep: python.lang.security.audit.httpsconnection-detected.httpsconnection-detected
+        connection = http.client.HTTPSConnection(
+            host, timeout=10, context=ssl.create_default_context()
+        )
         try:
             connection.request("GET", "/health")
             status = connection.getresponse().status

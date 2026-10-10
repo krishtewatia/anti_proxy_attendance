@@ -9,6 +9,7 @@ answer is shown.
 
 import http.client
 import os
+import ssl
 import sys
 import urllib.parse
 
@@ -33,7 +34,12 @@ def main() -> int:
     # No "ip" value: DuckDNS uses the address the request comes from, which is
     # this instance's public address.
     query = urllib.parse.urlencode({"domains": subdomain, "token": token, "ip": ""})
-    connection = http.client.HTTPSConnection("www.duckdns.org", timeout=20)
+    # Certificates are verified: Python 3 does so by default, and the context
+    # below says it explicitly. The rule named here is about Python 2.
+    # nosemgrep: python.lang.security.audit.httpsconnection-detected.httpsconnection-detected
+    connection = http.client.HTTPSConnection(
+        "www.duckdns.org", timeout=20, context=ssl.create_default_context()
+    )
     try:
         connection.request("GET", f"/update?{query}")
         answer = connection.getresponse().read().decode("ascii", "replace").strip()

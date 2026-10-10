@@ -134,18 +134,19 @@ resource "aws_iam_instance_profile" "instance" {
 # The instance
 # ------------------------------------------------------------------------------
 
+# This instance is the web server. With no load balancer and no NAT gateway
+# (both cost money), a public address is how visitors reach Caddy and how the
+# instance reaches the registry and the database. Only ports 80 and 443 are
+# open (network.tf), so the scanner's "no public address" rule does not apply.
+# nosemgrep: terraform.aws.security.aws-ec2-has-public-ip.aws-ec2-has-public-ip
 resource "aws_instance" "app" {
-  ami                         = data.aws_ssm_parameter.al2023.value
-  instance_type               = var.instance_type
-  subnet_id                   = aws_subnet.public.id
-  vpc_security_group_ids      = [aws_security_group.web.id]
-  iam_instance_profile        = aws_iam_instance_profile.instance.name
-  # This instance is the web server: with no load balancer and no NAT gateway
-  # (both cost money), a public address is how visitors reach Caddy and how
-  # the instance reaches the registry and the database. Only ports 80 and 443
-  # are open (network.tf). No Elastic IP: the address is released whenever the
-  # instance stops, so a stopped instance costs nothing but its volume.
-  # nosemgrep: terraform.aws.security.aws-ec2-has-public-ip.aws-ec2-has-public-ip
+  ami                    = data.aws_ssm_parameter.al2023.value
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.web.id]
+  iam_instance_profile   = aws_iam_instance_profile.instance.name
+  # No Elastic IP: the address is released whenever the instance stops, so a
+  # stopped instance costs nothing but its volume.
   associate_public_ip_address = true
 
   user_data = local.user_data
