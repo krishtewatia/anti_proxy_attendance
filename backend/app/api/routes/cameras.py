@@ -18,6 +18,7 @@ from app.api.dependencies.camera_auth import (
     require_camera_auth,
     validate_camera_binding,
 )
+from app.core.client_ip import client_ip as get_client_ip
 from app.database import get_database
 from app.database.cameras import (
     create_camera_in_db,
@@ -238,7 +239,7 @@ async def record_camera_heartbeat(
             detail=f"Route camera_id '{camera_id}' does not match body camera_id '{payload.camera_id}'",
         )
 
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     await validate_camera_binding(auth_context, camera_id, client_ip=client_ip, db=db)
 
     existing = await get_camera_from_db(camera_id, db=db)

@@ -7,6 +7,7 @@ from collections import deque
 import time
 from fastapi import HTTPException, Request, status
 
+from app.core.client_ip import client_ip
 from app.core.config import settings
 
 
@@ -55,7 +56,7 @@ events_rate_limiter = SlidingWindowRateLimiter()
 
 
 async def check_events_rate_limit(request: Request) -> None:
-    client_host = request.client.host if request.client else "unknown"
+    client_host = client_ip(request)
     await events_rate_limiter.check(client_host)
 
 
@@ -80,5 +81,5 @@ registration_rate_limiter = _SettingLimiter("REGISTRATION_RATE_LIMIT_PER_MINUTE"
 
 
 async def check_registration_rate_limit(request: Request) -> None:
-    client_host = request.client.host if request.client else "unknown"
+    client_host = client_ip(request)
     await registration_rate_limiter.check(f"register:{client_host}")

@@ -15,6 +15,19 @@ class Settings:
 
     # MongoDB connection settings
     MONGODB_URL: str = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+    # How long to wait for a database server. A hosted cluster needs longer
+    # than a database on the same machine.
+    MONGODB_SERVER_SELECTION_TIMEOUT_MS: int = int(
+        os.getenv("MONGODB_SERVER_SELECTION_TIMEOUT_MS", "1000")
+    )
+    # When true the backend refuses to start without its database. When false
+    # (running the code by hand, without Docker) it falls back to an in-memory
+    # database that is lost on restart.
+    REQUIRE_DATABASE: bool = os.getenv("REQUIRE_DATABASE", "false").lower() in {
+        "true",
+        "1",
+        "yes",
+    }
     DATABASE_NAME: str = os.getenv("DATABASE_NAME", "anti_proxy_attendance")
     EVENTS_COLLECTION: str = os.getenv("EVENTS_COLLECTION", "attendance_events")
 
@@ -54,6 +67,12 @@ class Settings:
     TEACHER_FRAME_RATE_LIMIT_PER_MINUTE: int = int(
         os.getenv("TEACHER_FRAME_RATE_LIMIT_PER_MINUTE", "600")
     )
+
+    # Reverse proxies whose X-Forwarded-For header is believed (addresses or
+    # networks, comma-separated). Empty: the header is always ignored.
+    TRUSTED_PROXY_IPS: list[str] = [
+        entry.strip() for entry in os.getenv("TRUSTED_PROXY_IPS", "").split(",") if entry.strip()
+    ]
 
     # CORS configuration
     CORS_ALLOWED_ORIGINS: list[str] = [

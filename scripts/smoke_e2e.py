@@ -46,6 +46,12 @@ of photos of a printed or on-screen face; default
 checks that a spoof is blocked and nobody is marked for it. That check is
 skipped unless the stack enforces liveness.
 
+``--prod-rehearsal`` starts the throwaway stack from the production Compose
+file instead (``docker-compose.prod.yml`` with
+``docker/docker-compose.prod.rehearsal.yml``): every request goes through
+Caddy, as it will on the deployment, and the run also checks that only Caddy
+is reachable and that a made-up X-Forwarded-For header is ignored.
+
 Only statuses and identifiers are printed, never image or embedding data.
 Exit code 0 means every check passed. Standard library only.
 """
@@ -68,6 +74,13 @@ import uuid
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 COMPOSE_FILE = PROJECT_ROOT / "docker" / "docker-compose.smoke.yml"
+# The production stack, rehearsed locally (--prod-rehearsal).
+PROD_REHEARSAL_FILES = [
+    PROJECT_ROOT / "docker-compose.prod.yml",
+    PROJECT_ROOT / "docker" / "docker-compose.prod.rehearsal.yml",
+]
+# Compose files of the throwaway stack; main() switches them for a rehearsal.
+STACK_FILES: list[Path] = [COMPOSE_FILE]
 MODEL_CACHE_VOLUME = "anti_proxy_model_cache"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
@@ -184,7 +197,8 @@ def load_photos(photos_dir: Path) -> list[list[bytes]]:
 
 
 def compose(project: str, env: dict[str, str], *args: str, capture: bool = False):
-    cmd = ["docker", "compose", "-p", project, "-f", str(COMPOSE_FILE), *args]
+    files = [arg for path in STACK_FILES for arg in ("-f", str(path))]
+    cmd = ["docker", "compose", "-p", project, *files, *args]
     return subprocess.run(  # nosec B603
         cmd,
         env=env,
@@ -196,8 +210,14 @@ def compose(project: str, env: dict[str, str], *args: str, capture: bool = False
     )
 
 
-def start_throwaway_stack(project: str, env: dict[str, str], build: bool) -> str:
-    """Start the isolated stack and return the backend's base URL."""
+def start_throwaway_stack(
+    project: str, env: dict[str, str], build: bool, entry: tuple[str, str] = ("backend", "8000")
+) -> str:
+    """Start the isolated stack and return the base URL of its entry point.
+
+    ``entry`` is the service and container port requests are sent to: the
+    backend itself, or Caddy when rehearsing the production stack.
+    """
     subprocess.run(  # nosec B603 B607
         ["docker", "volume", "create", MODEL_CACHE_VOLUME],
         check=True,
@@ -212,9 +232,9 @@ def start_throwaway_stack(project: str, env: dict[str, str], build: bool) -> str
     result = compose(project, env, *up_args)
     if result.returncode != 0:
         raise RuntimeError("docker compose up failed")
-    port = compose(project, env, "port", "backend", "8000", capture=True)
+    port = compose(project, env, "port", *entry, capture=True)
     if port.returncode != 0 or not port.stdout.strip():
-        raise RuntimeError("could not read the backend's host port")
+        raise RuntimeError(f"could not read the host port of {entry[0]}")
     host_port = port.stdout.strip().rsplit(":", 1)[-1]
     return f"http://127.0.0.1:{host_port}"
 
@@ -239,6 +259,43 @@ def check_liveness_model_in_image(project: str, env: dict[str, str], checks: Che
         "the vision image loaded its liveness model",
         result.returncode == 0 and state.get("liveness_model_loaded") is True,
         state or {"exit": result.returncode},
+    )
+
+
+def check_production_topology(
+    project: str, env: dict[str, str], api: "Api", checks: Checks
+) -> None:
+    """Rehearsal only: Caddy is the single way in, and it does not pass on a made-up client address."""
+    for service, port in (("backend", "8000"), ("frontend", "8080"), ("vision-service", "8088")):
+        published = compose(project, env, "port", service, port, capture=True)
+        # An unpublished port is reported as an error or as host port 0.
+        host_port = (published.stdout or "").strip().rsplit(":", 1)[-1]
+        checks.check(
+            f"{service} publishes no port (reachable only through Caddy)",
+            published.returncode != 0 or not host_port.isdigit() or int(host_port) == 0,
+            (published.stdout or "").strip()[:80],
+        )
+
+    status, _ = api.call("GET", "/health")
+    checks.check("Caddy forwards /health to the backend", status == 200, status)
+    status, _ = api.call("GET", "/", raw=True)
+    checks.check("Caddy serves the web application at /", status == 200, status)
+
+    # The registration limit is per client address. Every request below claims
+    # a different address in X-Forwarded-For; if Caddy or the backend believed
+    # it, none would ever be limited. The body is empty, so no account is made.
+    statuses = []
+    for n in range(45):
+        status, _ = api.post_json(
+            "/api/v1/auth/register", {}, headers={"X-Forwarded-For": f"198.51.100.{n + 1}"}
+        )
+        statuses.append(status)
+        if status == 429:
+            break
+    checks.check(
+        "a made-up X-Forwarded-For header does not get around the rate limit (429)",
+        429 in statuses,
+        {"requests": len(statuses), "last": statuses[-1]},
     )
 
 
@@ -806,6 +863,12 @@ def main() -> int:
         "--keep", action="store_true", help="Throwaway stack: leave it running afterwards"
     )
     parser.add_argument(
+        "--prod-rehearsal",
+        action="store_true",
+        help="Throwaway stack: start the production Compose file (Caddy in front, "
+        "nothing else published) instead of the plain test stack",
+    )
+    parser.add_argument(
         "--model-wait",
         type=int,
         default=240,
@@ -886,9 +949,35 @@ def main() -> int:
         }
         if args.liveness_threshold:
             env["SMOKE_LIVENESS_THRESHOLD"] = args.liveness_threshold
+        entry = ("backend", "8000")
+        if args.prod_rehearsal:
+            STACK_FILES[:] = PROD_REHEARSAL_FILES
+            entry = ("caddy", "80")
+            # The production file's own variable names, with this run's values.
+            env.update(
+                {
+                    "COMPOSE_PROJECT_NAME": project,
+                    "SITE_ADDRESS": ":80",
+                    # Loopback only, host ports chosen by Docker.
+                    "HTTP_BIND": "127.0.0.1:",
+                    "HTTPS_BIND": "127.0.0.1:",
+                    "IMAGE_PREFIX": project,
+                    "IMAGE_TAG": "rehearsal",
+                    "MONGODB_URL": "mongodb://mongodb:27017",
+                    "DATABASE_NAME": "smoke_e2e",
+                    "JWT_SECRET_KEY": env["SMOKE_JWT_SECRET_KEY"],
+                    "VISION_SERVICE_API_KEY": service_key,
+                    "RECOGNITION_SIGNING_KEY": env["SMOKE_RECOGNITION_SIGNING_KEY"],
+                    "LIVENESS_MODE": args.liveness_mode,
+                    "BOOTSTRAP_ADMIN_EMAIL": admin_email,
+                    "BOOTSTRAP_ADMIN_PASSWORD": admin_password,
+                }
+            )
+            if args.liveness_threshold:
+                env["LIVENESS_THRESHOLD"] = args.liveness_threshold
         base_url = ""
         try:
-            base_url = start_throwaway_stack(project, env, build=not args.no_build)
+            base_url = start_throwaway_stack(project, env, build=not args.no_build, entry=entry)
             check_liveness_model_in_image(project, env, checks)
             run_flow(
                 Api(base_url),
@@ -903,6 +992,9 @@ def main() -> int:
                 fresh_database=True,
                 **flow_args,
             )
+            if args.prod_rehearsal:
+                # Last: it uses up the registration budget on purpose.
+                check_production_topology(project, env, Api(base_url), checks)
         except RuntimeError as exc:
             checks.check("throwaway stack started", False, exc)
         finally:
@@ -914,7 +1006,8 @@ def main() -> int:
                 print(f"  administrator: {admin_email} / {admin_current_password}")
                 print(f"  service key  : {service_key}")
                 print("Remove it with:")
-                print(f"  docker compose -p {project} -f {COMPOSE_FILE} down -v")
+                files = " ".join(f"-f {path}" for path in STACK_FILES)
+                print(f"  docker compose -p {project} {files} down -v")
             else:
                 stop_throwaway_stack(project, env, show_logs=checks.failed > 0)
 

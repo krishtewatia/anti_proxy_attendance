@@ -36,7 +36,10 @@ def get_client() -> AsyncIOMotorClient:
 
             _client = AsyncMongoMockClient()
         else:
-            _client = AsyncIOMotorClient(settings.MONGODB_URL, serverSelectionTimeoutMS=1000)
+            _client = AsyncIOMotorClient(
+                settings.MONGODB_URL,
+                serverSelectionTimeoutMS=settings.MONGODB_SERVER_SELECTION_TIMEOUT_MS,
+            )
     return _client
 
 

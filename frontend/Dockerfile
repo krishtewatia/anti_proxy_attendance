@@ -19,6 +19,11 @@ RUN npm ci
 ARG VITE_APP_NAME="Anti-Proxy Attendance System"
 ENV VITE_APP_NAME=${VITE_APP_NAME}
 
+# The browser calls the API on the address the page came from (nginx here, or
+# the reverse proxy in front of it), never on a separate backend port.
+ARG VITE_API_BASE_URL="same-origin"
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
 # Copy source code and build production bundle
 COPY . .
 RUN npm run build
