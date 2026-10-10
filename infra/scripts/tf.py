@@ -20,12 +20,12 @@ apply twice: once to start the instance, once to allow its new address.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import ssl
 import sys
 import time
-import urllib.error
-import urllib.request
+import urllib.parse
 
 from common import REPO_ROOT, STATE_TFVARS, TFVARS, aws, fail, outputs, require_tools, run, terraform
 
@@ -92,22 +92,30 @@ def public_ip() -> str:
 
 
 def wait_for_site(url: str, minutes: int = 15) -> bool:
+    host = urllib.parse.urlsplit(url).hostname
+    if not url.startswith("https://") or not host:
+        fail(f"unexpected site address: {url!r}")
     print(f"Waiting for {url}/health (first start pulls about 2.5 GB of images) ...", flush=True)
     deadline = time.time() + minutes * 60
     last = ""
     while time.time() < deadline:
+        connection = http.client.HTTPSConnection(host, timeout=10)
         try:
-            with urllib.request.urlopen(f"{url}/health", timeout=10) as response:
-                if response.status == 200:
-                    print(f"The site answers: {url}")
-                    return True
-                last = f"HTTP {response.status}"
-        except urllib.error.HTTPError as exc:
-            last = f"HTTP {exc.code}"
+            connection.request("GET", "/health")
+            status = connection.getresponse().status
+            if status == 200:
+                print(f"The site answers: {url}")
+                return True
+            last = f"HTTP {status}"
         except ssl.SSLCertVerificationError:
-            last = "certificate not trusted (expected with the staging certificate authority)"
-        except (urllib.error.URLError, OSError) as exc:
-            last = type(exc).__name__ if not getattr(exc, "reason", None) else str(exc.reason)[:80]
+            # The site is up; its certificate comes from the staging authority.
+            print(f"The site answers at {url}, with a certificate browsers do not trust")
+            print("(acme_ca is set to the staging authority in terraform.tfvars).")
+            return True
+        except OSError as exc:
+            last = type(exc).__name__
+        finally:
+            connection.close()
         time.sleep(15)
     print(f"The site did not answer within {minutes} minutes (last result: {last}).")
     print("Look at it with:  make logs")

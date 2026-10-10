@@ -7,10 +7,10 @@ secrets file and is never printed; DuckDNS answers "OK" or "KO" and only that
 answer is shown.
 """
 
+import http.client
 import os
 import sys
 import urllib.parse
-import urllib.request
 
 ENV_FILE = "/run/antiproxy/env"
 
@@ -33,12 +33,15 @@ def main() -> int:
     # No "ip" value: DuckDNS uses the address the request comes from, which is
     # this instance's public address.
     query = urllib.parse.urlencode({"domains": subdomain, "token": token, "ip": ""})
+    connection = http.client.HTTPSConnection("www.duckdns.org", timeout=20)
     try:
-        with urllib.request.urlopen(f"https://www.duckdns.org/update?{query}", timeout=20) as response:
-            answer = response.read().decode("ascii", "replace").strip()
-    except Exception as exc:  # the URL holds the token, so the error text is not shown
+        connection.request("GET", f"/update?{query}")
+        answer = connection.getresponse().read().decode("ascii", "replace").strip()
+    except Exception as exc:  # the request holds the token, so the error text is not shown
         print(f"DuckDNS update failed: {type(exc).__name__}", file=sys.stderr)
         return 1
+    finally:
+        connection.close()
     print(f"DuckDNS update for {subdomain}: {answer[:2]}")
     return 0 if answer.startswith("OK") else 1
 
