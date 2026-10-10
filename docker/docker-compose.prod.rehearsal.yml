@@ -1,0 +1,78 @@
+# ==============================================================================
+# Rehearsal of the production stack on a laptop or in CI.
+#
+# Used on top of docker-compose.prod.yml by `scripts/smoke_e2e.py --prod-rehearsal`:
+# the same services, network and Caddy routing as production, with three
+# differences that make it runnable anywhere:
+#   - images are built from the working tree instead of pulled;
+#   - a throwaway in-memory MongoDB stands in for the hosted cluster;
+#   - Caddy serves plain HTTP on a loopback port chosen by Docker (no
+#     certificate, nothing published to the network): the script sets
+#     SITE_ADDRESS, HTTP_BIND and HTTPS_BIND for that.
+# Volumes get per-run names so nothing is shared with a real stack.
+# ==============================================================================
+
+services:
+  mongodb:
+    image: mongo:8.0
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - internal
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      # The run registers a handful of accounts from one address in a few seconds.
+      REGISTRATION_RATE_LIMIT_PER_MINUTE: "30"
+
+  frontend:
+    build:
+      context: ./frontend
+
+  vision-service:
+    build:
+      context: ./vision-service
+    # Healthy only once the face models are loaded.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import json, os, sys, urllib.request
+          req = urllib.request.Request("http://127.0.0.1:8088/status", headers={"X-API-Key": os.environ["VISION_SERVICE_API_KEY"]})
+          sys.exit(0 if json.load(urllib.request.urlopen(req, timeout=4)).get("models_loaded") else 1)
+      interval: 5s
+      timeout: 6s
+      retries: 60
+      start_period: 10s
+
+volumes:
+  # The face models, shared with the development stack so they are downloaded
+  # once. External: removing this stack never removes it.
+  model_cache:
+    name: anti_proxy_model_cache
+    external: true
+  caddy_data:
+    name: ${COMPOSE_PROJECT_NAME}_caddy_data
+  caddy_config:
+    name: ${COMPOSE_PROJECT_NAME}_caddy_config
+  uploads_data:
+    name: ${COMPOSE_PROJECT_NAME}_uploads
+  vision_outbox:
+    name: ${COMPOSE_PROJECT_NAME}_vision_outbox
+
+networks:
+  internal:
+    name: ${COMPOSE_PROJECT_NAME}_internal

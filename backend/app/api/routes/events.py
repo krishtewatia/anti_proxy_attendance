@@ -15,6 +15,7 @@ from app.api.dependencies.camera_auth import (
     validate_camera_binding,
 )
 from app.api.dependencies.rate_limiter import check_events_rate_limit
+from app.core.client_ip import client_ip as get_client_ip
 from app.core.config import settings
 from app.database import get_database
 from app.schemas.vision_event import VisionEventCreate, VisionEventResponse
@@ -52,7 +53,7 @@ async def ingest_vision_event(
         )
 
     # 1. Enforce Camera ID Binding
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     await validate_camera_binding(auth_context, event.camera_id, client_ip, db=db)
 
     # 1B. Demo Mode camera restriction

@@ -40,14 +40,22 @@ import type {
   SubjectEditFields,
 } from "../utils/catalog.ts";
 
+// Value of VITE_API_BASE_URL that means "the address this page was loaded
+// from": the Docker image is built with it, so the browser reaches the API
+// through the same reverse proxy that served the page.
+export const SAME_ORIGIN = "same-origin";
+
 export const getApiBaseUrl = (): string => {
+  if (import.meta.env?.VITE_API_BASE_URL === SAME_ORIGIN) {
+    return "";
+  }
   if (import.meta.env?.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
   // Node (the test suites): an explicit address, never a guess.
   const nodeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
   if (nodeEnv?.VITE_API_BASE_URL) {
-    return nodeEnv.VITE_API_BASE_URL;
+    return nodeEnv.VITE_API_BASE_URL === SAME_ORIGIN ? "" : nodeEnv.VITE_API_BASE_URL;
   }
   if (typeof window !== "undefined" && window.location.hostname) {
     const proto = window.location.protocol || "http:";

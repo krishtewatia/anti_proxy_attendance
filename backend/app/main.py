@@ -58,7 +58,13 @@ async def lifespan(app: FastAPI):
     db = get_database()
     try:
         await init_indexes(db)
-    except Exception:
+    except Exception as exc:
+        if settings.REQUIRE_DATABASE:
+            # A deployment must never run on an in-memory database: everything
+            # written to it would be lost, and nobody would be told.
+            raise RuntimeError(
+                "The database is not reachable and REQUIRE_DATABASE is set: refusing to start."
+            ) from exc
         # Fallback to in-memory mock client if local MongoDB daemon is not running
         from app.database import mongodb
         from mongomock_motor import AsyncMongoMockClient

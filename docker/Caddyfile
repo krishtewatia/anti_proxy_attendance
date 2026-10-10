@@ -1,0 +1,45 @@
+# ==============================================================================
+# Caddy: the only container reachable from outside (ports 80 and 443).
+#
+# It obtains and renews the HTTPS certificate for SITE_ADDRESS by itself and
+# forwards requests to the backend and frontend over the internal network.
+#
+# Client addresses: Caddy ignores any X-Forwarded-For header sent by a client
+# (no trusted proxies are configured) and writes the address it saw itself.
+# The backend believes that header only from this container.
+#
+# No access log is written: request paths and bodies never reach a log file.
+# ==============================================================================
+
+{
+	# No admin API: the configuration is this file and nothing else.
+	admin off
+	# Set ACME_CA to Let's Encrypt's staging directory for trial runs, so
+	# repeated rebuilds do not use up the weekly limit of real certificates.
+	acme_ca {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# Camera frames and enrollment photos; the backend enforces its own limits.
+	request_body {
+		max_size 12MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# The API and the health check go straight to the backend.
+	@backend path /api/* /health
+	handle @backend {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else is the web application.
+	handle {
+		reverse_proxy frontend:8080
+	}
+}

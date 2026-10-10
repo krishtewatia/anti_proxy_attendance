@@ -11,6 +11,7 @@ from typing import Optional, Set
 from fastapi import Depends, Header, HTTPException, Request, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app.core.client_ip import client_ip as get_client_ip
 from app.core.config import settings
 from app.database import get_database
 from app.services.audit_service import record_audit_event
@@ -93,7 +94,7 @@ async def require_camera_auth(
         return CameraAuthContext(service_id="dev-bypass", allowed_cameras=None)
 
     api_key = x_api_key or x_vision_api_key
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
 
     if not api_key:
         logger.warning(

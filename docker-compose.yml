@@ -65,6 +65,9 @@ services:
       DEBUG: ${DEBUG:-false}
       MONGODB_URL: mongodb://${MONGO_APP_USERNAME:-antiproxy_user}:${MONGO_APP_PASSWORD:-antiproxy_secure_password}@mongodb:27017/${DATABASE_NAME:-anti_proxy_attendance}?authSource=${DATABASE_NAME:-anti_proxy_attendance}
       DATABASE_NAME: ${DATABASE_NAME:-anti_proxy_attendance}
+      # The database container is part of this stack: fail at startup rather
+      # than run on an in-memory database if it cannot be reached.
+      REQUIRE_DATABASE: "true"
       EVENTS_COLLECTION: ${EVENTS_COLLECTION:-attendance_events}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-replace_with_a_secure_random_at_least_32_chars_secret_key_here}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}

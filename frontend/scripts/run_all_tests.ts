@@ -20,6 +20,7 @@ const testSuites: TestSuite[] = [
   { name: "No Made-Up Data In The Interface", file: "test_no_fake_data.ts", category: "Unit" },
   { name: "Session Page And List Fixes", file: "test_session_page_fixes.ts", category: "Unit" },
   { name: "Untaken Sessions Are Not Counted", file: "test_untaken_sessions.ts", category: "Unit" },
+  { name: "API Address: Same Origin Behind The Proxy", file: "test_api_base_url.ts", category: "Unit" },
   { name: "Create Session Form Validation & Lifecycle", file: "test_create_session.ts", category: "Unit" },
   { name: "Attendance Correction Validation & Audit History", file: "test_attendance_correction.ts", category: "Unit" },
   { name: "Audit Trail Contracts & Verification", file: "test_audit_logs.ts", category: "Contract" },
