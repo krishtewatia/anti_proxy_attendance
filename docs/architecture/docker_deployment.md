@@ -30,7 +30,7 @@ The Docker Compose setup defines 5 services across an isolated bridge network (`
                               │ Authenticated Driver
                               ▼ (Port 27017, localhost only)
 ┌─────────────────────────────────────────────────────────────┐
-│ MongoDB 7.0 with Authentication & Persistent Volume         │
+│ MongoDB 8.0 with Authentication & Persistent Volume         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -38,11 +38,13 @@ The Docker Compose setup defines 5 services across an isolated bridge network (`
 
 | Service | Image / Base | Non-Root User | Host Port | Purpose | Profile |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`mongodb`** | `mongo:7.0` | `mongodb` (UID 999) | `127.0.0.1:27017` | Event persistence, users, cameras | Default |
+| **`mongodb`** | `mongo:8.0` | `mongodb` (UID 999) | `127.0.0.1:27017` | Event persistence, users, cameras | Default |
 | **`backend`** | `python:3.12-slim` | `appuser` (UID 10001) | `8000` | FastAPI REST API, RBAC, Presence | Default |
 | **`frontend`** | `nginxinc/nginx-unprivileged:1.27-alpine` | `nginx` (UID 101) | `3000` (mapped to 8080) | Teacher dashboard & Admin UI | Default |
 | **`vision-service`** | `python:3.11-slim` | `visionuser` (UID 10002) | `8088` | WebRTC signaling, Face inference | `demo`, `vision` |
 | **`rtsp-sim`** | `bluenviron/mediamtx:1.9.3` | `mediamtx` | `8554` | Simulated CCTV RTSP broadcast | `rtsp-sim` |
+
+> **MongoDB 8.0.** Local, CI and the smoke test run MongoDB 8.0, the version MongoDB Atlas free clusters run. An existing 7.0 data volume starts under 8.0 without any migration step (its compatibility version stays 7.0, which is fine).
 
 ---
 

@@ -30,7 +30,7 @@
 ## 2. Backend & Distributed Systems Engineer
 
 - **Asynchronous FastAPI Core & State Recovery**:
-  - *Bullet*: Engineered a high-throughput, asynchronous FastAPI backend backed by MongoDB 7.0 and Motor; implemented a robust presence engine calculating cumulative classroom time ratios across discrete transit intervals, gracefully capping missing exits at session boundaries.
+  - *Bullet*: Engineered a high-throughput, asynchronous FastAPI backend backed by MongoDB 8.0 and Motor; implemented a robust presence engine calculating cumulative classroom time ratios across discrete transit intervals, gracefully capping missing exits at session boundaries.
   - *Repo Evidence*: [`backend/app/services/presence_engine.py`](file:///c:/Users/hp/Downloads/anti_proxy_project/backend/app/services/presence_engine.py), [`backend/app/api/routes/sessions.py`](file:///c:/Users/hp/Downloads/anti_proxy_project/backend/app/api/routes/sessions.py), [`backend/tests/test_attendance_e2e.py`](file:///c:/Users/hp/Downloads/anti_proxy_project/backend/tests/test_attendance_e2e.py).
 
 - **Timing-Safe Service Authentication & DoS Defense**:

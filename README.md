@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![InsightFace](https://img.shields.io/badge/InsightFace-SCRFD%20%2B%20ArcFace-FF6F00)](https://github.com/deepinsight/insightface)
-[![MongoDB](https://img.shields.io/badge/MongoDB-7.0-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com)
+[![MongoDB](https://img.shields.io/badge/MongoDB-8.0-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com)
 
 A modern, privacy-conscious classroom attendance ERP powered by client-side browser webcam acquisition, containerized deep learning inference (**InsightFace SCRFD + ArcFace**), a high-performance **FastAPI** backend, and an interactive **React** portal.
 
@@ -298,7 +298,7 @@ graph TD
 | **Frontend** | React SPA | React 19, TypeScript, Vite 8 | User interface, authentication state, ERP dashboards |
 | **Webcam Engine** | HTML5 Media API | `getUserMedia()`, HTML5 Canvas | Browser hardware capture and JPEG frame serialization |
 | **Backend API** | FastAPI | Python 3.12, Uvicorn, Motor | Async REST API, JWT auth, business logic |
-| **Database** | MongoDB | MongoDB 7.0 | Persistent document storage for users, profiles, and attendance |
+| **Database** | MongoDB | MongoDB 8.0 | Persistent document storage for users, profiles, and attendance |
 | **Face Detection** | InsightFace SCRFD | SCRFD-0.5G ONNX | Lightweight, high-accuracy edge face detection |
 | **Face Recognition**| ArcFace | MobileFaceNet / ResNet ONNX | 512-dimensional discriminative facial feature extraction |
 | **Vision Server** | aiohttp / OpenCV | Python 3.11, aiohttp, OpenCV Headless | Frame processing, embedding matching, gallery caching |

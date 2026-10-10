@@ -27,7 +27,7 @@ flowchart TB
         WORKER -->|"HTTPS POST /api/v1/events<br>X-Camera-Token & Bearer"| AUTH["Service Auth & Rate Limiter<br>(Timing-Safe Comparison)"]
         AUTH --> VALID["Schema & Timestamp Gate<br>(Strict Idempotency Check)"]
         VALID --> PRES["Presence State Machine<br>(Session Interval Accumulator)"]
-        PRES --> MONGO[("MongoDB 7.0 Replica Set<br>(Unique Indexes & TTL)")]
+        PRES --> MONGO[("MongoDB 8.0 Replica Set<br>(Unique Indexes & TTL)")]
         SESS["Session Finalization<br>(75% Threshold Calculation)"] <--> MONGO
         AUDIT["Immutable Audit Service<br>(Tamper Trail Logging)"] --> MONGO
     end
@@ -76,7 +76,7 @@ The backend provides high-performance, asynchronous REST APIs built on FastAPI a
 - **Audit & Governance (`services/audit_service.py`)**:
   - Records every administrative and teacher modification (manual attendance overrides, camera updates) with actor ID, timestamp, prior state, new state, and mandatory justification.
 
-### 2.3 Database Layer (MongoDB 7.0)
+### 2.3 Database Layer (MongoDB 8.0)
 MongoDB provides schemaless persistence with strict document-level validation and compound indexes:
 - **`users`**: User identities, roles (`ADMIN`, `TEACHER`, `STUDENT`), and bcrypt password hashes.
 - **`student_profiles`**: Academic roll numbers, metadata, and user linkages.
