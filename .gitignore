@@ -120,3 +120,11 @@ frontend/tsconfig*.tsbuildinfo
 
 # UI audit screenshots: local only, they show real student photos
 ui_audit/
+
+# Terraform: local state and local settings (never committed)
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/terraform.tfvars
+infra/terraform/*.auto.tfvars
+infra/terraform/crash.log

@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+"""Create, stop, start and destroy the AWS deployment. Used by the Makefile.
+
+    python infra/scripts/tf.py up        create or update everything, then wait for the site
+    python infra/scripts/tf.py stop      stop the instance (only its volume is billed)
+    python infra/scripts/tf.py start     start it again, then wait for the site
+    python infra/scripts/tf.py status    what exists and whether the site answers
+    python infra/scripts/tf.py plan      show what `up` would change, change nothing
+    python infra/scripts/tf.py logs      last lines of the start-up log and the container list
+    python infra/scripts/tf.py destroy   remove everything, including the secrets
+
+`up` and `destroy` show Terraform's plan and ask before changing anything.
+How the instance runs is one setting, `run_mode`, in infra/terraform/terraform.tfvars.
+
+The instance's public address changes whenever it is stopped and started, and
+the database only accepts connections from that address, so `up` and `start`
+apply twice: once to start the instance, once to allow its new address.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import ssl
+import sys
+import time
+import urllib.error
+import urllib.request
+
+from common import REPO_ROOT, STATE_TFVARS, TFVARS, aws, fail, outputs, require_tools, run, terraform
+
+SECRETS_SCRIPT = REPO_ROOT / "infra" / "scripts" / "manage_secrets.py"
+
+
+def release_sha() -> str:
+    """The commit on origin/main: the images the instance starts on first boot."""
+    result = run(["git", "-C", str(REPO_ROOT), "ls-remote", "origin", "refs/heads/main"], capture=True)
+    sha = result.stdout.split()[0] if result.stdout.split() else ""
+    if len(sha) != 40:
+        fail("could not read the commit of origin/main")
+    return sha
+
+
+def write_instance_state(state: str) -> None:
+    STATE_TFVARS.write_text(
+        "# Written by infra/scripts/tf.py (make start / make stop). Do not edit.\n"
+        f'instance_state = "{state}"\n',
+        encoding="utf-8",
+    )
+
+
+def prepare() -> None:
+    require_tools("terraform", "aws", "git")
+    if not TFVARS.exists():
+        fail(f"{TFVARS} does not exist. Copy terraform.tfvars.example to terraform.tfvars and fill it in.")
+    identity = aws("sts", "get-caller-identity", check=False)
+    if identity.returncode != 0:
+        fail("the AWS CLI has no working credentials. See docs/deployment/aws.md, section \"Credentials\".")
+    arn = json.loads(identity.stdout).get("Arn", "")
+    if arn.endswith(":root"):
+        fail("these are root credentials. Use the IAM admin user instead.")
+    print(f"AWS identity: {arn}")
+    terraform("init", "-input=false", capture=True)
+
+
+def apply(allowed_ip: str, *, auto_approve: bool) -> None:
+    args = [
+        "apply",
+        "-input=false",
+        f"-var=release_sha={release_sha()}",
+        f"-var=atlas_allowed_ip={allowed_ip}",
+    ]
+    if auto_approve:
+        args.append("-auto-approve")
+    terraform(*args)
+
+
+def public_ip() -> str:
+    """The instance's current public address, asked from EC2 directly (empty when stopped)."""
+    out = outputs()
+    if not out.get("instance_id"):
+        return ""
+    result = aws(
+        "ec2", "describe-instances",
+        "--instance-ids", out["instance_id"],
+        "--query", "Reservations[0].Instances[0].PublicIpAddress",
+        region=out.get("aws_region"),
+        check=False,
+    )
+    value = json.loads(result.stdout) if result.returncode == 0 and result.stdout.strip() else None
+    return value or ""
+
+
+def wait_for_site(url: str, minutes: int = 15) -> bool:
+    print(f"Waiting for {url}/health (first start pulls about 2.5 GB of images) ...", flush=True)
+    deadline = time.time() + minutes * 60
+    last = ""
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(f"{url}/health", timeout=10) as response:
+                if response.status == 200:
+                    print(f"The site answers: {url}")
+                    return True
+                last = f"HTTP {response.status}"
+        except urllib.error.HTTPError as exc:
+            last = f"HTTP {exc.code}"
+        except ssl.SSLCertVerificationError:
+            last = "certificate not trusted (expected with the staging certificate authority)"
+        except (urllib.error.URLError, OSError) as exc:
+            last = type(exc).__name__ if not getattr(exc, "reason", None) else str(exc.reason)[:80]
+        time.sleep(15)
+    print(f"The site did not answer within {minutes} minutes (last result: {last}).")
+    print("Look at it with:  make logs")
+    return False
+
+
+def show_logs() -> int:
+    """Start-up log and container states, fetched through Systems Manager (no SSH)."""
+    out = outputs()
+    if not out.get("instance_id"):
+        fail("nothing has been created yet.")
+    region = out.get("aws_region")
+    sent = aws(
+        "ssm", "send-command",
+        "--instance-ids", out["instance_id"],
+        "--document-name", "AWS-RunShellScript",
+        "--parameters",
+        json.dumps({"commands": [
+            "journalctl --unit antiproxy --no-pager --lines 40",
+            "docker ps --all --format 'table {{.Names}}	{{.Status}}'",
+            "free -m | head -3",
+        ]}),
+        region=region,
+    )
+    command_id = json.loads(sent.stdout)["Command"]["CommandId"]
+    for _ in range(30):
+        time.sleep(2)
+        result = aws(
+            "ssm", "get-command-invocation",
+            "--command-id", command_id, "--instance-id", out["instance_id"],
+            region=region, check=False,
+        )
+        if result.returncode != 0:
+            continue
+        invocation = json.loads(result.stdout)
+        if invocation.get("Status") in {"Success", "Failed", "TimedOut", "Cancelled"}:
+            print(invocation.get("StandardOutputContent", ""))
+            if invocation.get("StandardErrorContent"):
+                print(invocation["StandardErrorContent"], file=sys.stderr)
+            return 0 if invocation["Status"] == "Success" else 1
+    print("The instance did not answer (is it running?).")
+    return 1
+
+
+def bring_up(*, auto_approve: bool) -> int:
+    write_instance_state("running")
+    apply(public_ip(), auto_approve=auto_approve)
+    address = public_ip()
+    if not address:
+        fail("the instance has no public address after the apply")
+    print(f"Instance address: {address}. Allowing it to reach the database ...")
+    apply(address, auto_approve=True)
+
+    # Secrets live outside Terraform; make sure they exist before waiting.
+    run([sys.executable, str(SECRETS_SCRIPT), "init", "--if-missing"])
+    return 0 if wait_for_site(outputs().get("site_url", "")) else 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("command", choices=["up", "stop", "start", "status", "plan", "logs", "destroy"])
+    command = parser.parse_args().command
+    prepare()
+
+    if command == "plan":
+        terraform(
+            "plan", "-input=false",
+            f"-var=release_sha={release_sha()}", f"-var=atlas_allowed_ip={public_ip()}",
+        )
+        return 0
+
+    if command == "up":
+        return bring_up(auto_approve=False)
+
+    if command == "start":
+        if not outputs().get("instance_id"):
+            fail("nothing has been created yet. Run `make up` first.")
+        return bring_up(auto_approve=True)
+
+    if command == "stop":
+        if not outputs().get("instance_id"):
+            fail("nothing has been created yet.")
+        write_instance_state("stopped")
+        # With the instance stopped, no address is allowed to reach the database.
+        apply("", auto_approve=True)
+        print("Stopped. Only the 20 GB volume is billed while it is stopped.")
+        return 0
+
+    if command == "status":
+        out = outputs()
+        if not out.get("instance_id"):
+            print("Nothing has been created.")
+            return 0
+        state = aws(
+            "ec2", "describe-instances", "--instance-ids", out["instance_id"],
+            "--query", "Reservations[0].Instances[0].State.Name",
+            region=out.get("aws_region"), check=False,
+        )
+        print(f"run_mode : {out.get('run_mode')}")
+        print(f"instance : {out['instance_id']} ({json.loads(state.stdout) if state.stdout.strip() else 'unknown'})")
+        print(f"address  : {public_ip() or '(none while stopped)'}")
+        print(f"site     : {out.get('site_url')}")
+        return 0
+
+    if command == "logs":
+        return show_logs()
+
+    if command == "destroy":
+        before = outputs()
+        terraform("destroy", "-input=false", f"-var=release_sha={release_sha()}", "-var=atlas_allowed_ip=")
+        if outputs().get("instance_id"):
+            print("Terraform still reports resources; the destroy was not completed.")
+            return 1
+        # The parameters are not Terraform's, so they are removed here.
+        run(
+            [
+                sys.executable, str(SECRETS_SCRIPT), "purge",
+                "--region", before.get("aws_region") or "ap-south-1",
+                "--path", before.get("ssm_path") or "/antiproxy/prod",
+            ]
+        )
+        STATE_TFVARS.unlink(missing_ok=True)
+        print("Destroyed. Check that nothing is left with:  make sweep")
+        return 0
+
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
