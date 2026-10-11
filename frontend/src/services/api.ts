@@ -28,6 +28,7 @@ import type {
   TeacherProfileResponse,
   TeacherRegisterRequest,
 } from "../types";
+import { validationMessage } from "../utils/apiErrors.ts";
 import { clearStoredAuth, getStoredToken, setMustChangePassword } from "./auth.ts";
 import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
 import type { ReportsSummary } from "../utils/reports.ts";
@@ -101,8 +102,12 @@ async function request<T>(
     try {
       const errorBody = await response.json();
 
+      const invalid = validationMessage(errorBody?.detail);
       if (typeof errorBody?.detail === "string") {
         detail = errorBody.detail;
+      } else if (invalid) {
+        // A rejected form (422): say which field and why.
+        detail = invalid;
       } else if (typeof errorBody?.detail?.message === "string") {
         // Structured errors, e.g. { code: "account_pending", message: "..." }
         detail = errorBody.detail.message;
