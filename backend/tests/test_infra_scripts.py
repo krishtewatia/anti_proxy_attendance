@@ -330,3 +330,66 @@ def test_preflight_accepts_the_real_certificate_authority_once_the_deployment_ex
     assert missing == 0
     assert "real certificate authority" in printed
     assert "the staging certificate line is not on" not in printed
+
+
+# ------------------------------------------------------------------------------
+# After a start: catch up with merges made while the instance was stopped
+# ------------------------------------------------------------------------------
+
+OLD = "a" * 40
+NEW = "b" * 40
+OUT = {"instance_id": "i-0", "aws_region": "ap-south-1", "deploy_document": "antiproxy-prod-deploy"}
+
+
+def _catch_up(monkeypatch, *, running: str, newest: str, unpublished):
+    import tf
+
+    deployed: list[dict] = []
+    monkeypatch.setattr(tf, "outputs", lambda: OUT)
+    monkeypatch.setattr(tf, "release_sha", lambda: newest)
+    monkeypatch.setattr(tf, "running_release", lambda out: running)
+    monkeypatch.setattr(preflight, "unpublished_images", lambda sha: unpublished)
+    monkeypatch.setattr(
+        tf, "run_on_instance",
+        lambda out, document, parameters, wait_seconds: deployed.append({"document": document, **parameters}) or 0,
+    )
+    return tf.catch_up(), deployed
+
+
+def test_start_deploys_the_newest_release_when_the_instance_is_behind(monkeypatch, capsys):
+    code, deployed = _catch_up(monkeypatch, running=OLD, newest=NEW, unpublished=[])
+    assert code == 0
+    assert deployed == [{"document": "antiproxy-prod-deploy", "ReleaseSha": [NEW]}]
+
+
+def test_start_does_nothing_when_the_instance_is_already_on_the_newest_release(monkeypatch, capsys):
+    code, deployed = _catch_up(monkeypatch, running=NEW, newest=NEW, unpublished=[])
+    assert code == 0 and deployed == []
+    assert "newest release" in capsys.readouterr().out
+
+
+def test_start_stays_on_the_current_release_while_the_new_images_are_not_published(monkeypatch, capsys):
+    for unpublished in (["vision"], None):  # one image missing; registry unreachable
+        code, deployed = _catch_up(monkeypatch, running=OLD, newest=NEW, unpublished=unpublished)
+        assert code == 0 and deployed == []
+        assert "Staying on the current release" in capsys.readouterr().out
+
+
+def test_the_deploy_role_names_the_repository_by_its_permanent_ids():
+    terraform = SCRIPTS.parent / "terraform"
+    deploy = (terraform / "deploy.tf").read_text(encoding="utf-8")
+    variables = (terraform / "variables.tf").read_text(encoding="utf-8")
+    assert '"${var.github_oidc_subject_prefix}:ref:refs/heads/main"' in deploy
+    assert "StringEquals" in deploy and "StringLike" not in deploy
+    assert 'default     = "repo:krishtewatia@152677838/anti_proxy_attendance@1376867618"' in variables
+
+
+def test_the_pipeline_fails_clearly_and_sends_nothing_when_the_instance_is_stopped():
+    workflow = (SCRIPTS.parents[1] / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8")
+    check = workflow.index("- name: Is the instance running?")
+    deploy = workflow.index("- name: Deploy this commit")
+    step = workflow[check:deploy]
+    assert 'if [ "$state" != "running" ]; then' in step and "exit 1" in step
+    assert "Not deployed: the instance is $state. Nothing was changed." in step
+    # The check comes before the only step that talks to the instance.
+    assert "send-command" not in step and "send-command" in workflow[deploy:]

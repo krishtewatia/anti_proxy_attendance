@@ -51,8 +51,11 @@ resource "aws_iam_role" "deploy" {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           # Workflows running on main of this repository, and nothing else:
-          # not pull requests, not other branches, not forks.
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:ref:refs/heads/main"
+          # not pull requests, not other branches, not forks. The repository
+          # is named by its permanent numeric ids as well as its name (the
+          # form GitHub sends for this repository), so a renamed or re-created
+          # repository with the same name would not match.
+          "token.actions.githubusercontent.com:sub" = "${var.github_oidc_subject_prefix}:ref:refs/heads/main"
         }
       }
     }]

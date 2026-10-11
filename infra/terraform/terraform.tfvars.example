@@ -1,7 +1,8 @@
 # Copy to terraform.tfvars (ignored by git) and fill in. Nothing here is secret.
 
-# "on_demand": started and stopped by hand, and stopped automatically every night.
-# "always_on": runs until stopped by hand.
+# "on_demand" (what this project uses): started and stopped by hand with
+# tf.py start / tf.py stop, and stopped automatically every night.
+# "always_on" would remove the nightly stop.
 run_mode = "on_demand"
 
 site_host = "your-subdomain.duckdns.org"
