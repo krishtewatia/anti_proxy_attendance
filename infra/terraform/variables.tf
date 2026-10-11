@@ -115,6 +115,22 @@ variable "github_repository" {
   default     = "krishtewatia/anti_proxy_attendance"
 }
 
+variable "github_oidc_subject_prefix" {
+  description = <<-EOT
+    How GitHub names this repository in the identity token of a workflow run,
+    without the ":ref:..." part. This repository uses GitHub's immutable form,
+    "repo:<owner>@<owner id>/<name>@<repository id>". Read the current value with:
+      gh api repos/<owner>/<name>/actions/oidc/customization/sub --jq .sub_claim_prefix
+  EOT
+  type        = string
+  default     = "repo:krishtewatia@152677838/anti_proxy_attendance@1376867618"
+
+  validation {
+    condition     = can(regex("^repo:[^:*?]+/[^:*?]+$", var.github_oidc_subject_prefix))
+    error_message = "github_oidc_subject_prefix must look like repo:<owner>/<name>, without wildcards and without a ref."
+  }
+}
+
 variable "image_prefix" {
   description = "Registry path the three images share: <image_prefix>-backend, -frontend, -vision."
   type        = string

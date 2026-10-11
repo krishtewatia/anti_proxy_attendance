@@ -240,7 +240,7 @@ repeatedly after it.
 Step 3 (the window), then:
 
 ```powershell
-python infra/scripts/tf.py start     # start the instance, wait for the site
+python infra/scripts/tf.py start     # start the instance, wait for the site, update to the newest release
 python infra/scripts/tf.py status    # what exists and whether it is running
 python infra/scripts/tf.py logs      # start-up log, containers, memory
 python infra/scripts/tf.py stop      # end of the session
@@ -270,22 +270,34 @@ address, DuckDNS and the database access list are updated by themselves.
 Not used: NAT gateway, load balancer, RDS, Secrets Manager, ECR, Elastic IP.
 There is no SSH: port 22 is closed and no key pair exists.
 
-## Running all the time or on demand
+## Running on demand (the final mode)
 
-One setting, `run_mode` in `infra\terraform\terraform.tfvars`:
+**Decision of 11 October 2026: the deployment stays on demand.** The site is
+started when it is going to be shown and stopped afterwards; it does not run
+all the time.
 
-| `run_mode` | Behaviour |
-|---|---|
-| `on_demand` | You start and stop it (`tf.py start`, `tf.py stop`). It is also stopped automatically every night at 23:30 India time, so a forgotten instance does not use up credits. |
-| `always_on` | No automatic stop. It runs until `tf.py stop`. |
+```powershell
+python infra/scripts/tf.py start     # about an hour before showing the site
+python infra/scripts/tf.py stop      # afterwards
+```
 
-Change the value and run `python infra/scripts/tf.py up`. While stopped, only
-the volume is billed (about $1.80 a month); the public address is released,
-so nothing is charged for it.
+- `start` waits until the site answers, then checks whether merges happened
+  while the instance was stopped and, if so, moves it to the newest release
+  by itself.
+- If you forget to stop it, it is stopped automatically at 23:30 India time.
+- While stopped, only the volume is billed (about $1.80 a month); the public
+  address is released, so nothing is charged for it. Running costs $0.0274
+  an hour (ap-south-1, October 2026), about $0.66 for a full day.
+- Start it about an hour early: a freshly started instance has no CPU
+  credits yet and recognition is slower until some have built up (24 an
+  hour). A ten-minute webcam session used about 4.
+- A merge to `main` while the instance is stopped cannot be deployed. The
+  pipeline's deploy job then fails with the message "Not deployed: the
+  instance is stopped. Nothing was changed." That is expected and harmless:
+  the images are published, and the next `start` picks them up.
 
-Approximate credit use (ap-south-1, October 2026): running costs $0.0274 an
-hour (instance plus public address), so a full day is about $0.66 and
-24 October to 30 November is about $25.
+`run_mode` in `terraform.tfvars` stays `"on_demand"`. The other value,
+`"always_on"`, removes the nightly automatic stop; it is not used.
 
 ## All commands
 
@@ -338,7 +350,17 @@ deploys that commit and checks the site.
 - The role it receives can do one thing: run the `antiproxy-prod-deploy`
   document on the one instance. That document takes a full commit id and runs
   `/opt/antiproxy/deploy.sh` with it; it cannot run anything else.
-- If the instance is stopped, the job says so and ends successfully.
+- If the instance is stopped, the job fails at its first step with "Not
+  deployed: the instance is stopped. Nothing was changed.", before anything
+  is sent to the instance. The next `tf.py start` brings the instance to the
+  newest release.
+- The role's trust names the repository the way GitHub does in its tokens,
+  with the permanent numeric ids
+  (`repo:<owner>@<owner id>/<name>@<repository id>:ref:refs/heads/main`). If
+  a deploy ever fails with "Not authorized to perform
+  sts:AssumeRoleWithWebIdentity", compare `github_oidc_subject_prefix` in
+  `variables.tf` with the output of
+  `gh api repos/<owner>/<name>/actions/oidc/customization/sub`.
 - The check afterwards is `scripts/smoke_e2e.py --base-url <site> --checks-only`:
   it needs no photos, no account and no secret, and creates nothing on the
   site.
@@ -367,8 +389,7 @@ document name, site URL; none is a secret). Run them. To switch automatic
 deployment off: `gh variable delete AWS_DEPLOY_ROLE_ARN`.
 
 `python infra/scripts/tf.py deploy` deploys the current `origin/main` by
-hand, for example after `tf.py start` when merges happened while the instance
-was stopped.
+hand. `tf.py start` already does this when the instance is behind.
 
 ## Backups
 

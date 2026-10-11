@@ -290,13 +290,8 @@ def check_atlas(report: Report, values: dict[str, str]) -> None:
         report.note(f"could not reach Atlas to confirm the key ({type(exc).__name__})")
 
 
-def check_images(report: Report) -> None:
-    print("Images")
-    code, text = quiet(["git", "-C", str(REPO_ROOT), "ls-remote", "origin", "refs/heads/main"])
-    sha = text.split()[0] if code == 0 and text.split() else ""
-    if len(sha) != 40:
-        report.note("could not read the commit of origin/main; images not checked")
-        return
+def unpublished_images(sha: str) -> list[str] | None:
+    """Which of the three images are not in the registry for this commit; None if it cannot be reached."""
     absent = []
     for name in ("backend", "frontend", "vision"):
         repository = f"krishtewatia/anti-proxy-{name}"
@@ -315,10 +310,23 @@ def check_images(report: Report) -> None:
             status = connection.getresponse().status
             connection.close()
         except (OSError, ValueError):
-            report.note("could not reach the image registry; images not checked")
-            return
+            return None
         if status != 200:
             absent.append(name)
+    return absent
+
+
+def check_images(report: Report) -> None:
+    print("Images")
+    code, text = quiet(["git", "-C", str(REPO_ROOT), "ls-remote", "origin", "refs/heads/main"])
+    sha = text.split()[0] if code == 0 and text.split() else ""
+    if len(sha) != 40:
+        report.note("could not read the commit of origin/main; images not checked")
+        return
+    absent = unpublished_images(sha)
+    if absent is None:
+        report.note("could not reach the image registry; images not checked")
+        return
     if absent:
         report.miss(
             f"no published image for the newest commit ({sha[:7]}): {', '.join(absent)}",

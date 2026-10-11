@@ -167,21 +167,25 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: github-deploy-${{ github.run_id }}
 
-      # In on-demand mode the instance is often stopped. That is not a failure:
-      # it starts the release it was last given, and `make deploy` brings it
-      # up to date.
+      # The instance runs on demand and is usually stopped. A deploy then
+      # cannot happen: this step fails with one plain message, before anything
+      # is sent to the instance. Nothing is changed and the images of this
+      # commit are already published. The next `tf.py start` brings the
+      # instance up to date by itself.
       - name: Is the instance running?
-        id: instance
         run: |
           state=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
             --query 'Reservations[0].Instances[0].State.Name' --output text)
-          echo "state=$state" >> "$GITHUB_OUTPUT"
           if [ "$state" != "running" ]; then
-            echo "::notice::The instance is $state, so nothing was deployed. Run 'make deploy' after starting it."
+            message="Not deployed: the instance is $state. Nothing was changed. The images for this commit are published; 'python infra/scripts/tf.py start' will start the instance on the newest release."
+            echo "::error title=Not deployed (instance is $state)::$message"
+            echo "### Not deployed" >> "$GITHUB_STEP_SUMMARY"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
+          echo "The instance is running."
 
       - name: Deploy this commit
-        if: steps.instance.outputs.state == 'running'
         run: |
           command_id=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
@@ -208,5 +212,4 @@ jobs:
 
       # Needs no photos, no account and no secret, and creates nothing on the site.
       - name: Check the site from outside
-        if: steps.instance.outputs.state == 'running'
         run: python3 scripts/smoke_e2e.py --base-url "$SITE_URL" --checks-only

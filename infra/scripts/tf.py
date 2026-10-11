@@ -5,7 +5,7 @@
     python infra/scripts/tf.py secrets   same as: python infra/scripts/manage_secrets.py init
     python infra/scripts/tf.py up        create or update everything, then wait for the site
     python infra/scripts/tf.py stop      stop the instance (only its volume is billed)
-    python infra/scripts/tf.py start     start it again, then wait for the site
+    python infra/scripts/tf.py start     start it again, wait for the site, update it to the newest release
     python infra/scripts/tf.py status    what exists and whether the site answers
     python infra/scripts/tf.py plan      show what `up` would change, change nothing
     python infra/scripts/tf.py logs      last lines of the start-up log and the container list
@@ -216,7 +216,7 @@ def run_on_instance(out: dict[str, str], document: str, parameters: dict, *, wai
     return 1
 
 
-def bring_up(*, auto_approve: bool) -> int:
+def bring_up(*, auto_approve: bool, catch_up_release: bool = False) -> int:
     write_instance_state("running")
     apply(public_ip(), auto_approve=auto_approve)
     address = public_ip()
@@ -227,7 +227,59 @@ def bring_up(*, auto_approve: bool) -> int:
 
     # Secrets live outside Terraform; make sure they exist before waiting.
     run([sys.executable, str(SECRETS_SCRIPT), "init", "--if-missing"])
-    return 0 if wait_for_site(outputs().get("site_url", "")) else 1
+    if not wait_for_site(outputs().get("site_url", "")):
+        return 1
+    return catch_up() if catch_up_release else 0
+
+
+def running_release(out: dict[str, str]) -> str:
+    """The commit the instance is running, read through Systems Manager ('' if unknown)."""
+    region = out.get("aws_region")
+    sent = aws(
+        "ssm", "send-command",
+        "--instance-ids", out["instance_id"],
+        "--document-name", "AWS-RunShellScript",
+        "--parameters", json.dumps({"commands": ["cat /opt/antiproxy/release"]}),
+        region=region, check=False,
+    )
+    if sent.returncode != 0:
+        return ""
+    command_id = json.loads(sent.stdout)["Command"]["CommandId"]
+    for _ in range(30):
+        time.sleep(2)
+        result = aws(
+            "ssm", "get-command-invocation",
+            "--command-id", command_id, "--instance-id", out["instance_id"],
+            region=region, check=False,
+        )
+        if result.returncode != 0:
+            continue
+        invocation = json.loads(result.stdout)
+        if invocation.get("Status") in {"Success", "Failed", "TimedOut", "Cancelled"}:
+            return invocation.get("StandardOutputContent", "").strip()
+    return ""
+
+
+def catch_up() -> int:
+    """After a start: move the instance to the newest release if merges happened while it was stopped."""
+    out = outputs()
+    newest = release_sha()
+    current = running_release(out)
+    if current == newest:
+        print(f"Running the newest release ({newest[:7]}).")
+        return 0
+    import preflight
+
+    missing = preflight.unpublished_images(newest)
+    if missing is None or missing:
+        print(
+            f"The instance runs {current[:7] or 'an unknown release'}; the newest commit is {newest[:7]}, "
+            "but its images are not published yet. Staying on the current release.\n"
+            "When the 'Publish Images' run on GitHub has finished:  python infra/scripts/tf.py deploy"
+        )
+        return 0
+    print(f"Merges happened while the instance was stopped: updating {current[:7] or '?'} -> {newest[:7]} ...")
+    return run_on_instance(out, out["deploy_document"], {"ReleaseSha": [newest]}, wait_seconds=900)
 
 
 def main() -> int:
@@ -255,7 +307,7 @@ def main() -> int:
     if command == "start":
         if not outputs().get("instance_id"):
             fail("nothing has been created yet. Run `python infra/scripts/tf.py up` first.")
-        return bring_up(auto_approve=True)
+        return bring_up(auto_approve=True, catch_up_release=True)
 
     if command == "stop":
         if not outputs().get("instance_id"):
