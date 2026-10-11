@@ -38,7 +38,8 @@ CHECKS = [
 
 def main() -> int:
     require_tools("aws")
-    identity = aws("sts", "get-caller-identity", check=False)
+    # A region is given on every call, so this works even when the profile has none.
+    identity = aws("sts", "get-caller-identity", region="us-east-1", check=False)
     if identity.returncode != 0:
         fail("the AWS CLI has no working credentials")
     print(f"Account {json.loads(identity.stdout)['Account']}, read-only sweep\n")
@@ -61,7 +62,7 @@ def main() -> int:
         for line in lines:
             print(line)
 
-    buckets = aws("s3api", "list-buckets", "--query", "Buckets[].Name", check=False)
+    buckets = aws("s3api", "list-buckets", "--query", "Buckets[].Name", region="us-east-1", check=False)
     names = json.loads(buckets.stdout or "[]") if buckets.returncode == 0 else []
     print(f"\nS3 buckets (all regions): {', '.join(names) if names else 'none'}")
     print(f"\n{found} billable resource(s) found in {len(regions)} regions, {len(names or [])} bucket(s).")

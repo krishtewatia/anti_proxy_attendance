@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Create, stop, start and destroy the AWS deployment. Used by the Makefile.
 
+    python infra/scripts/tf.py preflight check this machine is ready; changes nothing
+    python infra/scripts/tf.py secrets   same as: python infra/scripts/manage_secrets.py init
     python infra/scripts/tf.py up        create or update everything, then wait for the site
     python infra/scripts/tf.py stop      stop the instance (only its volume is billed)
     python infra/scripts/tf.py start     start it again, then wait for the site
     python infra/scripts/tf.py status    what exists and whether the site answers
     python infra/scripts/tf.py plan      show what `up` would change, change nothing
     python infra/scripts/tf.py logs      last lines of the start-up log and the container list
+    python infra/scripts/tf.py certificate   make the instance use the certificate authority set in terraform.tfvars
     python infra/scripts/tf.py deploy    switch the running instance to the current origin/main
     python infra/scripts/tf.py backup    take a backup now and list the stored backups
     python infra/scripts/tf.py github-vars   the repository variables the deploy pipeline needs
@@ -30,7 +33,46 @@ import sys
 import time
 import urllib.parse
 
-from common import REPO_ROOT, STATE_TFVARS, TFVARS, aws, fail, outputs, require_tools, run, terraform
+from common import (
+    REPO_ROOT,
+    STATE_TFVARS,
+    TFVARS,
+    aws,
+    fail,
+    outputs,
+    parse_tfvars,
+    require_tools,
+    run,
+    terraform,
+)
+
+# The two certificate authorities the deployment may use, and nothing else.
+CERTIFICATE_AUTHORITIES = {
+    "real": "https://acme-v02.api.letsencrypt.org/directory",
+    "staging": "https://acme-staging-v02.api.letsencrypt.org/directory",
+}
+
+
+def certificate_commands(tfvars_text: str) -> tuple[str, list[str]]:
+    """Which authority terraform.tfvars asks for, and the commands that switch the instance to it.
+
+    The instance read the setting once, when it was created, so changing the
+    file alone does nothing. Certificates from the other authority are
+    removed, otherwise Caddy would keep serving them.
+    """
+    wanted = parse_tfvars(tfvars_text).get("acme_ca", CERTIFICATE_AUTHORITIES["real"])
+    kinds = {url: kind for kind, url in CERTIFICATE_AUTHORITIES.items()}
+    if wanted not in kinds:
+        fail(f"acme_ca in terraform.tfvars is not one of the two known addresses: {wanted}")
+    commands = [
+        "set -eu",
+        f"sed -i 's|^ACME_CA=.*|ACME_CA={wanted}|' /opt/antiproxy/config.env",
+        "docker ps --all --quiet --filter name=caddy | xargs --no-run-if-empty docker rm --force",
+        "docker volume rm --force anti_proxy_caddy_data anti_proxy_caddy_config",
+        "systemctl restart antiproxy.service",
+        "grep '^ACME_CA=' /opt/antiproxy/config.env",
+    ]
+    return kinds[wanted], commands
 
 SECRETS_SCRIPT = REPO_ROOT / "infra" / "scripts" / "manage_secrets.py"
 
@@ -55,10 +97,10 @@ def write_instance_state(state: str) -> None:
 def prepare() -> None:
     require_tools("terraform", "aws", "git")
     if not TFVARS.exists():
-        fail(f"{TFVARS} does not exist. Copy terraform.tfvars.example to terraform.tfvars and fill it in.")
-    identity = aws("sts", "get-caller-identity", check=False)
+        fail(f"{TFVARS} does not exist. Run `python infra/scripts/tf.py preflight` to see what is missing.")
+    identity = aws("sts", "get-caller-identity", region="ap-south-1", check=False)
     if identity.returncode != 0:
-        fail("the AWS CLI has no working credentials. See docs/deployment/aws.md, section \"Credentials\".")
+        fail("the AWS CLI cannot sign in. Run `python infra/scripts/tf.py preflight` to see what is missing.")
     arn = json.loads(identity.stdout).get("Arn", "")
     if arn.endswith(":root"):
         fail("these are root credentials. Use the IAM admin user instead.")
@@ -126,7 +168,7 @@ def wait_for_site(url: str, minutes: int = 15) -> bool:
             connection.close()
         time.sleep(15)
     print(f"The site did not answer within {minutes} minutes (last result: {last}).")
-    print("Look at it with:  make logs")
+    print("Look at it with:  python infra/scripts/tf.py logs")
     return False
 
 
@@ -190,8 +232,14 @@ def bring_up(*, auto_approve: bool) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["up", "stop", "start", "status", "plan", "logs", "deploy", "backup", "github-vars", "destroy"])
+    parser.add_argument("command", choices=["preflight", "secrets", "up", "stop", "start", "status", "plan", "logs", "certificate", "deploy", "backup", "github-vars", "destroy"])
     command = parser.parse_args().command
+    if command == "preflight":
+        import preflight
+
+        return preflight.main()
+    if command == "secrets":
+        return run([sys.executable, str(SECRETS_SCRIPT), "init"], check=False).returncode
     prepare()
 
     if command == "plan":
@@ -206,7 +254,7 @@ def main() -> int:
 
     if command == "start":
         if not outputs().get("instance_id"):
-            fail("nothing has been created yet. Run `make up` first.")
+            fail("nothing has been created yet. Run `python infra/scripts/tf.py up` first.")
         return bring_up(auto_approve=True)
 
     if command == "stop":
@@ -236,6 +284,15 @@ def main() -> int:
 
     if command == "logs":
         return show_logs()
+
+    if command == "certificate":
+        out = outputs()
+        if not out.get("instance_id"):
+            fail("nothing has been created yet.")
+        kind, commands = certificate_commands(TFVARS.read_text(encoding="utf-8-sig"))
+        print(f"Switching the instance to the {kind} certificate authority (the site restarts) ...")
+        code = run_on_instance(out, "AWS-RunShellScript", {"commands": commands}, wait_seconds=600)
+        return code if code else (0 if wait_for_site(out.get("site_url", ""), minutes=10) else 1)
 
     if command == "deploy":
         out = outputs()
@@ -293,7 +350,7 @@ def main() -> int:
             ]
         )
         STATE_TFVARS.unlink(missing_ok=True)
-        print("Destroyed. Check that nothing is left with:  make sweep")
+        print("Destroyed. Check that nothing is left with:  python infra/scripts/sweep.py")
         return 0
 
     return 2

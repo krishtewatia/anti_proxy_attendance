@@ -33,13 +33,14 @@ import json
 import os
 from pathlib import Path
 import secrets
+import shutil
 import sys
 import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
 
-from common import aws, fail, outputs, require_tools
+from common import aws, cli_file_argument, fail, outputs, require_tools
 
 GENERATED = ["JWT_SECRET_KEY", "VISION_SERVICE_API_KEY", "RECOGNITION_SIGNING_KEY"]
 BOOTSTRAP = ["BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD"]
@@ -77,16 +78,21 @@ class Store:
             "Overwrite": True,
             "Tier": "Standard",
         }
+        # A new directory that only this user can enter; removed again whatever
+        # happens below, including a failed or interrupted AWS call.
         directory = tempfile.mkdtemp(prefix="antiproxy-")
         request_file = Path(directory) / "request.json"
         try:
             descriptor = os.open(request_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 json.dump(request, handle)
-            aws("ssm", "put-parameter", "--cli-input-json", request_file.as_uri(), region=self.region)
+            aws(
+                "ssm", "put-parameter",
+                "--cli-input-json", cli_file_argument(request_file),
+                region=self.region,
+            )
         finally:
-            request_file.unlink(missing_ok=True)
-            os.rmdir(directory)
+            shutil.rmtree(directory, ignore_errors=True)
         print(f"  stored {name}")
 
     def delete(self, names: list[str]) -> None:
@@ -153,7 +159,7 @@ def create_database_user(project_id: str) -> str:
 def mongodb_url(srv_address: str, password: str) -> str:
     host = srv_address.split("://", 1)[-1].strip("/")
     if not host:
-        fail("Terraform has no Atlas cluster address yet. Run `make up` first.")
+        fail("Terraform has no Atlas cluster address yet. Run `python infra/scripts/tf.py up` first.")
     query = urllib.parse.urlencode({"retryWrites": "true", "w": "majority", "appName": "antiproxy"})
     return (
         f"mongodb+srv://{urllib.parse.quote(DATABASE_USER)}:{urllib.parse.quote(password, safe='')}"
@@ -171,6 +177,10 @@ def hidden(prompt: str, *, minimum: int = 1, confirm: bool = False) -> str:
         value = getpass.getpass(prompt).strip()
         if len(value) < minimum:
             print(f"  At least {minimum} characters.")
+            continue
+        if "'" in value:
+            # The instance writes values between single quotes.
+            print("  Do not use the ' character.")
             continue
         if confirm and getpass.getpass("  Again: ").strip() != value:
             print("  The two entries differ.")
@@ -190,6 +200,9 @@ def command_init(store: Store, out: dict[str, str], only_if_missing: bool) -> in
     if only_if_missing and not missing:
         print("All secrets are already in Parameter Store.")
         return 0
+    # A deployment that already has its keys has had its first administrator
+    # too; `tf.py up` must not ask for one again later.
+    first_time = not any(name in existing for name in GENERATED)
     print(f"Secrets under {store.path} ({store.region}):")
 
     for name in GENERATED:
@@ -198,20 +211,24 @@ def command_init(store: Store, out: dict[str, str], only_if_missing: bool) -> in
         else:
             store.put(name, secrets.token_hex(32))
 
-    if "MONGODB_URL" in existing:
-        print("  MONGODB_URL exists, kept")
-    else:
-        if not out.get("atlas_project_id"):
-            fail("Terraform has not created the Atlas project yet. Run `make up` first.")
-        password = create_database_user(out["atlas_project_id"])
-        store.put("MONGODB_URL", mongodb_url(out.get("atlas_srv_address", ""), password))
-
     if "DUCKDNS_TOKEN" in existing:
         print("  DUCKDNS_TOKEN exists, kept")
     else:
-        store.put("DUCKDNS_TOKEN", hidden("DuckDNS token (hidden): ", minimum=20))
+        store.put("DUCKDNS_TOKEN", hidden("DuckDNS token (hidden, nothing is shown while you paste): ", minimum=20))
 
-    if not any(name in existing for name in BOOTSTRAP):
+    database_pending = False
+    if "MONGODB_URL" in existing:
+        print("  MONGODB_URL exists, kept")
+    elif not out.get("atlas_project_id"):
+        # The database user can only be made once the cluster exists.
+        database_pending = True
+        print("  MONGODB_URL: later. `python infra/scripts/tf.py up` creates the database,")
+        print("               then stores this one by itself.")
+    else:
+        password = create_database_user(out["atlas_project_id"])
+        store.put("MONGODB_URL", mongodb_url(out.get("atlas_srv_address", ""), password))
+
+    if (first_time or not only_if_missing) and not any(name in existing for name in BOOTSTRAP):
         print("First administrator of the deployed site (created at first start, must change the password at first sign-in):")
         email = input("  Email: ").strip()
         if "@" not in email:
@@ -221,7 +238,9 @@ def command_init(store: Store, out: dict[str, str], only_if_missing: bool) -> in
             "BOOTSTRAP_ADMIN_PASSWORD",
             hidden("  Temporary password (hidden, at least 12 characters): ", minimum=12, confirm=True),
         )
-        print("  After the first sign-in run:  make secrets-remove-bootstrap")
+        print("  After the first sign-in run:  python infra/scripts/manage_secrets.py remove-bootstrap")
+    if database_pending:
+        print("Done for now. Next: python infra/scripts/tf.py up")
     return 0
 
 
@@ -229,7 +248,7 @@ def command_rotate(store: Store, name: str) -> int:
     if name not in GENERATED:
         fail(f"only these can be rotated here: {', '.join(GENERATED)}")
     store.put(name, secrets.token_hex(32))
-    print("Restart the application so it reads the new value:  make stop && make start")
+    print("Restart the application so it reads the new value: tf.py stop, then tf.py start")
     return 0
 
 
