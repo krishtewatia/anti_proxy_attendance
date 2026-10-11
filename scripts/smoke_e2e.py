@@ -17,12 +17,15 @@ Two ways to run it:
     #    project with generated secrets, runs the checks, removes everything.
     python scripts/smoke_e2e.py --photos /path/to/photos
 
-    # 2. Against a running deployment (for example after a deploy):
+    # 2. Against a stack already running on this machine:
     SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... \\
-        python scripts/smoke_e2e.py --base-url https://attendance.example.edu --photos /path/to/photos
+        python scripts/smoke_e2e.py --base-url http://localhost:3000 --photos /path/to/photos
+
+    # 3. Against a deployment, from outside, without photos:
+    python scripts/smoke_e2e.py --base-url https://attendance.example.edu --checks-only
 
 Registrations need an administrator's approval, so the run needs an admin
-account. The throwaway stack creates one for itself. Against a deployment,
+account. The throwaway stack creates one for itself. Against a running stack,
 supply SMOKE_ADMIN_EMAIL and SMOKE_ADMIN_PASSWORD (and optionally
 SMOKE_TEACHER_EMAIL / SMOKE_TEACHER_PASSWORD for an existing approved teacher
 who is assigned the class given by --class-code).
@@ -32,15 +35,14 @@ Photos are never read from the repository. ``--photos`` (default:
 person with at least three face photos each. The first two people are
 enrolled; a third, if present, is used as the person who is not enrolled.
 
-Face photos stay on this machine by default. The full flow uploads the
-photos in ``--photos`` to whatever it is pointed at, so against anything other
-than this machine (``localhost``) it refuses to run unless
-``--send-photos-to-remote`` is given. Give it only when every person in those
-photos has agreed to their face being stored on that server. For this
-project's own deployment the answer is no: the fixtures are volunteers'
-faces, and the deployment is checked with ``--checks-only`` and by hand.
+Face photos never leave this machine. The full flow uploads the photos in
+``--photos`` to the stack it tests, so it runs only against this machine: the
+throwaway stack, or ``--base-url`` with a ``localhost`` address. Against any
+other address the script refuses to run the photo flow, and there is no
+option to allow it. A deployment is checked with ``--checks-only`` and, for
+recognition, by hand.
 
-Against a deployment the script can be run repeatedly. It registers two
+Against a running local stack the script can be run repeatedly. It registers two
 smoke-test students once (IDs ``SMOKEA`` and ``SMOKEB`` by default, reused on
 later runs) and creates one new session per run. Nothing is deleted, so use a
 class and an environment where that is acceptable, and keep using the same
@@ -963,7 +965,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--base-url",
-        help="Test a running deployment instead of starting a throwaway stack",
+        help="Test a stack that is already running instead of starting a throwaway one. "
+        "The photo flow needs a localhost address; any other address needs --checks-only",
     )
     parser.add_argument(
         "--photos",
@@ -1017,12 +1020,6 @@ def main() -> int:
         type=int,
         default=240,
         help="Seconds to wait for the first successful recognition (model loading)",
-    )
-    parser.add_argument(
-        "--send-photos-to-remote",
-        action="store_true",
-        help="With --base-url on another machine: allow the face photos to be uploaded there. "
-        "Only when every person in the photos agreed to that",
     )
     parser.add_argument(
         "--checks-only",
@@ -1086,14 +1083,12 @@ def main() -> int:
         except ValueError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
-        if not is_this_machine(args.base_url) and not args.send_photos_to_remote:
+        if not is_this_machine(args.base_url):
             print(
-                "ERROR: this would upload the face photos in --photos to "
-                f"{urllib.parse.urlsplit(args.base_url).hostname}.\n"
+                "ERROR: the photo flow never runs against another machine: it would upload "
+                f"the face photos in --photos to {urllib.parse.urlsplit(args.base_url).hostname}.\n"
                 "  To check a deployment without photos:  add --checks-only\n"
-                "  To run the full flow locally:          drop --base-url\n"
-                "  Only if every person in the photos agreed to their face being stored there:\n"
-                "                                         add --send-photos-to-remote",
+                "  To run the full flow locally:          drop --base-url",
                 file=sys.stderr,
             )
             return 2

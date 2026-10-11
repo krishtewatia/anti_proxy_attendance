@@ -347,8 +347,8 @@ deploys that commit and checks the site.
 The full flow enrols the face photos in the fixtures folder, and those are
 volunteers' faces: they are never uploaded to the deployment. The script
 enforces this: with `--base-url` pointing anywhere but this machine it
-refuses to run the photo flow unless `--send-photos-to-remote` is added, and
-this project does not add it. How each part is checked instead:
+refuses to run the photo flow, and there is no option to allow it. How each
+part is checked instead:
 
 | What | How |
 |---|---|
