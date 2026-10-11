@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.dependencies.rate_limiter import check_registration_rate_limit
+from app.core.client_ip import client_ip
+from app.services.login_throttle import login_throttle
 
 from typing import Annotated
 
@@ -45,23 +47,45 @@ async def register(user: UserCreate) -> UserResponse:
     "/login",
     response_model=TokenResponse,
 )
-async def login(credentials: UserLogin) -> TokenResponse:
+async def login(credentials: UserLogin, request: Request) -> TokenResponse:
+    # Too many failed sign-ins from this address or for this email: refuse
+    # before looking at the password. The answer is the same whether or not
+    # the account exists.
+    address = client_ip(request)
+    wait_seconds = await login_throttle.retry_after(address, credentials.email)
+    if wait_seconds:
+        minutes = max(1, -(-wait_seconds // 60))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Too many failed sign-in attempts. "
+                f"Try again in {minutes} minute{'' if minutes == 1 else 's'}."
+            ),
+            headers={"Retry-After": str(wait_seconds)},
+        )
+
     try:
-        return await authenticate_user(
+        token = await authenticate_user(
             email=credentials.email,
             password=credentials.password,
         )
     except AccountPendingError as exc:
+        # The password was right, so this is not a failed guess.
+        await login_throttle.record_success(credentials.email)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "account_pending", "message": str(exc)},
         ) from exc
     except AuthenticationError as exc:
+        await login_throttle.record_failure(address, credentials.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+    await login_throttle.record_success(credentials.email)
+    return token
 
 
 @router.post(

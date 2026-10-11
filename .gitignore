@@ -121,10 +121,22 @@ frontend/tsconfig*.tsbuildinfo
 # UI audit screenshots: local only, they show real student photos
 ui_audit/
 
-# Terraform: local state and local settings (never committed)
-infra/terraform/.terraform/
-infra/terraform/*.tfstate
-infra/terraform/*.tfstate.*
-infra/terraform/terraform.tfvars
-infra/terraform/*.auto.tfvars
-infra/terraform/crash.log
+# Terraform: local state, local settings and saved plans (never committed).
+# State and plans can hold resource details; tfvars hold account identifiers.
+# Only terraform.tfvars.example and .terraform.lock.hcl belong in the repository.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+*.tfplan
+tfplan
+plan.out
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc

@@ -306,6 +306,26 @@ def check_production_topology(
         {"requests": len(statuses), "last": statuses[-1]},
     )
 
+    # The same for sign-in: wrong passwords for accounts that do not exist,
+    # each request claiming a different address. The address limit must hold.
+    statuses = []
+    retry_after = None
+    for n in range(30):
+        conn_status, body = api.post_json(
+            "/api/v1/auth/login",
+            {"email": f"nobody{n}@smoke.invalid", "password": "not-a-real-password"},
+            headers={"X-Forwarded-For": f"198.51.100.{n + 1}"},
+        )
+        statuses.append(conn_status)
+        if conn_status == 429:
+            retry_after = str(body.get("detail", ""))[:60]
+            break
+    checks.check(
+        "failed sign-ins are limited per address, whatever X-Forwarded-For claims (429)",
+        429 in statuses and set(statuses[:-1]) == {401},
+        {"requests": len(statuses), "last": statuses[-1], "message": retry_after},
+    )
+
 
 def stop_throwaway_stack(project: str, env: dict[str, str], show_logs: bool) -> None:
     if show_logs:

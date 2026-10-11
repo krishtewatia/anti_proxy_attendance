@@ -69,6 +69,25 @@ outside can choose the address they see.
 
 In development `TRUSTED_PROXY_IPS` is empty and the header is always ignored.
 
+## Failed sign-ins
+
+Failed sign-ins are counted per account (the email as typed) and per client
+address. After 5 failures for one account, or 20 from one address, within 15
+minutes, further attempts get `429` with a `Retry-After` header until the
+oldest failure is 15 minutes old, even with the right password. Only failures
+count, and a successful sign-in clears the account's count. An email that is
+not registered is counted and locked in exactly the same way, and takes the
+same time to refuse, so neither the limit nor the timing shows which emails
+exist.
+
+The address limit is higher than the account limit because a whole campus
+can share one public address. Settings: `LOGIN_MAX_FAILURES_PER_ACCOUNT`,
+`LOGIN_MAX_FAILURES_PER_ADDRESS`, `LOGIN_FAILURE_WINDOW_SECONDS`.
+
+Someone who knows a user's email can lock that account for 15 minutes by
+failing five times on purpose. That is the price of a per-account limit; the
+lock ends by itself and an administrator's password reset is not affected.
+
 ## The browser and the API
 
 The frontend image is built with `VITE_API_BASE_URL=same-origin`: the page

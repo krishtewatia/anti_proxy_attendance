@@ -64,6 +64,12 @@ class Settings:
     REGISTRATION_RATE_LIMIT_PER_MINUTE: int = int(
         os.getenv("REGISTRATION_RATE_LIMIT_PER_MINUTE", "5")
     )
+    # Failed sign-ins: after this many inside the window, further attempts
+    # are refused (429) for that account or that client address. The address
+    # limit is higher because a whole campus can share one address.
+    LOGIN_MAX_FAILURES_PER_ACCOUNT: int = int(os.getenv("LOGIN_MAX_FAILURES_PER_ACCOUNT", "5"))
+    LOGIN_MAX_FAILURES_PER_ADDRESS: int = int(os.getenv("LOGIN_MAX_FAILURES_PER_ADDRESS", "20"))
+    LOGIN_FAILURE_WINDOW_SECONDS: int = int(os.getenv("LOGIN_FAILURE_WINDOW_SECONDS", "900"))
     TEACHER_FRAME_RATE_LIMIT_PER_MINUTE: int = int(
         os.getenv("TEACHER_FRAME_RATE_LIMIT_PER_MINUTE", "600")
     )
