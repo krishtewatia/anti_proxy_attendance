@@ -45,6 +45,13 @@ repos:
   # ----------------------------------------------------------------------------
   - repo: local
     hooks:
+      # Terraform state, variable files and saved plans must never be
+      # committed, even with `git add -f`.
+      - id: no-terraform-state
+        name: No Terraform state, tfvars or plan files
+        entry: Terraform state, tfvars and plan files must not be committed
+        language: fail
+        files: (\.tfstate(\..*)?|\.tfvars(\.json)?|\.tfplan|(^|/)tfplan|(^|/)plan\.out)$
       - id: bandit
         name: Bandit Security Scanner
         entry: ./backend/.venv/Scripts/bandit.exe

@@ -60,6 +60,16 @@ def fresh_registration_rate_limit():
     registration_rate_limiter.reset()
 
 
+@pytest.fixture(autouse=True)
+def fresh_login_throttle():
+    """Each test starts with no failed sign-ins on record (the counts are process-wide)."""
+    from app.services.login_throttle import login_throttle
+
+    login_throttle.reset()
+    yield
+    login_throttle.reset()
+
+
 @pytest.fixture
 def register_test_camera(monkeypatch):
     """Register cameras in the real camera registry and return their auth headers.

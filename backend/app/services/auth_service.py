@@ -1,4 +1,5 @@
 import logging
+import secrets
 from uuid import uuid4
 
 from app.database.users import (
@@ -74,6 +75,11 @@ async def register_user(user: UserCreate) -> UserResponse:
     )
 
 
+# A real hash of a random value nobody knows: checked against when the email
+# is not registered, so that case costs the same as a wrong password.
+_UNKNOWN_ACCOUNT_HASH = hash_password(secrets.token_urlsafe(32))
+
+
 async def authenticate_user(
     *,
     email: str,
@@ -81,10 +87,10 @@ async def authenticate_user(
 ) -> TokenResponse:
     user = await get_user_by_email(email)
 
-    if user is None:
-        raise AuthenticationError("Invalid email or password")
-
-    if not user.get("is_active", False):
+    if user is None or not user.get("is_active", False):
+        # Do the same password work as for a real account, so the time the
+        # answer takes does not show whether the email is registered.
+        verify_password(password, _UNKNOWN_ACCOUNT_HASH)
         raise AuthenticationError("Invalid email or password")
 
     if not verify_password(password, user["password_hash"]):
