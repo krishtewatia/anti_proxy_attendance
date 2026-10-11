@@ -628,10 +628,16 @@ python scripts/smoke_e2e.py --photos /path/to/photos
 
 By default it builds the images, starts a throwaway stack under a random Compose project name with generated secrets and an in-memory database, runs the checks, and removes the stack again. It does not touch the development stack. `--photos` needs one folder per person with at least three face photos each; if it is omitted, `$VISION_FIXTURES_DIR/recognition_benchmark` is used. Photos are never read from the repository.
 
-To check a running deployment instead (for example after a deploy):
+To check a running deployment from outside, with no photos, no account and nothing created on it:
 
 ```bash
-SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... python scripts/smoke_e2e.py --base-url https://your-host --photos /path/to/photos
+python scripts/smoke_e2e.py --base-url https://your-host --checks-only
+```
+
+The full flow uploads the face photos to the server it is pointed at. Against anything but this machine the script refuses unless `--send-photos-to-remote` is added; add it only when every person in the photos has agreed to their face being stored there:
+
+```bash
+SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... python scripts/smoke_e2e.py --base-url https://your-host --photos /path/to/photos --send-photos-to-remote
 ```
 
 Registrations need an administrator's approval, so the run needs an admin account to approve the teacher and students it registers. The throwaway stack creates its own. Against a deployment, supply an administrator as above; optionally add `SMOKE_TEACHER_EMAIL` and `SMOKE_TEACHER_PASSWORD` to reuse an approved teacher who is assigned the class given by `--class-code`.

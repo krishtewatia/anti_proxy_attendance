@@ -32,6 +32,14 @@ Photos are never read from the repository. ``--photos`` (default:
 person with at least three face photos each. The first two people are
 enrolled; a third, if present, is used as the person who is not enrolled.
 
+Face photos stay on this machine by default. The full flow uploads the
+photos in ``--photos`` to whatever it is pointed at, so against anything other
+than this machine (``localhost``) it refuses to run unless
+``--send-photos-to-remote`` is given. Give it only when every person in those
+photos has agreed to their face being stored on that server. For this
+project's own deployment the answer is no: the fixtures are volunteers'
+faces, and the deployment is checked with ``--checks-only`` and by hand.
+
 Against a deployment the script can be run repeatedly. It registers two
 smoke-test students once (IDs ``SMOKEA`` and ``SMOKEB`` by default, reused on
 later runs) and creates one new session per run. Nothing is deleted, so use a
@@ -346,6 +354,12 @@ def stop_throwaway_stack(project: str, env: dict[str, str], show_logs: bool) -> 
 
 
 # ------------------------------------------------------------------ outside view
+
+
+def is_this_machine(base_url: str) -> bool:
+    """True when the address is this computer, so photos sent to it do not leave it."""
+    host = (urllib.parse.urlsplit(base_url).hostname or "").lower()
+    return host in {"localhost", "127.0.0.1", "::1"} or host.endswith(".localhost")
 
 
 def port_open(host: str, port: int) -> bool:
@@ -1005,6 +1019,12 @@ def main() -> int:
         help="Seconds to wait for the first successful recognition (model loading)",
     )
     parser.add_argument(
+        "--send-photos-to-remote",
+        action="store_true",
+        help="With --base-url on another machine: allow the face photos to be uploaded there. "
+        "Only when every person in the photos agreed to that",
+    )
+    parser.add_argument(
         "--checks-only",
         action="store_true",
         help="With --base-url: only the checks that need no photos, no account and no secret "
@@ -1065,6 +1085,17 @@ def main() -> int:
             deployed = Api(args.base_url)
         except ValueError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        if not is_this_machine(args.base_url) and not args.send_photos_to_remote:
+            print(
+                "ERROR: this would upload the face photos in --photos to "
+                f"{urllib.parse.urlsplit(args.base_url).hostname}.\n"
+                "  To check a deployment without photos:  add --checks-only\n"
+                "  To run the full flow locally:          drop --base-url\n"
+                "  Only if every person in the photos agreed to their face being stored there:\n"
+                "                                         add --send-photos-to-remote",
+                file=sys.stderr,
+            )
             return 2
         run_flow(
             deployed,
