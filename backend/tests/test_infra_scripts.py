@@ -238,7 +238,7 @@ def test_the_settings_file_is_read_and_commented_lines_are_not():
 
 def _preflight_settings(monkeypatch, tmp_path, text: str | None, capsys) -> tuple[int, str]:
     terraform_dir = tmp_path / "infra" / "terraform"
-    terraform_dir.mkdir(parents=True)
+    terraform_dir.mkdir(parents=True, exist_ok=True)
     tfvars = terraform_dir / "terraform.tfvars"
     if text is not None:
         tfvars.write_text(text, encoding="utf-8")
@@ -319,3 +319,14 @@ def test_the_certificate_command_refuses_any_other_address():
 
     with pytest.raises(SystemExit):
         tf.certificate_commands('acme_ca = "https://example.org/x; rm -rf /"')
+
+
+def test_preflight_accepts_the_real_certificate_authority_once_the_deployment_exists(monkeypatch, tmp_path, capsys):
+    """After the switch to the real certificate the staging line is off on purpose."""
+    state = tmp_path / "infra" / "terraform"
+    state.mkdir(parents=True)
+    (state / "terraform.tfstate").write_text(json.dumps({"resources": [{"type": "aws_instance"}]}), encoding="utf-8")
+    missing, printed = _preflight_settings(monkeypatch, tmp_path, TFVARS_TEXT, capsys)
+    assert missing == 0
+    assert "real certificate authority" in printed
+    assert "the staging certificate line is not on" not in printed

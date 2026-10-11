@@ -174,13 +174,6 @@ def check_tfvars(report: Report) -> dict[str, str]:
     else:
         report.ok(f"run_mode = {run_mode}")
 
-    if values.get("acme_ca") == STAGING_CA:
-        report.ok("staging certificate authority is on (right for the first runs)")
-    else:
-        report.miss(
-            "the staging certificate line is not on",
-            f'in terraform.tfvars, remove the # in front of:  acme_ca = "{STAGING_CA}"',
-        )
     state_file = TF_DIR / "terraform.tfstate"
     resources = 0
     if state_file.exists():
@@ -195,6 +188,19 @@ def check_tfvars(report: Report) -> dict[str, str]:
             "this folder already holds the deployment's Terraform state; "
             "always run tf.py from this same folder, or a second copy of everything would be created"
         )
+    if values.get("acme_ca") == STAGING_CA:
+        if resources == 0:
+            report.ok("staging certificate authority is on (right for the first runs)")
+        else:
+            report.note("terraform.tfvars names the staging certificate authority (browsers will warn)")
+    elif resources == 0:
+        report.miss(
+            "the staging certificate line is not on",
+            f'in terraform.tfvars, remove the # in front of:  acme_ca = "{STAGING_CA}"',
+        )
+    else:
+        # Already deployed: the real authority is what a finished deployment uses.
+        report.ok("real certificate authority (the staging line is off)")
     return values
 
 
