@@ -628,13 +628,21 @@ python scripts/smoke_e2e.py --photos /path/to/photos
 
 By default it builds the images, starts a throwaway stack under a random Compose project name with generated secrets and an in-memory database, runs the checks, and removes the stack again. It does not touch the development stack. `--photos` needs one folder per person with at least three face photos each; if it is omitted, `$VISION_FIXTURES_DIR/recognition_benchmark` is used. Photos are never read from the repository.
 
-To check a running deployment instead (for example after a deploy):
+To check a running deployment from outside, with no photos, no account and nothing created on it:
 
 ```bash
-SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... python scripts/smoke_e2e.py --base-url https://your-host --photos /path/to/photos
+python scripts/smoke_e2e.py --base-url https://your-host --checks-only
 ```
 
-Registrations need an administrator's approval, so the run needs an admin account to approve the teacher and students it registers. The throwaway stack creates its own. Against a deployment, supply an administrator as above; optionally add `SMOKE_TEACHER_EMAIL` and `SMOKE_TEACHER_PASSWORD` to reuse an approved teacher who is assigned the class given by `--class-code`.
+Face photos never leave your machine: the full flow uploads them to the stack it tests, so it only runs against the throwaway stack or a stack already running locally. Against any other address the script refuses to run the photo flow, and there is no option to allow it.
+
+To run the full flow against a stack already running on this machine:
+
+```bash
+SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... python scripts/smoke_e2e.py --base-url http://localhost:3000 --photos /path/to/photos
+```
+
+Registrations need an administrator's approval, so the run needs an admin account to approve the teacher and students it registers. The throwaway stack creates its own. Against a running stack, supply an administrator as above; optionally add `SMOKE_TEACHER_EMAIL` and `SMOKE_TEACHER_PASSWORD` to reuse an approved teacher who is assigned the class given by `--class-code`.
 
 In that mode the script registers a smoke-test teacher per run and two smoke-test students once (`SMOKEA` and `SMOKEB`), reuses the students on later runs, and creates one new session per run. Nothing is deleted. The exit code is 0 only if every check passes.
 

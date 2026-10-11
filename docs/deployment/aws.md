@@ -341,16 +341,20 @@ deploys that commit and checks the site.
 - If the instance is stopped, the job says so and ends successfully.
 - The check afterwards is `scripts/smoke_e2e.py --base-url <site> --checks-only`:
   it needs no photos, no account and no secret, and creates nothing on the
-  site. The full flow with face photos is run from a laptop:
+  site.
 
-  ```powershell
-  $env:SMOKE_ADMIN_EMAIL = "..."
-  $env:SMOKE_ADMIN_PASSWORD = "..."
-  python scripts/smoke_e2e.py --base-url https://<site_host> --photos C:\path\to\photos
-  ```
+**The photo smoke test is for local runs only (decision of 11 October 2026).**
+The full flow enrols the face photos in the fixtures folder, and those are
+volunteers' faces: they are never uploaded to the deployment. The script
+enforces this: with `--base-url` pointing anywhere but this machine it
+refuses to run the photo flow, and there is no option to allow it. How each
+part is checked instead:
 
-  That run leaves two smoke-test students and a session behind; use it before
-  real data is entered, or delete them afterwards from the admin panel.
+| What | How |
+|---|---|
+| The whole flow with photos | Locally: `python scripts/smoke_e2e.py` and `python scripts/smoke_e2e.py --prod-rehearsal` (the production stack through Caddy, on the laptop) |
+| The deployment from outside | `python scripts/smoke_e2e.py --base-url https://<site_host> --checks-only`, also run by the pipeline after every deploy |
+| Recognition on the deployment | By hand, in Chrome, with the owner's own face |
 
 Switch it on once the deployment exists:
 

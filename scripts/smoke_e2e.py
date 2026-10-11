@@ -17,12 +17,15 @@ Two ways to run it:
     #    project with generated secrets, runs the checks, removes everything.
     python scripts/smoke_e2e.py --photos /path/to/photos
 
-    # 2. Against a running deployment (for example after a deploy):
+    # 2. Against a stack already running on this machine:
     SMOKE_ADMIN_EMAIL=... SMOKE_ADMIN_PASSWORD=... \\
-        python scripts/smoke_e2e.py --base-url https://attendance.example.edu --photos /path/to/photos
+        python scripts/smoke_e2e.py --base-url http://localhost:3000 --photos /path/to/photos
+
+    # 3. Against a deployment, from outside, without photos:
+    python scripts/smoke_e2e.py --base-url https://attendance.example.edu --checks-only
 
 Registrations need an administrator's approval, so the run needs an admin
-account. The throwaway stack creates one for itself. Against a deployment,
+account. The throwaway stack creates one for itself. Against a running stack,
 supply SMOKE_ADMIN_EMAIL and SMOKE_ADMIN_PASSWORD (and optionally
 SMOKE_TEACHER_EMAIL / SMOKE_TEACHER_PASSWORD for an existing approved teacher
 who is assigned the class given by --class-code).
@@ -32,7 +35,14 @@ Photos are never read from the repository. ``--photos`` (default:
 person with at least three face photos each. The first two people are
 enrolled; a third, if present, is used as the person who is not enrolled.
 
-Against a deployment the script can be run repeatedly. It registers two
+Face photos never leave this machine. The full flow uploads the photos in
+``--photos`` to the stack it tests, so it runs only against this machine: the
+throwaway stack, or ``--base-url`` with a ``localhost`` address. Against any
+other address the script refuses to run the photo flow, and there is no
+option to allow it. A deployment is checked with ``--checks-only`` and, for
+recognition, by hand.
+
+Against a running local stack the script can be run repeatedly. It registers two
 smoke-test students once (IDs ``SMOKEA`` and ``SMOKEB`` by default, reused on
 later runs) and creates one new session per run. Nothing is deleted, so use a
 class and an environment where that is acceptable, and keep using the same
@@ -346,6 +356,12 @@ def stop_throwaway_stack(project: str, env: dict[str, str], show_logs: bool) -> 
 
 
 # ------------------------------------------------------------------ outside view
+
+
+def is_this_machine(base_url: str) -> bool:
+    """True when the address is this computer, so photos sent to it do not leave it."""
+    host = (urllib.parse.urlsplit(base_url).hostname or "").lower()
+    return host in {"localhost", "127.0.0.1", "::1"} or host.endswith(".localhost")
 
 
 def port_open(host: str, port: int) -> bool:
@@ -949,7 +965,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--base-url",
-        help="Test a running deployment instead of starting a throwaway stack",
+        help="Test a stack that is already running instead of starting a throwaway one. "
+        "The photo flow needs a localhost address; any other address needs --checks-only",
     )
     parser.add_argument(
         "--photos",
@@ -1065,6 +1082,15 @@ def main() -> int:
             deployed = Api(args.base_url)
         except ValueError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        if not is_this_machine(args.base_url):
+            print(
+                "ERROR: the photo flow never runs against another machine: it would upload "
+                f"the face photos in --photos to {urllib.parse.urlsplit(args.base_url).hostname}.\n"
+                "  To check a deployment without photos:  add --checks-only\n"
+                "  To run the full flow locally:          drop --base-url",
+                file=sys.stderr,
+            )
             return 2
         run_flow(
             deployed,
