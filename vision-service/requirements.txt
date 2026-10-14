@@ -3,7 +3,7 @@
 opencv-python-headless>=5.0.0.93
 numpy>=2.4.6
 onnxruntime>=1.30.0
-insightface>=2.0
+insightface>=2.1
 pillow>=12.3.0
 scipy>=1.17.1
 scikit-image>=0.26.0
@@ -11,8 +11,8 @@ tqdm>=4.70.1
 
 # Networking & Ingestion
 requests>=2.34.2
-aiohttp>=3.14.3
+aiohttp>=3.14.4
 
 # Telemetry & Utilities
 psutil>=7.2.2
-python-dotenv>=1.2.3
+python-dotenv>=1.2.4
