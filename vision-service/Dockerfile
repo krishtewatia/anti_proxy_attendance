@@ -6,7 +6,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Dependency Builder
 # ------------------------------------------------------------------------------
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /build
 
@@ -41,7 +41,7 @@ ADD --checksum=sha256:2be5c295aefee7bf6356edbf6303b1827aab5d793e4a1898de4e11fb0f
 # ------------------------------------------------------------------------------
 # Stage 2: Minimal Non-Root CV Runtime
 # ------------------------------------------------------------------------------
-FROM python:3.11-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 # Install essential native libraries for OpenCV and ONNX Runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \

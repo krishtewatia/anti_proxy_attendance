@@ -6,7 +6,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Build & Dependencies
 # ------------------------------------------------------------------------------
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /build
 
@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # ------------------------------------------------------------------------------
 # Stage 2: Minimal Non-Root Runtime
 # ------------------------------------------------------------------------------
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 # Security: Create unprivileged system group and user
 RUN groupadd -g 10001 appgroup && \
