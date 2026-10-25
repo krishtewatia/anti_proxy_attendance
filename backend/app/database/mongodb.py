@@ -103,6 +103,22 @@ async def init_indexes(db: AsyncIOMotorDatabase):
         expireAfterSeconds=0,
         name="ttl_recognition_nonce",
     )
+    # Pilot organisation model: one document per key.
+    for collection, keys, name in (
+        ("org_terms", [("term_id", 1)], "uq_org_terms"),
+        ("org_branches", [("code", 1)], "uq_org_branches"),
+        ("org_cohorts", [("cohort_id", 1)], "uq_org_cohorts"),
+        ("org_sections", [("cohort_id", 1), ("code", 1)], "uq_org_sections"),
+        ("org_group_sets", [("cohort_id", 1), ("set_code", 1)], "uq_org_group_sets"),
+        ("catalog_subjects", [("key", 1)], "uq_catalog_subjects"),
+        ("org_classes", [("class_id", 1)], "uq_org_classes"),
+        ("timetable_versions", [("version_id", 1)], "uq_timetable_versions"),
+        ("timetable_slots", [("slot_id", 1)], "uq_timetable_slots"),
+    ):
+        await db[collection].create_index(keys, unique=True, name=name)
+    await db["timetable_slots"].create_index(
+        [("version_id", 1), ("day", 1), ("start_minute", 1)], name="idx_timetable_slots_day"
+    )
     # Enforce unique camera_id on cameras collection
     await db["cameras"].create_index(
         [("camera_id", 1)],
