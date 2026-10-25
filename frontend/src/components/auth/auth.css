@@ -225,6 +225,18 @@
   color: var(--erp-present-text);
 }
 
+.alert-banner.warning {
+  background: var(--erp-warning-bg);
+  border: 1px solid var(--erp-warning-border);
+  color: var(--erp-warning-text);
+}
+
+.alert-banner.info {
+  background: var(--erp-info-bg);
+  border: 1px solid var(--erp-info-border);
+  color: var(--erp-info-text);
+}
+
 .alert-banner svg {
   flex-shrink: 0;
   width: 16px;

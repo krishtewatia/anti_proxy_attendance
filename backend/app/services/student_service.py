@@ -33,6 +33,7 @@ from app.services.registration_rules import (
     check_roll_number_free,
     clean_roll_number,
     new_student_key,
+    pilot_structure_exists,
     record_consent,
 )
 from app.services.student_biometric_service import (
@@ -46,6 +47,10 @@ logger = logging.getLogger(__name__)
 
 class StudentAuthorizationError(Exception):
     """Raised when an operation requires STUDENT role but another role was provided."""
+
+
+class ClassRequiredError(ValueError):
+    """No class was given where one is required (no pilot structure)."""
 
 
 class DuplicateStudentProfileError(Exception):
@@ -127,6 +132,15 @@ async def register_student_account(
     if existing_profile is not None:
         raise DuplicateStudentProfileError(f"Student ID '{student_id}' is already registered")
 
+    # With the pilot's academic structure, a student chooses their section,
+    # electives and photos in their setup after signing in; sign-up only
+    # creates the account. Without it, the class is chosen here as before.
+    pilot = await pilot_structure_exists(db)
+    if pilot and self_registration and req.photo_base64:
+        raise ValueError("Add your photos in your setup after signing in.")
+    if not pilot and not req.has_class():
+        raise ClassRequiredError("Choose a class, or give both a branch and a section")
+
     # A student sending their own photo first accepts the notice about it.
     if self_registration and req.photo_base64:
         check_consent_version(req.consent_version)
@@ -136,7 +150,9 @@ async def register_student_account(
     chosen = await resolve_active_class(
         db, class_code=req.class_code, branch=req.branch, section=req.section
     )
-    if chosen is not None:
+    if pilot and not req.has_class():
+        branch, section, class_code = "", "", ""
+    elif chosen is not None:
         branch, section, class_code = chosen["branch"], chosen["section"], chosen["class_code"]
     elif req.class_code or await db["academic_classes"].count_documents({}) > 0:
         raise ValueError("Choose one of the classes in the list; that class is not available.")

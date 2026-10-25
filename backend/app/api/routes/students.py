@@ -11,7 +11,7 @@ from app.api.dependencies.auth import (
     require_student,
     require_teacher_or_admin,
 )
-from app.core.account_status import template_is_active
+from app.core.account_status import is_approved, template_is_active
 from app.database.biometric_profiles import list_all_biometric_profiles
 from app.database.mongodb import get_database
 from app.database.users import get_all_users
@@ -34,6 +34,7 @@ from app.services.student_biometric_service import (
     extract_and_register_student_photo,
 )
 from app.services.student_service import (
+    ClassRequiredError,
     DuplicateStudentProfileError,
     StudentAuthorizationError,
     create_student_profile,
@@ -71,6 +72,10 @@ async def register_student_endpoint(
     try:
         profile = await register_student_account(payload, enrolled_by="self")
         return profile
+    except ClassRequiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     except DuplicateStudentProfileError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -243,6 +248,15 @@ async def upload_student_photo_endpoint(
     approved. A student could otherwise replace their face with someone
     else's and have that person marked present in their place.
     """
+    if not is_approved(current_user):
+        # A student still waiting for approval sends photos with their setup.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "setup_pending",
+                "message": "Add your photos in your setup; they are reviewed with it.",
+            },
+        )
     if not (await consent_status(get_database(), current_user["user_id"]))["accepted"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

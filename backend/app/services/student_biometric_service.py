@@ -45,6 +45,29 @@ def get_vision_service_urls() -> list[str]:
     return urls
 
 
+async def extract_face(img_bytes: bytes) -> dict | None:
+    """The vision service's answer for one photo, or None if it cannot be reached.
+
+    The answer holds the status ("ok" or "no_face") and, for a face, its
+    embedding, ``det_score`` and ``bbox``. Nothing here is logged.
+    """
+    for v_url in get_vision_service_urls():
+        try:
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                resp = await client.post(
+                    f"{v_url}/extract-embedding",
+                    content=img_bytes,
+                    headers={"Content-Type": "image/jpeg", **vision_service_headers()},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("status") in ("ok", "no_face"):
+                        return data
+        except Exception as exc:
+            logger.debug("Vision HTTP endpoint %s unreachable: %s", v_url, exc)
+    return None
+
+
 async def extract_and_register_student_photo(
     identity: str,
     photo_base64: str,

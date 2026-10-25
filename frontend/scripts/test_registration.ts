@@ -7,6 +7,7 @@ import {
   emailAllowed,
   emailPlaceholder,
   FORGOT_PASSWORD_HINT,
+  registeredMessage,
   registrationProblem,
   type RegistrationFields,
 } from "../src/utils/registration.ts";
@@ -73,6 +74,8 @@ async function run() {
   const login = readFileSync("src/components/auth/LoginForm.tsx", "utf-8");
   expect(login.includes("{FORGOT_PASSWORD_HINT}") && !/reset link|forgot-password/i.test(login), "sign-in points to the administrator");
   expect(FORGOT_PASSWORD_HINT.includes("administrator"), "the hint names the administrator");
+  expect(registeredMessage("STUDENT").startsWith("Account created. Sign in now"), "a student signs in at once");
+  expect(registeredMessage("TEACHER").includes("must approve"), "a teacher waits for approval");
   for (const file of ["src/components/admin/StudentsTab.tsx", "src/components/admin/TeachersTab.tsx"]) {
     const source = readFileSync(file, "utf-8");
     expect(!source.includes(">Student ID<") && !source.includes(">Teacher ID<"), `${file} must not ask for or show an ID`);

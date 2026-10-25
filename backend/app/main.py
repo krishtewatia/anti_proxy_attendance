@@ -22,6 +22,7 @@ from app.api.routes.cameras import router as cameras_router
 from app.api.routes.admin import router as admin_router
 from app.api.routes.admin_accounts import router as admin_accounts_router
 from app.api.routes.organisation import router as organisation_router
+from app.api.routes.enrolment import router as enrolment_router
 from app.api.routes.academic import router as academic_router
 from app.api.routes.teachers import router as teachers_router
 from app.database import close_client, get_database, init_indexes
@@ -162,6 +163,7 @@ if not settings.DEMO_MODE:
 app.include_router(admin_router)
 app.include_router(admin_accounts_router)
 app.include_router(organisation_router)
+app.include_router(enrolment_router)
 app.include_router(academic_router)
 app.include_router(teachers_router)
 

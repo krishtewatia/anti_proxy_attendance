@@ -21,6 +21,14 @@ export interface ConsentStatus {
   notice: ConsentNotice;
 }
 
+// What the sign-in page says after a sign-up. A student can sign in at once;
+// approval of their setup puts them on the attendance list. A teacher waits.
+export function registeredMessage(role: "STUDENT" | "TEACHER"): string {
+  return role === "STUDENT"
+    ? "Account created. Sign in now, then choose your section and add your photos under My Setup. You join the attendance list once an administrator approves your setup."
+    : "Registration received. An administrator must approve your account before you can sign in.";
+}
+
 export const FORGOT_PASSWORD_HINT = "Forgot your password? Ask an administrator to reset it.";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

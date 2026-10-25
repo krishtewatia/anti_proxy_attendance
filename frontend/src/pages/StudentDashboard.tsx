@@ -8,6 +8,8 @@ import type {
   UserResponse,
 } from "../types";
 import { AuthenticatedImage } from "../components/common/AuthenticatedImage";
+import { SetupWizard } from "../components/student/SetupWizard";
+import { draftFromEnrolment, emptyDraft, setupStatusCard, type MySetup } from "../utils/enrolment.ts";
 import "./student-dashboard.css";
 
 interface StudentDashboardProps {
@@ -29,6 +31,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [historyPageNumber, setHistoryPageNumber] = useState(1);
+  // The student's setup (section, groups, photos) and whether they are on the attendance list.
+  const [setup, setSetup] = useState<MySetup | null>(null);
+  const [setupAvailable, setSetupAvailable] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [setupMessage, setSetupMessage] = useState<string | null>(null);
+
+  const fetchSetup = useCallback(async () => {
+    try {
+      const [mine, options] = await Promise.all([api.getMySetup(), api.getSetupOptions()]);
+      setSetup(mine);
+      // Setup exists only once the college's academic structure is in place.
+      setSetupAvailable(options.cohorts.length > 0);
+    } catch {
+      setSetupAvailable(false);
+    }
+  }, []);
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
@@ -47,7 +65,18 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   useEffect(() => {
     fetchDashboard();
-  }, [fetchDashboard]);
+    void fetchSetup();
+  }, [fetchDashboard, fetchSetup]);
+
+  const withdrawSetup = async () => {
+    try {
+      await api.withdrawSetup();
+      setSetupMessage("Your request was withdrawn.");
+      await fetchSetup();
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   if (loading) {
     return (
@@ -84,6 +113,62 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   const studentFirstName = profile?.name ? profile.name.split(" ")[0] : user.email.split("@")[0];
 
+  // The setup status, with the next thing the student can do.
+  const renderSetupCard = () => {
+    const card = setupStatusCard(setup);
+    const banner = card.tone === "success" ? "success" : card.tone === "error" ? "error" : card.tone === "warning" ? "warning" : "info";
+    return (
+      <div className={`alert-banner ${banner}`} style={{ marginBottom: "1.5rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center" }}>
+        <div style={{ flex: "1 1 16rem" }}>
+          <strong>{card.title}</strong>
+          <div style={{ fontSize: "0.875rem" }}>{card.text}</div>
+        </div>
+        {card.action === "withdraw" ? (
+          <button type="button" className="erp-btn erp-btn-secondary" onClick={() => void withdrawSetup()}>Withdraw request</button>
+        ) : (
+          <button type="button" className="erp-btn erp-btn-primary" onClick={() => { setWizardOpen(true); onSelectNav?.("setup"); }}>
+            {card.action === "change" ? "Change my setup" : "Start setup"}
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  // MY SETUP VIEW: the wizard, or the current setup and its status.
+  const renderSetupView = () => {
+    const isChange = Boolean(setup?.enrolment);
+    const pending = setup?.latest_request?.status === "PENDING";
+    return (
+      <div style={{ maxWidth: "760px", margin: "0 auto" }}>
+        <div className="erp-page-header">
+          <h1 className="erp-page-title">My Setup</h1>
+          <p className="erp-page-subtitle">Your section, electives, DLDA group and face photos</p>
+        </div>
+        {setupMessage && (
+          <div className="alert-banner success" style={{ marginBottom: "1rem" }}><span>{setupMessage}</span></div>
+        )}
+        {!setupAvailable ? (
+          <div className="erp-card" style={{ padding: "1.5rem", color: "var(--erp-text-muted)" }}>
+            Setup is not open yet. Ask an administrator.
+          </div>
+        ) : wizardOpen && !pending ? (
+          <SetupWizard
+            initial={isChange ? draftFromEnrolment(setup?.enrolment ?? null) : emptyDraft()}
+            isChange={isChange}
+            onCancel={() => setWizardOpen(false)}
+            onDone={(message) => {
+              setWizardOpen(false);
+              setSetupMessage(message);
+              void fetchSetup();
+            }}
+          />
+        ) : (
+          renderSetupCard()
+        )}
+      </div>
+    );
+  };
+
   // 1. DASHBOARD VIEW (Section 3)
   const renderDashboardView = () => (
     <div className="erp-student-dashboard">
@@ -93,9 +178,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           {getGreeting()}, {studentFirstName}
         </h1>
         <p className="erp-page-subtitle">
-          {profile?.branch || "Data Science"} • Section {profile?.section || "B"} • Roll No: {profile?.roll_number || "—"}
+          {profile?.branch || "—"} • Section {profile?.section || "—"} • Roll No: {profile?.roll_number || "—"}
         </p>
       </div>
+
+      {setupAvailable && renderSetupCard()}
 
       {/* Attendance Summary Banner (Overall Attendance + Present Classes) */}
       <div className="erp-student-overview-card">
@@ -353,12 +440,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
           <div style={{ display: "flex", justifyContent: "space-between", padding: "0.6rem 0", borderBottom: "1px solid var(--erp-border)" }}>
             <span style={{ color: "var(--erp-text-muted)" }}>Branch:</span>
-            <strong>{profile?.branch || "Data Science"}</strong>
+            <strong>{profile?.branch || "—"}</strong>
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", padding: "0.6rem 0", borderBottom: "1px solid var(--erp-border)" }}>
             <span style={{ color: "var(--erp-text-muted)" }}>Section:</span>
-            <strong>Section {profile?.section || "B"}</strong>
+            <strong>{profile?.section ? `Section ${profile.section}` : "—"}</strong>
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", padding: "0.6rem 0", borderBottom: "1px solid var(--erp-border)" }}>
@@ -396,6 +483,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       {activeNavId === "attendance" && renderAttendanceView()}
       {activeNavId === "history" && renderHistoryView()}
       {activeNavId === "profile" && renderProfileView()}
+      {activeNavId === "setup" && renderSetupView()}
     </div>
   );
 };

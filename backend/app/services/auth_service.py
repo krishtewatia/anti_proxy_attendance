@@ -9,7 +9,7 @@ from app.database.users import (
 )
 from app.schemas.auth import TokenResponse, UserCreate, UserResponse
 from app.security.jwt import create_access_token
-from app.core.account_status import ACCOUNT_APPROVED, ACCOUNT_PENDING, account_status
+from app.core.account_status import ACCOUNT_PENDING, can_sign_in
 from app.security.passwords import hash_password, verify_password
 from app.services.audit_service import record_audit_event
 
@@ -103,7 +103,7 @@ async def authenticate_user(
 
     # Checked only after the password, so the message cannot be used to find
     # out whether an email is registered.
-    if account_status(user) != ACCOUNT_APPROVED:
+    if not can_sign_in(user):
         raise AccountPendingError(
             "Your registration is awaiting admin approval. You can log in once it has been approved."
         )

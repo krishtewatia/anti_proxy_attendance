@@ -73,11 +73,18 @@ def clean_roll_number(value: str) -> str:
     return roll
 
 
+async def pilot_structure_exists(db: AsyncIOMotorDatabase) -> bool:
+    """True once a term exists (for example after "Create the pilot structure")."""
+    from app.services.organisation_service import TERMS
+
+    return await db[TERMS].count_documents({}, limit=1) > 0
+
+
 async def college_email_domain(db: AsyncIOMotorDatabase) -> Optional[str]:
     """The domain registrations must use, or None while no structure exists yet."""
-    from app.services.organisation_service import TERMS, get_settings
+    from app.services.organisation_service import get_settings
 
-    if await db[TERMS].count_documents({}, limit=1) == 0:
+    if not await pilot_structure_exists(db):
         return None
     return (await get_settings(db))["college_email_domain"]
 

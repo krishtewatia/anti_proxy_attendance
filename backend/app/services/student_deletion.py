@@ -20,13 +20,14 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import logging
+import shutil
 from typing import Any
 
 import httpx
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.config import settings
-from app.core.uploads import pending_photo_path, student_photo_path
+from app.core.uploads import enrolment_photo_dir, pending_photo_path, student_photo_path
 from app.services.audit_service import record_audit_event
 from app.services.vision_client import vision_service_headers
 
@@ -153,6 +154,17 @@ async def delete_student_completely(
             except (ValueError, OSError):
                 pass
     await db["consents"].delete_many({"user_id": user_id})
+    # Setup requests (and their waiting photos) and the approved setup.
+    async for request in db["enrolment_requests"].find({"user_id": user_id}, {"request_id": 1}):
+        try:
+            folder = enrolment_photo_dir(request["request_id"])
+            if folder.is_dir():
+                photos += sum(1 for item in folder.iterdir() if item.is_file())
+                shutil.rmtree(folder)
+        except (ValueError, OSError):
+            pass
+    await db["enrolment_requests"].delete_many({"user_id": user_id})
+    await db["enrolments"].delete_many({"user_id": user_id})
     profile_deleted = (
         await db["student_profiles"].delete_one({"user_id": user_id})
     ).deleted_count > 0

@@ -86,3 +86,40 @@ body, `dry_run=true` by default), `timetable/versions`,
 
 The older flat class and subject model still drives today's screens; later
 pilot PRs move them onto this model.
+
+## Student setup and approval (enrolment)
+
+A student signs up with name, roll number (digits only), college email and
+password, and can sign in at once. Under **My Setup** they choose, in one
+request:
+
+1. year (cohort) and section; the section's core classes follow from its
+   timetable and are shown pre-ticked;
+2. one option + group in each elective set (DE-II, DE-III), by code only;
+3. the DLDA workshop group;
+4. 2 or 3 face photos, after accepting the photo notice.
+
+| Collection | Holds |
+| --- | --- |
+| `enrolment_requests` | One per submission: section, choices, class ids, photo count, the face template (until decided), kind (FIRST or CHANGE), status (PENDING, APPROVED, REJECTED, WITHDRAWN, SUPERSEDED), reason. Photos wait under `uploads/enrolment_requests/<request_id>/`. |
+| `enrolments` | The approved setup in force, one per student and term: section, choices, class ids. |
+
+**Eligibility.** The account status stays the eligibility flag: a student
+whose status is PENDING can sign in and use their own dashboard and setup, but
+is on no roster and class list, and their face is not in the gallery. A
+pending teacher still cannot sign in.
+
+**Photo checks** use the vision service unchanged: a face is found, the
+detector's confidence is at least 0.6, the face's shorter side is at least
+25% of the image's shorter side (image size read from the PNG/JPEG header),
+and every pair of photos has cosine similarity of at least 0.50 (the standard
+classroom threshold, ADR-007). The vision service does not count faces, so
+"only this student in the photo" is checked by the administrator's photo grid.
+The stored template is the normalised mean of the photos' embeddings.
+
+**Approval** (one by one or in bulk, each audited): the first request makes
+the student eligible (account APPROVED, template ACTIVE, enrolment written,
+first photo becomes the profile photo). A change keeps the approved setup and
+template until it is approved. Rejecting needs a reason, keeps the account and
+deletes the waiting photos. The 14-day purge never removes a student whose
+request is waiting.

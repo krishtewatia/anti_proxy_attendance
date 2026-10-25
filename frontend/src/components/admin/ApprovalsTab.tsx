@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../../services";
 import { AuthenticatedImage } from "../common/AuthenticatedImage";
+import { SetupRequestsSection } from "./SetupRequestsSection";
 import {
   daysUntilPurge,
   normalizeClassCodes,
@@ -160,7 +161,7 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches
       <div className="erp-page-header">
         <h1 className="erp-page-title">Pending Approvals</h1>
         <p className="erp-page-subtitle">
-          New registrations cannot log in, and a new student's face is not recognized, until approved here.
+          New teachers cannot log in until approved here. Students can sign in at once, but are not on any attendance list, and their face is not recognized, until their setup is approved here.
           Registrations left untouched for 14 days are removed automatically.
         </p>
       </div>
@@ -170,6 +171,8 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches
           <span>{banner.text}</span>
         </div>
       )}
+
+      {counts && counts.setup_requests > 0 && <SetupRequestsSection onChanged={(text) => { setBanner({ type: "success", text }); void load(); }} />}
 
       {nothing && (
         <div className="erp-card" style={{ padding: "2rem", textAlign: "center", color: "var(--erp-text-muted)" }}>

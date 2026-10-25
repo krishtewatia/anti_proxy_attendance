@@ -58,6 +58,10 @@ AuditAction = Literal[
     "CALENDAR_UPDATED",
     "SETTINGS_UPDATED",
     "CONSENT_ACCEPTED",
+    "ENROLMENT_REQUESTED",
+    "ENROLMENT_APPROVED",
+    "ENROLMENT_REJECTED",
+    "ENROLMENT_WITHDRAWN",
 ]
 
 AuditResourceType = Literal[

@@ -1,7 +1,8 @@
 """Account and face-template review states.
 
-A registration is PENDING until an administrator approves it. Only APPROVED
-accounts can log in or hold a valid token. A face template is ACTIVE once an
+A registration is PENDING until an administrator approves it. A pending
+teacher cannot log in; a pending student can, but is not eligible for
+attendance (no roster, no recognition) until approved. A face template is ACTIVE once an
 administrator has approved the account (or the photo change) it came from;
 only ACTIVE templates of APPROVED students are served to the vision service.
 
@@ -34,6 +35,19 @@ def account_status(user: dict[str, Any] | None) -> str:
 
 def is_approved(user: dict[str, Any] | None) -> bool:
     return bool(user) and account_status(user) == ACCOUNT_APPROVED
+
+
+def can_sign_in(user: dict[str, Any] | None) -> bool:
+    """Approved accounts sign in; so does a student whose approval is pending.
+
+    For a student, approval only decides eligibility for attendance: until
+    then they are on no roster and their face is not recognised, but they can
+    sign in, set up their classes and photos, and see their own dashboard. A
+    teacher still cannot sign in before approval.
+    """
+    if is_approved(user):
+        return True
+    return bool(user) and user.get("role") == "STUDENT" and account_status(user) == ACCOUNT_PENDING
 
 
 def template_is_active(profile: dict[str, Any] | None) -> bool:

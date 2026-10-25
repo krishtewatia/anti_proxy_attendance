@@ -107,3 +107,24 @@ def pending_photo_path(identity: str) -> Path:
     if path.resolve().parent != directory.resolve():
         raise ValueError("student ID is not usable as a file name")
     return path
+
+
+ENROLMENT_PHOTOS_SUBDIR = "enrolment_requests"
+_SAFE_REQUEST_ID = re.compile(r"req_[0-9a-f]{32}")
+
+
+def enrolment_photo_dir(request_id: str) -> Path:
+    """Folder of the photos sent with one setup request, waiting for review."""
+    if not isinstance(request_id, str) or not _SAFE_REQUEST_ID.fullmatch(request_id):
+        raise ValueError("not a setup request id")
+    directory = resolve_uploads_root() / ENROLMENT_PHOTOS_SUBDIR
+    path = directory / request_id
+    if path.resolve().parent != directory.resolve():
+        raise ValueError("not a setup request id")
+    return path
+
+
+def enrolment_photo_path(request_id: str, index: int) -> Path:
+    if not isinstance(index, int) or not 0 <= index < 3:
+        raise ValueError("photo number out of range")
+    return enrolment_photo_dir(request_id) / f"{index}.jpg"

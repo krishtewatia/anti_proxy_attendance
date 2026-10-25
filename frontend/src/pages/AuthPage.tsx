@@ -3,6 +3,7 @@ import { AuthLayout } from "../components/auth/AuthLayout";
 import { LoginForm } from "../components/auth/LoginForm";
 import { RegisterForm } from "../components/auth/RegisterForm";
 import type { TokenResponse } from "../types";
+import { registeredMessage } from "../utils/registration.ts";
 
 interface AuthPageProps {
   onLoginSuccess: (response: TokenResponse) => void;
@@ -12,11 +13,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
-  const handleRegisterSuccess = () => {
+  const handleRegisterSuccess = (_email: string, role: "STUDENT" | "TEACHER") => {
     setActiveTab("login");
-    setSuccessBanner(
-      "Registration received. An administrator must approve your account before you can sign in.",
-    );
+    setSuccessBanner(registeredMessage(role));
   };
 
   return (

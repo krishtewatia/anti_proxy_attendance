@@ -145,10 +145,12 @@ async def test_all_three_public_registration_routes_create_pending_accounts(stub
 
 @pytest.mark.anyio
 async def test_pending_account_cannot_log_in_and_is_told_why(stub_vision_embedding):
+    # A pending teacher cannot log in. (A pending student can: for a student,
+    # approval decides eligibility for attendance; see test_enrolment_requests.)
     async with _client() as client:
-        await client.post("/api/v1/students/register", json=_student_payload())
-        correct = await _login(client, "apr001@approval.test")
-        wrong = await _login(client, "apr001@approval.test", "not-the-password")
+        await client.post("/api/v1/teachers/register", json=_teacher_payload())
+        correct = await _login(client, "t.apr1@approval.test")
+        wrong = await _login(client, "t.apr1@approval.test", "not-the-password")
         unknown = await _login(client, "nobody@approval.test")
 
     assert correct.status_code == 403
@@ -229,7 +231,9 @@ async def test_pending_list_shows_each_kind_with_counts(stub_vision_embedding):
         count = await client.get(f"{APPROVALS}/count", headers=admin)
 
     body = listing.json()
-    assert body["counts"] == {"students": 1, "teachers": 1, "accounts": 0, "photo_changes": 0, "total": 2}
+    assert body["counts"] == {
+        "students": 1, "teachers": 1, "accounts": 0, "photo_changes": 0, "setup_requests": 0, "total": 2,
+    }
     assert count.json() == body["counts"]
     assert body["students"][0]["student_id"] == "APR001"
     assert body["students"][0]["class_code"] == "DS-B"
@@ -630,7 +634,7 @@ async def test_public_registration_is_rate_limited_across_the_three_routes(monke
     monkeypatch.setattr(settings, "REGISTRATION_RATE_LIMIT_PER_MINUTE", 3)
     async with _client() as client:
         first = await client.post(
-            "/api/v1/auth/register", json={"email": "r1@approval.test", "password": PASSWORD, "role": "STUDENT"}
+            "/api/v1/auth/register", json={"email": "r1@approval.test", "password": PASSWORD, "role": "TEACHER"}
         )
         second = await client.post("/api/v1/teachers/register", json=_teacher_payload("T-R2", "r2@approval.test"))
         third = await client.post(
