@@ -33,6 +33,7 @@ import { clearStoredAuth, getStoredToken, setMustChangePassword } from "./auth.t
 import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
 import type { ReportsSummary } from "../utils/reports.ts";
 import type { ConsentStatus, RegistrationRules } from "../utils/registration.ts";
+import type { RegistryTeacher, StudentRegistry } from "../utils/registry.ts";
 import type { ListSummary, ListUploadReport, MatchReport } from "../utils/sectionList.ts";
 import type { MySetup, PhotoCheckResult, SetupOptions, SetupRequest, SetupRequestList, requestBody } from "../utils/enrolment.ts";
 import type {
@@ -446,6 +447,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ action, request_ids, ...(reason ? { reason } : {}) }),
     });
+  },
+
+  // --- Admin: registries, Year > Branch > Section ---
+  getStudentRegistry(params: Record<string, string> = {}): Promise<StudentRegistry> {
+    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
+    return request<StudentRegistry>(`/api/v1/admin/registry/students${query ? `?${query}` : ""}`);
+  },
+
+  getTeacherRegistry(): Promise<{ teachers: RegistryTeacher[] }> {
+    return request<{ teachers: RegistryTeacher[] }>("/api/v1/admin/registry/teachers");
   },
 
   // --- Admin: the official section list ---

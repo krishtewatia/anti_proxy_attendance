@@ -393,3 +393,17 @@ def test_the_pipeline_fails_clearly_and_sends_nothing_when_the_instance_is_stopp
     assert "Not deployed: the instance is $state. Nothing was changed." in step
     # The check comes before the only step that talks to the instance.
     assert "send-command" not in step and "send-command" in workflow[deploy:]
+
+
+def test_a_deploy_with_missing_variables_fails_instead_of_being_skipped():
+    workflow = (SCRIPTS.parents[1] / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8")
+    deploy_job = workflow[workflow.index("  deploy:"):]
+    # Skipped only when switched off on purpose, never because a variable is empty.
+    assert "if: vars.DEPLOY_ENABLED != 'false'" in deploy_job
+    assert "vars.AWS_DEPLOY_ROLE_ARN != ''" not in workflow
+    check = deploy_job.index("- name: Are the deployment variables set?")
+    credentials = deploy_job.index("- name: Get short-lived AWS credentials (OIDC)")
+    step = deploy_job[check:credentials]
+    assert check < credentials and "exit 1" in step
+    for name in ("AWS_DEPLOY_ROLE_ARN", "AWS_REGION", "AWS_INSTANCE_ID", "AWS_DEPLOY_DOCUMENT", "SITE_URL"):
+        assert name in step
