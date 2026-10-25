@@ -604,6 +604,9 @@ def run_flow(
     # A deployment that has just started may still be loading the face models;
     # enrollment fails until it has, so retry until the deadline. On a database
     # that outlives the run the students exist from an earlier run (409).
+    # The student accepts the photo notice (its current version) with the photo.
+    _, rules = api.call("GET", "/api/v1/auth/registration-rules")
+    consent_version = (rules or {}).get("consent_notice", {}).get("version")
     students: list[str] = []
     enroll_deadline = time.time() + model_wait_seconds
     for index, label in enumerate(("A", "B")):
@@ -621,6 +624,7 @@ def run_flow(
                     "branch": branch,
                     "section": section,
                     "photo_base64": base64.b64encode(people[index][0]).decode(),
+                    "consent_version": consent_version,
                 },
             )
             if status not in (400, 502, 503, None) or time.time() > enroll_deadline:

@@ -2,8 +2,9 @@ export interface TeacherRegisterRequest {
   name: string;
   email: string;
   password: string;
-  teacher_id: string;
-  department: string;
+  // An internal key the server makes up; teachers are known by email.
+  teacher_id?: string;
+  department?: string;
   assigned_classes?: string[];
   assigned_subjects?: string[];
 }

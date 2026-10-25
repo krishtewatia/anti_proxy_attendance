@@ -7,6 +7,7 @@ from app.database import mongodb
 from app.database.mongodb import init_indexes
 from app.main import app
 from app.security.jwt import create_access_token
+from app.services.registration_rules import CONSENT_NOTICE_VERSION
 
 
 @pytest.fixture(autouse=True)
@@ -208,6 +209,7 @@ async def test_failed_photo_enrollment_leaves_no_account_and_can_be_retried(clie
         "branch": "Data Science",
         "section": "B",
         "photo_base64": "cGxhY2Vob2xkZXI=",
+        "consent_version": CONSENT_NOTICE_VERSION,
     }
 
     first = client.post("/api/v1/students/register", json=payload)

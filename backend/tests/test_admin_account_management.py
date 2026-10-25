@@ -80,7 +80,8 @@ def _student_payload(student_id: str = "ACC001", email: str = "acc001@accounts.t
         "email": email,
         "password": PASSWORD,
         "student_id": student_id,
-        "roll_number": "20260001",
+        # Roll numbers are unique: one per email in these tests.
+        "roll_number": f"2026-{email.split('@')[0]}",
         "branch": "Data Science",
         "section": "B",
         "photo_base64": PHOTO_B64,

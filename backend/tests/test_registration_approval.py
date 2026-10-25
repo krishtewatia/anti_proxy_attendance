@@ -25,6 +25,7 @@ from app.security.passwords import hash_password
 from app.services import approval_service, student_deletion
 from app.services.account_bootstrap import bootstrap_first_admin, migrate_account_status
 from app.services.approval_service import purge_stale_registrations
+from app.services.registration_rules import CONSENT_NOTICE_VERSION
 
 PASSWORD = "RegistrationPass123!"
 PHOTO_B64 = "cGxhY2Vob2xkZXIgcGhvdG8gYnl0ZXM="  # placeholder bytes, not an image of anyone
@@ -72,10 +73,12 @@ def _student_payload(student_id: str = "APR001", email: str = "apr001@approval.t
         "email": email,
         "password": PASSWORD,
         "student_id": student_id,
-        "roll_number": "20260001",
+        # Roll numbers are unique: one per email in these tests.
+        "roll_number": f"2026-{email.split('@')[0]}",
         "branch": "Data Science",
         "section": "B",
         "photo_base64": PHOTO_B64,
+        "consent_version": CONSENT_NOTICE_VERSION,
     }
 
 

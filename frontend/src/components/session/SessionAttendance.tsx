@@ -113,7 +113,6 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({ sessionId,
               <tr>
                 <th>Student</th>
                 <th>Roll No</th>
-                <th>Student ID</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -125,9 +124,6 @@ export const SessionAttendance: React.FC<SessionAttendanceProps> = ({ sessionId,
                   <tr key={record.attendance_id}>
                     <td style={{ fontWeight: 600 }}>{record.student_name || record.identity}</td>
                     <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem" }}>{record.roll_number || "—"}</td>
-                    <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--erp-primary)" }}>
-                      {record.student_id || "—"}
-                    </td>
                     <td>
                       <span className={`status-badge ${!wasTaken ? "completed" : isPresent ? "present" : "absent"}`}>
                         {!wasTaken ? "Not taken" : isPresent ? "Present" : "Absent"}

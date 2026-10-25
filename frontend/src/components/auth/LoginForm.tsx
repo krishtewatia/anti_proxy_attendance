@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { auth } from "../../services";
 import type { TokenResponse } from "../../types";
 import { isPendingApprovalError } from "../../utils/approvals.ts";
+import { FORGOT_PASSWORD_HINT } from "../../utils/registration.ts";
 
 interface LoginFormProps {
   onSuccess: (response: TokenResponse) => void;
@@ -137,6 +138,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           <span>Sign In</span>
         )}
       </button>
+
+      <p style={{ margin: "0.75rem 0 0", textAlign: "center", fontSize: "0.8rem", color: "#64748b" }}>{FORGOT_PASSWORD_HINT}</p>
 
       <div className="auth-footer">
         <span>Don't have an account?</span>

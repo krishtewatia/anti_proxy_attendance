@@ -296,6 +296,8 @@ PUBLIC_ROUTES = {
     ("GET", "/api/v1/health"),
     ("POST", "/auth/login"),
     ("POST", "/auth/register"),
+    # The sign-up form shows the college email domain and the photo notice.
+    ("GET", "/auth/registration-rules"),
     ("POST", "/api/v1/students/register"),
     ("POST", "/api/v1/teachers/register"),
     # The registration form lists the active classes before anyone has an account.

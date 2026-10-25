@@ -25,6 +25,16 @@ from app.schemas.student import (
 from app.security.passwords import hash_password
 from app.core.account_status import ACCOUNT_APPROVED, ACCOUNT_PENDING
 from app.services.academic_admin_service import resolve_active_class
+from app.services.registration_rules import (
+    CONSENT_NOTICE_VERSION,
+    RegistrationRuleError,
+    check_consent_version,
+    check_email_allowed,
+    check_roll_number_free,
+    clean_roll_number,
+    new_student_key,
+    record_consent,
+)
 from app.services.student_biometric_service import (
     ENROLL_ACTIVE,
     ENROLL_PENDING_REGISTRATION,
@@ -96,19 +106,33 @@ async def register_student_account(
     log in and the face template is stored but not used until an administrator
     approves it. An administrator creating the account passes ``approved=True``.
     """
-    # 1. Check existing user email
+    db = get_database()
+    self_registration = enrolled_by == "self"
+
+    # 1. Check existing user email, and the college email domain
     existing_user = await get_user_by_email(req.email)
     if existing_user is not None:
         raise DuplicateStudentProfileError(f"A user with email '{req.email}' already exists")
+    await check_email_allowed(db, req.email)
 
-    # 2. Check existing student ID
-    existing_profile = await repo_get_student_profile_by_identity(req.student_id)
+    # 2. The roll number is how the college knows the student: unique. The
+    #    student ID is an internal key, made up when not given.
+    roll_number = clean_roll_number(req.roll_number)
+    try:
+        await check_roll_number_free(db, roll_number)
+    except RegistrationRuleError as exc:
+        raise DuplicateStudentProfileError(str(exc)) from exc
+    student_id = req.student_id or new_student_key()
+    existing_profile = await repo_get_student_profile_by_identity(student_id)
     if existing_profile is not None:
-        raise DuplicateStudentProfileError(f"Student ID '{req.student_id}' is already registered")
+        raise DuplicateStudentProfileError(f"Student ID '{student_id}' is already registered")
+
+    # A student sending their own photo first accepts the notice about it.
+    if self_registration and req.photo_base64:
+        check_consent_version(req.consent_version)
 
     # 3. The class: an active class from the catalog. Only a database with no
     #    catalog at all falls back to deriving a code from branch and section.
-    db = get_database()
     chosen = await resolve_active_class(
         db, class_code=req.class_code, branch=req.branch, section=req.section
     )
@@ -127,19 +151,19 @@ async def register_student_account(
     photo_url = None
     if req.photo_base64:
         ok, msg = await extract_and_register_student_photo(
-            identity=req.student_id,
+            identity=student_id,
             photo_base64=req.photo_base64,
             enrolled_by=enrolled_by,
             student_name=req.name,
-            student_id=req.student_id,
+            student_id=student_id,
             mode=ENROLL_ACTIVE if approved else ENROLL_PENDING_REGISTRATION,
         )
         if not ok:
-            logger.error("Biometric enrollment rejected for %s: %s", req.student_id, msg)
+            logger.error("Biometric enrollment rejected for %s: %s", student_id, msg)
             raise ValueError(msg)
         has_biometric = True
-        photo_url = f"/api/v1/students/{req.student_id}/photo"
-        logger.info("Biometric registration for %s: %s", req.student_id, msg)
+        photo_url = f"/api/v1/students/{student_id}/photo"
+        logger.info("Biometric registration for %s: %s", student_id, msg)
 
     # 5. Create User account
     user_id = f"user_{uuid4().hex}"
@@ -155,11 +179,11 @@ async def register_student_account(
     # 6. Upsert student profile
     profile_doc = await upsert_student_profile(
         user_id=user_id,
-        identity=req.student_id,
+        identity=student_id,
         name=req.name,
         email=req.email,
-        student_id=req.student_id,
-        roll_number=req.roll_number,
+        student_id=student_id,
+        roll_number=roll_number,
         branch=branch,
         section=section,
         class_code=class_code,
@@ -167,14 +191,16 @@ async def register_student_account(
         photo_url=photo_url,
         has_biometric=has_biometric,
     )
+    if self_registration and req.photo_base64:
+        await record_consent(db, user_id, CONSENT_NOTICE_VERSION)
 
     return StudentProfileResponse(
         user_id=user_id,
-        identity=req.student_id,
+        identity=student_id,
         name=req.name,
         email=req.email,
-        student_id=req.student_id,
-        roll_number=req.roll_number,
+        student_id=student_id,
+        roll_number=roll_number,
         branch=branch,
         section=section,
         class_code=class_code,

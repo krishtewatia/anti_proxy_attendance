@@ -86,7 +86,7 @@ def _student(student_id: str, **overrides) -> dict:
         "email": f"{student_id.lower()}@catalog.test",
         "password": PASSWORD,
         "student_id": student_id,
-        "roll_number": "20260001",
+        "roll_number": f"2026-{student_id}",
         "branch": "Data Science",
         "section": "B",
     }

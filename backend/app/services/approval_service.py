@@ -130,6 +130,7 @@ async def list_pending(db: AsyncIOMotorDatabase) -> dict[str, Any]:
             {
                 "identity": request["identity"],
                 "student_id": profile.get("student_id") or request["identity"],
+                "roll_number": profile.get("roll_number"),
                 "name": profile.get("name"),
                 "class_code": profile.get("class_code"),
                 "requested_at": request.get("requested_at"),

@@ -206,7 +206,7 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches
                       </td>
                       <td>
                         <div style={{ fontWeight: 600 }}>{student.name || "(no name)"}</div>
-                        <div style={{ fontSize: "0.8rem" }}>{student.student_id} · Roll {student.roll_number || "—"}</div>
+                        <div style={{ fontSize: "0.8rem" }}>Roll {student.roll_number || "—"} · {student.email}</div>
                         <div style={{ fontSize: "0.8rem", color: "var(--erp-text-muted)" }}>{student.email}</div>
                         {ageLine(student.registered_at)}
                       </td>
@@ -293,7 +293,7 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches
                     <tr key={teacher.user_id}>
                       <td>
                         <div style={{ fontWeight: 600 }}>{teacher.name || "(no name)"}</div>
-                        <div style={{ fontSize: "0.8rem" }}>{teacher.teacher_id} · {teacher.department || "—"}</div>
+                        <div style={{ fontSize: "0.8rem" }}>{teacher.email} · {teacher.department || "—"}</div>
                         <div style={{ fontSize: "0.8rem", color: "var(--erp-text-muted)" }}>{teacher.email}</div>
                         {ageLine(teacher.registered_at)}
                       </td>
@@ -395,7 +395,7 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches
                   <tr key={change.identity}>
                     <td>
                       <div style={{ fontWeight: 600 }}>{change.name || change.student_id}</div>
-                      <div style={{ fontSize: "0.8rem" }}>{change.student_id} · {change.class_code || "—"}</div>
+                      <div style={{ fontSize: "0.8rem" }}>Roll {change.roll_number || "—"} · {change.class_code || "—"}</div>
                     </td>
                     <td>
                       <AuthenticatedImage

@@ -344,16 +344,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             {profile?.name || user.email}
           </h2>
           <div style={{ fontSize: "0.875rem", color: "var(--erp-text-muted)" }}>
-            Student ID: <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--erp-text-main)" }}>{profile?.student_id || "DS202601"}</span>
+            Roll No: <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--erp-text-main)" }}>{profile?.roll_number || "—"}</span>
           </div>
         </div>
 
         {/* Organized Information into Logical Sections (Section 4) */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", fontSize: "0.875rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "0.6rem 0", borderBottom: "1px solid var(--erp-border)" }}>
-            <span style={{ color: "var(--erp-text-muted)" }}>ERP / Roll Number:</span>
-            <strong style={{ fontFamily: "var(--font-mono)" }}>{profile?.roll_number || "—"}</strong>
-          </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", padding: "0.6rem 0", borderBottom: "1px solid var(--erp-border)" }}>
             <span style={{ color: "var(--erp-text-muted)" }}>Branch:</span>

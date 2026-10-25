@@ -13,9 +13,18 @@ class TeacherRegisterRequest(BaseModel):
     name: str = Field(min_length=2, max_length=128)
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=6, max_length=128)
-    teacher_id: str = Field(min_length=2, max_length=64, description="College Teacher ID e.g. T001")
+    # An internal key: made up by the system when not given.
+    teacher_id: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=64,
+        description="Internal key; leave out to have one made up",
+    )
     department: str = Field(
-        min_length=2, max_length=128, description="Academic department e.g. Data Science"
+        default="CSE-DS",
+        min_length=2,
+        max_length=128,
+        description="Academic department e.g. CSE-DS",
     )
     assigned_classes: list[str] = Field(
         default_factory=list, description="Class codes e.g. ['DS-B', 'DS-C']"
