@@ -57,6 +57,7 @@ AuditAction = Literal[
     "TERM_UPDATED",
     "CALENDAR_UPDATED",
     "SETTINGS_UPDATED",
+    "CONSENT_ACCEPTED",
 ]
 
 AuditResourceType = Literal[

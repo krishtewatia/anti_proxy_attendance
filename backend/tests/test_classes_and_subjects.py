@@ -5,6 +5,7 @@ new assignments, and everything that already refers to it is kept. A class or
 subject that is in use cannot be renamed or deleted.
 """
 
+import zlib
 import json
 
 from httpx import ASGITransport, AsyncClient
@@ -86,7 +87,7 @@ def _student(student_id: str, **overrides) -> dict:
         "email": f"{student_id.lower()}@catalog.test",
         "password": PASSWORD,
         "student_id": student_id,
-        "roll_number": "20260001",
+        "roll_number": f"2026{zlib.crc32(student_id.encode()):010d}",
         "branch": "Data Science",
         "section": "B",
     }

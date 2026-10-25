@@ -23,13 +23,16 @@ export interface StudentRegisterRequest {
   name: string;
   email: string;
   password: string;
-  student_id: string;
+  // An internal key the server makes up; students are known by roll number.
+  student_id?: string;
   roll_number: string;
   // The class by its code; branch and section are the older way to name it.
   class_code?: string;
   branch?: string;
   section?: string;
   photo_base64?: string;
+  // The photo notice version the student accepted (needed with a photo).
+  consent_version?: string;
 }
 
 export interface StudentProfileResponse {

@@ -2,7 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.dependencies.rate_limiter import check_registration_rate_limit
 from app.core.client_ip import client_ip
+from app.database.mongodb import get_database
 from app.services.login_throttle import login_throttle
+from app.services.registration_rules import (
+    CONSENT_NOTICE,
+    RegistrationRuleError,
+    college_email_domain,
+)
 
 from typing import Annotated
 
@@ -41,6 +47,20 @@ async def register(user: UserCreate) -> UserResponse:
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
+    except RegistrationRuleError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get(
+    "/registration-rules",
+    summary="What the sign-up form needs: the college email domain and the photo notice",
+)
+async def registration_rules() -> dict:
+    return {
+        # None until the academic structure exists: any address is accepted.
+        "college_email_domain": await college_email_domain(get_database()),
+        "consent_notice": CONSENT_NOTICE,
+    }
 
 
 @router.post(

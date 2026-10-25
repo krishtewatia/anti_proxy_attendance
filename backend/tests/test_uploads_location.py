@@ -7,6 +7,7 @@ if the service would start with such a location, or if a student ID could be
 used to write outside the uploads directory.
 """
 
+import zlib
 from pathlib import Path
 import secrets
 
@@ -29,6 +30,7 @@ from app.database.users import create_user
 from app.main import app
 from app.security.jwt import create_access_token
 from app.security.passwords import hash_password
+from app.services.registration_rules import CONSENT_NOTICE_VERSION
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = BACKEND_DIR.parent
@@ -81,10 +83,11 @@ def _registration(student_id: str) -> dict:
         "email": f"{abs(hash(student_id))}@uploads.test",
         "password": "StudentSecurePass123!",
         "student_id": student_id,
-        "roll_number": "20260001",
+        "roll_number": f"2026{zlib.crc32(student_id.encode()):010d}",
         "branch": "Data Science",
         "section": "B",
         "photo_base64": PLACEHOLDER_PHOTO_B64,
+        "consent_version": CONSENT_NOTICE_VERSION,
     }
 
 

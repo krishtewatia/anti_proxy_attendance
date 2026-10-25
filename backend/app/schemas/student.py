@@ -1,8 +1,10 @@
 """Student Schemas for Multi-Role Attendance Management."""
 
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Annotated, Optional
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+from app.services.registration_rules import ROLL_NUMBER_PATTERN
 
 
 class StudentProfile(BaseModel):
@@ -30,14 +32,20 @@ class StudentRegisterRequest(BaseModel):
     name: str = Field(min_length=2, max_length=128)
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=6, max_length=128)
-    student_id: str = Field(
+    # An internal key: made up by the system when not given. Students are
+    # known by their roll number; nobody needs to type a student ID.
+    student_id: Optional[str] = Field(
+        default=None,
         min_length=2,
         max_length=64,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9_.\-]*$",
-        description="College ID e.g. DS20260125 (letters, digits, '.', '_' and '-')",
+        description="Internal key; leave out to have one made up",
     )
-    roll_number: str = Field(
-        min_length=2, max_length=64, description="ERP / Roll number e.g. 20261234"
+    roll_number: Annotated[str, StringConstraints(strip_whitespace=True)] = Field(
+        min_length=2,
+        max_length=32,
+        pattern=ROLL_NUMBER_PATTERN,
+        description="College roll number, digits only e.g. 2401331540142 (unique)",
     )
     # The class is given by its code (the registration form's list of active
     # classes), or the older way by branch and section.
@@ -49,6 +57,9 @@ class StudentRegisterRequest(BaseModel):
     photo_base64: Optional[str] = Field(
         default=None, description="Optional Base64 encoded photograph"
     )
+    # The version of the photo notice the student accepted. Required when a
+    # student registering themselves includes a photo.
+    consent_version: Optional[str] = Field(default=None, max_length=64)
 
     @model_validator(mode="after")
     def class_or_branch_and_section(self) -> "StudentRegisterRequest":

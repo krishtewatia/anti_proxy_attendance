@@ -37,6 +37,12 @@ from app.database.student_profiles import normalize_class_code
 from app.database.users import create_user
 from app.security.passwords import hash_password
 from app.services.academic_admin_service import resolve_active_class, unavailable_subjects
+from app.services.registration_rules import (
+    RegistrationRuleError,
+    check_email_allowed,
+    check_roll_number_free,
+    clean_roll_number,
+)
 from app.services.approval_service import _clean_codes, _known_class_codes, delete_teacher_account
 from app.services.audit_service import record_audit_event
 from app.services.auth_service import set_password
@@ -87,6 +93,11 @@ async def _change_email(db: AsyncIOMotorDatabase, user: dict[str, Any], email: s
         raise AccountAdminError("Enter a valid email address", 400)
     if new_email == user.get("email"):
         return False
+    if user.get("role") in ("STUDENT", "TEACHER"):
+        try:
+            await check_email_allowed(db, new_email)
+        except RegistrationRuleError as exc:
+            raise AccountAdminError(str(exc), 400) from exc
     taken = await db["users"].find_one({"email": new_email, "user_id": {"$ne": user["user_id"]}})
     if taken is not None:
         raise AccountAdminError("Another account already uses this email address", 409)
@@ -229,7 +240,16 @@ async def update_student(
         changed_fields.append("name")
 
     if roll_number is not None and roll_number.strip() != (profile.get("roll_number") or ""):
-        changes["roll_number"] = roll_number.strip()
+        # Same rules as at registration: a safe format, and unique.
+        try:
+            new_roll = clean_roll_number(roll_number)
+        except RegistrationRuleError as exc:
+            raise AccountAdminError(str(exc), 400) from exc
+        try:
+            await check_roll_number_free(db, new_roll, exclude_user_id=user_id)
+        except RegistrationRuleError as exc:
+            raise AccountAdminError(str(exc), 409) from exc
+        changes["roll_number"] = new_roll
         changed_fields.append("roll_number")
 
     if class_code is not None or branch is not None or section is not None:

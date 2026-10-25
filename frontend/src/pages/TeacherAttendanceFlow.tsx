@@ -631,7 +631,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   const sessionsPage = paginate(previousSessions, sessionsPageNumber, SESSIONS_PAGE_SIZE);
   const teacherName = dashboardData?.teacher.name || user.email;
   const teacherDepartment = dashboardData?.teacher.department || "";
-  const teacherId = dashboardData?.teacher.teacher_id || "";
+  const teacherEmail = dashboardData?.teacher.email || "";
   const noClasses = assignedClasses.length === 0;
   const noClassesMessage =
     "No classes are assigned to you yet. Ask an administrator to assign your classes.";
@@ -978,7 +978,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                     >
                       <div className="erp-student-details">
                         <span className="erp-student-name">{student.student_name}</span>
-                        <span className="erp-student-roll">{student.student_id}</span>
+                        <span className="erp-student-roll">{student.roll_number || "—"}</span>
                       </div>
                       <span className={`status-badge ${isPresent ? "present" : "absent"}`}>
                         {isPresent ? "✓ PRESENT" : "— ABSENT"}
@@ -1027,7 +1027,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
               <table className="erp-table">
                 <thead>
                   <tr>
-                    <th>Student ID</th>
+                    <th>Roll No</th>
                     <th>Student Name</th>
                     <th>Status</th>
                     <th>Correction</th>
@@ -1039,7 +1039,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                     return (
                       <tr key={student.identity}>
                         <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem" }}>
-                          {student.student_id}
+                          {student.roll_number || "—"}
                         </td>
                         <td style={{ fontWeight: 600 }}>{student.student_name}</td>
                         <td>
@@ -1239,8 +1239,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", fontSize: "0.875rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--erp-border)" }}>
-            <span style={{ color: "var(--erp-text-muted)" }}>Faculty ID:</span>
-            <strong style={{ fontFamily: "var(--font-mono)" }}>{teacherId || "—"}</strong>
+            <span style={{ color: "var(--erp-text-muted)" }}>Email:</span>
+            <strong style={{ overflowWrap: "anywhere", textAlign: "right" }}>{teacherEmail || "—"}</strong>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--erp-border)" }}>
             <span style={{ color: "var(--erp-text-muted)" }}>Department:</span>

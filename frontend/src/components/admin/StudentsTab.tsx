@@ -11,7 +11,6 @@ const EMPTY_STUDENT = {
   name: "",
   email: "",
   password: "",
-  student_id: "",
   roll_number: "",
   class_code: "",
 };
@@ -158,8 +157,7 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
           <thead>
             <tr>
               <th>Name</th>
-              <th>Student ID</th>
-              <th>ERP/Roll No</th>
+              <th>Roll No</th>
               <th>Branch</th>
               <th>Section</th>
               <th>Status</th>
@@ -169,7 +167,7 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
           <tbody>
             {filteredStudents.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", padding: "2rem", color: "var(--erp-text-muted)" }}>
+                <td colSpan={6} style={{ textAlign: "center", padding: "2rem", color: "var(--erp-text-muted)" }}>
                   No students found.
                 </td>
               </tr>
@@ -192,10 +190,7 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
                       <span>{s.name}</span>
                     </div>
                   </td>
-                  <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--erp-primary)" }}>
-                    {s.student_id}
-                  </td>
-                  <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem" }}>{s.roll_number}</td>
+                  <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--erp-primary)" }}>{s.roll_number}</td>
                   <td>{s.branch}</td>
                   <td>Section {s.section || "B"}</td>
                   <td>
@@ -230,15 +225,9 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
             <input type="text" required placeholder="Full Name" value={newStudent.name} onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })} className="auth-input" />
           </div>
 
-          <div className="erp-form-grid-2" style={fieldGap}>
-            <div className="form-group">
-              <label className="form-label">Student ID</label>
-              <input type="text" required placeholder="e.g. DS202605" value={newStudent.student_id} onChange={(e) => setNewStudent({ ...newStudent, student_id: e.target.value })} className="auth-input" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">ERP / Roll Number</label>
-              <input type="text" required placeholder="e.g. 12349" value={newStudent.roll_number} onChange={(e) => setNewStudent({ ...newStudent, roll_number: e.target.value })} className="auth-input" />
-            </div>
+          <div className="form-group" style={fieldGap}>
+            <label className="form-label">Roll No</label>
+            <input type="text" required minLength={2} placeholder="e.g. 2401331540142" inputMode="numeric" value={newStudent.roll_number} onChange={(e) => setNewStudent({ ...newStudent, roll_number: e.target.value })} className="auth-input" />
           </div>
 
           <div className="form-group" style={fieldGap}>
@@ -253,7 +242,7 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
 
           <div className="form-group" style={fieldGap}>
             <label className="form-label">Email Address</label>
-            <input type="email" required placeholder="student@institution.edu" value={newStudent.email} onChange={(e) => setNewStudent({ ...newStudent, email: e.target.value })} className="auth-input" />
+            <input type="email" required placeholder="rollno@college email domain" value={newStudent.email} onChange={(e) => setNewStudent({ ...newStudent, email: e.target.value })} className="auth-input" />
           </div>
 
           <div className="form-group">
@@ -273,15 +262,12 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
             <input type="text" required minLength={2} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="auth-input" />
           </div>
 
-          <div className="erp-form-grid-2" style={fieldGap}>
-            <div className="form-group">
-              <label className="form-label">Student ID</label>
-              <input type="text" required minLength={2} value={editForm.student_id} onChange={(e) => setEditForm({ ...editForm, student_id: e.target.value })} className="auth-input" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">ERP / Roll Number</label>
-              <input type="text" required minLength={2} value={editForm.roll_number} onChange={(e) => setEditForm({ ...editForm, roll_number: e.target.value })} className="auth-input" />
-            </div>
+          <div className="form-group" style={fieldGap}>
+            <label className="form-label">Roll No</label>
+            <input type="text" required minLength={2} value={editForm.roll_number} onChange={(e) => setEditForm({ ...editForm, roll_number: e.target.value })} className="auth-input" />
+            <small style={{ color: "var(--erp-text-muted)", fontSize: "0.75rem" }}>
+              Photos and attendance stay linked when the roll number is corrected.
+            </small>
           </div>
 
           <div className="form-group" style={fieldGap}>

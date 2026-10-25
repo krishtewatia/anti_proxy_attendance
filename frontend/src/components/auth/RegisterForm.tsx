@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../services";
 import { classLabel, type PublicClass } from "../../utils/catalog.ts";
+import { emailPlaceholder, registrationProblem, type RegistrationRules } from "../../utils/registration.ts";
+import { ConsentNotice } from "./ConsentNotice";
 
 interface RegisterFormProps {
   onSuccess: (registeredEmail: string) => void;
   onSwitchToLogin: () => void;
 }
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const RegisterForm: React.FC<RegisterFormProps> = ({
   onSuccess,
@@ -19,16 +19,19 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // Student-specific fields
-  const [studentId, setStudentId] = useState("");
+  // Student-specific fields. Students are known by roll number; the internal
+  // student ID is made up by the server.
   const [rollNumber, setRollNumber] = useState("");
+  const [consentAccepted, setConsentAccepted] = useState(false);
   const [classCode, setClassCode] = useState("");
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
-  // Teacher-specific fields
-  const [teacherId, setTeacherId] = useState("");
-  const [department, setDepartment] = useState("Data Science");
+  // Teacher-specific fields (no teacher ID: teachers are known by email)
+  const [department, setDepartment] = useState("CSE-DS");
+
+  // The college email domain and the photo notice (from the server).
+  const [rules, setRules] = useState<RegistrationRules | null>(null);
 
   // The classes that exist and are open for registration (from the server).
   const [classes, setClasses] = useState<PublicClass[]>([]);
@@ -52,10 +55,20 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
       .finally(() => {
         if (!cancelled) setClassesLoaded(true);
       });
+    api
+      .getRegistrationRules()
+      .then((loaded) => {
+        if (!cancelled) setRules(loaded);
+      })
+      .catch(() => {
+        // Without the rules the server still checks the email and the notice.
+      });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const domain = rules?.college_email_domain ?? null;
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -82,23 +95,21 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
     const trimmedEmail = email.trim();
     const trimmedName = name.trim();
 
-    if (!trimmedName) {
-      setErrorMessage("Please enter your full name.");
-      return;
-    }
-
-    if (!trimmedEmail || !EMAIL_REGEX.test(trimmedEmail)) {
-      setErrorMessage("Please enter a valid email address.");
-      return;
-    }
-
-    if (password.length < 6) {
-      setErrorMessage("Password must be at least 6 characters long.");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setErrorMessage("Passwords do not match.");
+    const problem = registrationProblem(
+      {
+        role,
+        name,
+        email,
+        password,
+        confirmPassword,
+        rollNumber,
+        hasPhoto: Boolean(photoBase64),
+        consentAccepted,
+      },
+      domain,
+    );
+    if (problem) {
+      setErrorMessage(problem);
       return;
     }
 
@@ -106,16 +117,6 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
 
     try {
       if (role === "STUDENT") {
-        if (!studentId.trim()) {
-          setErrorMessage("Please enter your Student ID (e.g. DS20260125).");
-          setLoading(false);
-          return;
-        }
-        if (!rollNumber.trim()) {
-          setErrorMessage("Please enter your ERP / Roll Number.");
-          setLoading(false);
-          return;
-        }
         if (!classCode) {
           setErrorMessage("Please choose your class.");
           setLoading(false);
@@ -126,23 +127,16 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
           name: trimmedName,
           email: trimmedEmail,
           password,
-          student_id: studentId.trim(),
           roll_number: rollNumber.trim(),
           class_code: classCode,
           photo_base64: photoBase64 || undefined,
+          consent_version: photoBase64 && rules ? rules.consent_notice.version : undefined,
         });
       } else {
-        if (!teacherId.trim()) {
-          setErrorMessage("Please enter your Teacher ID (e.g. T001).");
-          setLoading(false);
-          return;
-        }
-
         await api.registerTeacher({
           name: trimmedName,
           email: trimmedEmail,
           password,
-          teacher_id: teacherId.trim(),
           department,
           // Classes and subjects are assigned by an administrator at approval.
           assigned_classes: [],
@@ -154,7 +148,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("409") || message.toLowerCase().includes("already exists")) {
-        setErrorMessage("An account with this email or ID already exists.");
+        setErrorMessage("An account with this email or roll number already exists.");
       } else {
         setErrorMessage(message || "Unable to complete registration. Please try again.");
       }
@@ -240,44 +234,32 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
           id="register-email"
           type="email"
           className="auth-input"
-          placeholder="your.email@campus.edu"
+          placeholder={emailPlaceholder(domain, role)}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
           disabled={loading}
         />
+        {domain && (
+          <small style={{ color: "#64748b", fontSize: "0.75rem" }}>Use your college email address (@{domain}).</small>
+        )}
       </div>
 
       {/* Role-Specific: Student Fields */}
       {role === "STUDENT" && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.85rem" }}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="register-student-id">Student ID</label>
-              <input
-                id="register-student-id"
-                type="text"
-                className="auth-input"
-                placeholder="e.g. DS202601"
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="register-roll-no">ERP / Roll No</label>
-              <input
-                id="register-roll-no"
-                type="text"
-                className="auth-input"
-                placeholder="e.g. 20261234"
-                value={rollNumber}
-                onChange={(e) => setRollNumber(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
+          <div className="form-group" style={{ marginBottom: "0.85rem" }}>
+            <label className="form-label" htmlFor="register-roll-no">Roll No</label>
+            <input
+              id="register-roll-no"
+              type="text"
+              className="auth-input"
+              placeholder="e.g. 2401331540142" inputMode="numeric"
+              value={rollNumber}
+              onChange={(e) => setRollNumber(e.target.value)}
+              required
+              disabled={loading}
+            />
           </div>
 
           <div className="form-group" style={{ marginBottom: "0.85rem" }}>
@@ -333,32 +315,25 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
               />
             </div>
           </div>
+
+          {photoBase64 && rules && (
+            <div style={{ marginBottom: "1rem" }}>
+              <ConsentNotice notice={rules.consent_notice} accepted={consentAccepted} onChange={setConsentAccepted} disabled={loading} />
+            </div>
+          )}
         </>
       )}
 
       {/* Role-Specific: Teacher Fields */}
       {role === "TEACHER" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "0.85rem" }}>
-          <div className="form-group">
-            <label className="form-label" htmlFor="register-teacher-id">Teacher ID</label>
-            <input
-              id="register-teacher-id"
-              type="text"
-              className="auth-input"
-              placeholder="e.g. T001"
-              value={teacherId}
-              onChange={(e) => setTeacherId(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
+        <div style={{ marginBottom: "0.85rem" }}>
           <div className="form-group">
             <label className="form-label" htmlFor="register-dept">Department</label>
             <input
               id="register-dept"
               type="text"
               className="auth-input"
-              placeholder="e.g. Data Science"
+              placeholder="e.g. CSE-DS"
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
               required

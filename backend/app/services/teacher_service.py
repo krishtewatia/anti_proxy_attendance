@@ -25,6 +25,7 @@ from app.schemas.teacher import (
     TeacherSessionSummaryItem,
 )
 from app.security.passwords import hash_password
+from app.services.registration_rules import check_email_allowed, new_teacher_key
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,13 @@ async def register_teacher_account(
     if existing_user is not None:
         raise DuplicateTeacherError(f"A user with email '{req.email}' already exists")
 
-    existing_profile = await get_teacher_profile_by_teacher_id(req.teacher_id)
+    await check_email_allowed(get_database(), req.email)
+
+    # An internal key, made up when not given: teachers are known by their email.
+    teacher_id = req.teacher_id or new_teacher_key()
+    existing_profile = await get_teacher_profile_by_teacher_id(teacher_id)
     if existing_profile is not None:
-        raise DuplicateTeacherError(f"Teacher ID '{req.teacher_id}' is already registered")
+        raise DuplicateTeacherError(f"Teacher ID '{teacher_id}' is already registered")
 
     user_id = f"user_{uuid4().hex}"
     pw_hash = hash_password(req.password)
@@ -65,7 +70,7 @@ async def register_teacher_account(
     assigned_subjects = req.assigned_subjects if approved else []
     _ = await upsert_teacher_profile(
         user_id=user_id,
-        teacher_id=req.teacher_id,
+        teacher_id=teacher_id,
         name=req.name,
         email=req.email,
         department=req.department,
@@ -85,7 +90,7 @@ async def register_teacher_account(
 
     return TeacherProfileResponse(
         user_id=user_id,
-        teacher_id=req.teacher_id,
+        teacher_id=teacher_id,
         name=req.name,
         email=req.email,
         department=req.department,

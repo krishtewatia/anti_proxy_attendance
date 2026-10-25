@@ -32,6 +32,7 @@ import { validationMessage } from "../utils/apiErrors.ts";
 import { clearStoredAuth, getStoredToken, setMustChangePassword } from "./auth.ts";
 import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
 import type { ReportsSummary } from "../utils/reports.ts";
+import type { ConsentStatus, RegistrationRules } from "../utils/registration.ts";
 import type {
   CalendarEntry,
   ImportReport,
@@ -373,6 +374,11 @@ export const api = {
   },
 
   // --- Phase 2: Student Endpoints ---
+  // Public: the college email domain (null while any address is accepted) and the photo notice.
+  getRegistrationRules(): Promise<RegistrationRules> {
+    return request<RegistrationRules>("/api/v1/auth/registration-rules");
+  },
+
   registerStudent(
     data: StudentRegisterRequest,
   ): Promise<StudentProfileResponse> {
@@ -398,6 +404,18 @@ export const api = {
 
   getStudentDashboard(): Promise<StudentAttendanceDashboardResponse> {
     return request<StudentAttendanceDashboardResponse>("/api/v1/students/dashboard");
+  },
+
+  // The notice a student accepts before sending a photo of their face.
+  getMyConsent(): Promise<ConsentStatus> {
+    return request<ConsentStatus>("/api/v1/students/consent");
+  },
+
+  acceptConsent(version: string): Promise<ConsentStatus> {
+    return request<ConsentStatus>("/api/v1/students/consent", {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    });
   },
 
   uploadStudentPhoto(photo_base64: string): Promise<{ status: string; message: string; has_biometric: boolean }> {

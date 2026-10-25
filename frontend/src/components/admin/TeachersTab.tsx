@@ -9,8 +9,7 @@ const EMPTY_TEACHER = {
   name: "",
   email: "",
   password: "",
-  teacher_id: "",
-  department: "Data Science",
+  department: "CSE-DS",
   assigned_classes: [] as string[],
   assigned_subjects: "",
 };
@@ -59,7 +58,6 @@ export const TeachersTab: React.FC<AdminTabProps> = ({ teachers, academic, notif
         name: newTeacher.name,
         email: newTeacher.email,
         password: newTeacher.password,
-        teacher_id: newTeacher.teacher_id,
         department: newTeacher.department,
         assigned_classes: newTeacher.assigned_classes,
         assigned_subjects: splitList(newTeacher.assigned_subjects),
@@ -162,7 +160,7 @@ export const TeachersTab: React.FC<AdminTabProps> = ({ teachers, academic, notif
           <thead>
             <tr>
               <th>Name</th>
-              <th>Teacher ID</th>
+              <th>Email</th>
               <th>Department</th>
               <th>Classes</th>
               <th>Status</th>
@@ -180,9 +178,7 @@ export const TeachersTab: React.FC<AdminTabProps> = ({ teachers, academic, notif
               filteredTeachers.map((t) => (
                 <tr key={t.user_id}>
                   <td style={{ fontWeight: 600 }}>{t.name}</td>
-                  <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--erp-primary)" }}>
-                    {t.teacher_id}
-                  </td>
+                  <td style={{ fontSize: "0.8125rem", color: "var(--erp-primary)" }}>{t.email}</td>
                   <td>{t.department}</td>
                   <td>
                     {(t.assigned_classes || []).length === 0 ? (
@@ -236,15 +232,9 @@ export const TeachersTab: React.FC<AdminTabProps> = ({ teachers, academic, notif
             <input type="text" required placeholder="Full Name" value={newTeacher.name} onChange={(e) => setNewTeacher({ ...newTeacher, name: e.target.value })} className="auth-input" />
           </div>
 
-          <div className="erp-form-grid-2" style={fieldGap}>
-            <div className="form-group">
-              <label className="form-label">Teacher ID</label>
-              <input type="text" required placeholder="e.g. T002" value={newTeacher.teacher_id} onChange={(e) => setNewTeacher({ ...newTeacher, teacher_id: e.target.value })} className="auth-input" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Department</label>
-              <input type="text" required placeholder="e.g. Data Science" value={newTeacher.department} onChange={(e) => setNewTeacher({ ...newTeacher, department: e.target.value })} className="auth-input" />
-            </div>
+          <div className="form-group" style={fieldGap}>
+            <label className="form-label">Department</label>
+            <input type="text" required placeholder="e.g. CSE-DS" value={newTeacher.department} onChange={(e) => setNewTeacher({ ...newTeacher, department: e.target.value })} className="auth-input" />
           </div>
 
           <div className="form-group" style={fieldGap}>
@@ -259,7 +249,7 @@ export const TeachersTab: React.FC<AdminTabProps> = ({ teachers, academic, notif
 
           <div className="form-group" style={fieldGap}>
             <label className="form-label">Email Address</label>
-            <input type="email" required placeholder="teacher@institution.edu" value={newTeacher.email} onChange={(e) => setNewTeacher({ ...newTeacher, email: e.target.value })} className="auth-input" />
+            <input type="email" required placeholder="name@college email domain" value={newTeacher.email} onChange={(e) => setNewTeacher({ ...newTeacher, email: e.target.value })} className="auth-input" />
           </div>
 
           <div className="form-group">
@@ -279,15 +269,9 @@ export const TeachersTab: React.FC<AdminTabProps> = ({ teachers, academic, notif
             <input type="text" required minLength={2} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="auth-input" />
           </div>
 
-          <div className="erp-form-grid-2" style={fieldGap}>
-            <div className="form-group">
-              <label className="form-label">Teacher ID</label>
-              <input type="text" required minLength={2} value={editForm.teacher_id} onChange={(e) => setEditForm({ ...editForm, teacher_id: e.target.value })} className="auth-input" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Department</label>
-              <input type="text" required minLength={2} value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })} className="auth-input" />
-            </div>
+          <div className="form-group" style={fieldGap}>
+            <label className="form-label">Department</label>
+            <input type="text" required minLength={2} value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })} className="auth-input" />
           </div>
 
           <div className="form-group" style={fieldGap}>

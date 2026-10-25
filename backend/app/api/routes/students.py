@@ -3,7 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.dependencies.rate_limiter import check_registration_rate_limit
 from app.api.dependencies.auth import (
@@ -21,6 +21,13 @@ from app.schemas.student import (
     StudentProfileBind,
     StudentProfileResponse,
     StudentRegisterRequest,
+)
+from app.services.audit_service import record_audit_event
+from app.services.registration_rules import (
+    RegistrationRuleError,
+    check_consent_version,
+    consent_status,
+    record_consent,
 )
 from app.services.student_biometric_service import (
     ENROLL_PENDING_CHANGE,
@@ -44,6 +51,10 @@ router = APIRouter(
 
 class PhotoUploadRequest(BaseModel):
     photo_base64: str
+
+
+class ConsentAcceptRequest(BaseModel):
+    version: str = Field(min_length=1, max_length=64)
 
 
 @router.post(
@@ -182,6 +193,42 @@ async def get_student_photo_endpoint(
     )
 
 
+@router.get(
+    "/consent",
+    summary="The notice about photos, and whether you have accepted it",
+)
+async def get_my_consent_endpoint(
+    current_user: Annotated[dict, Depends(require_student)],
+) -> dict:
+    return await consent_status(get_database(), current_user["user_id"])
+
+
+@router.post(
+    "/consent",
+    summary="Accept the notice about photos (needed before you send a photo)",
+)
+async def accept_consent_endpoint(
+    payload: ConsentAcceptRequest,
+    current_user: Annotated[dict, Depends(require_student)],
+) -> dict:
+    try:
+        check_consent_version(payload.version)
+    except RegistrationRuleError as exc:
+        # The notice changed since the page was loaded: show the new one.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    db = get_database()
+    result = await record_consent(db, current_user["user_id"], payload.version)
+    await record_audit_event(
+        actor_user_id=current_user["user_id"],
+        actor_role=current_user["role"],
+        action="CONSENT_ACCEPTED",
+        resource_type="USER",
+        resource_id=current_user["user_id"],
+        metadata={"notice_version": payload.version},
+    )
+    return result
+
+
 @router.post(
     "/photo",
     summary="Upload or update student biometric photograph",
@@ -196,6 +243,14 @@ async def upload_student_photo_endpoint(
     approved. A student could otherwise replace their face with someone
     else's and have that person marked present in their place.
     """
+    if not (await consent_status(get_database(), current_user["user_id"]))["accepted"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "consent_required",
+                "message": "Read and accept the notice about your photo first.",
+            },
+        )
     profile = await get_student_profile_response(current_user["user_id"])
     if not profile:
         raise HTTPException(

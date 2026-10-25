@@ -38,6 +38,11 @@ async def register_user(user: UserCreate) -> UserResponse:
     if existing_user is not None:
         raise DuplicateUserError("A user with this email already exists")
 
+    from app.database.mongodb import get_database
+    from app.services.registration_rules import check_email_allowed
+
+    await check_email_allowed(get_database(), user.email)
+
     user_id = f"user_{uuid4().hex}"
 
     password_hash = hash_password(user.password)

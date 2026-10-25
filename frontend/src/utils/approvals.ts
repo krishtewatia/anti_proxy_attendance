@@ -36,6 +36,7 @@ export interface PendingAccount {
 export interface PendingPhotoChange {
   identity: string;
   student_id: string;
+  roll_number?: string | null;
   name?: string | null;
   class_code?: string | null;
   requested_at?: string | null;

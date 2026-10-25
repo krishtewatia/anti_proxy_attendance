@@ -23,6 +23,7 @@ const testSuites: TestSuite[] = [
   { name: "API Address: Same Origin Behind The Proxy", file: "test_api_base_url.ts", category: "Unit" },
   { name: "Validation Errors In Plain Words", file: "test_api_errors.ts", category: "Unit" },
   { name: "Academic Setup: Structure, Classes, Timetable", file: "test_academic_setup.ts", category: "Unit" },
+  { name: "Sign-up: College Email, Roll No, Photo Notice", file: "test_registration.ts", category: "Unit" },
   { name: "Create Session Form Validation & Lifecycle", file: "test_create_session.ts", category: "Unit" },
   { name: "Attendance Correction Validation & Audit History", file: "test_attendance_correction.ts", category: "Unit" },
   { name: "Audit Trail Contracts & Verification", file: "test_audit_logs.ts", category: "Contract" },

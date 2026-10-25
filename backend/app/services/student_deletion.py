@@ -152,6 +152,7 @@ async def delete_student_completely(
                     photos += 1
             except (ValueError, OSError):
                 pass
+    await db["consents"].delete_many({"user_id": user_id})
     profile_deleted = (
         await db["student_profiles"].delete_one({"user_id": user_id})
     ).deleted_count > 0
