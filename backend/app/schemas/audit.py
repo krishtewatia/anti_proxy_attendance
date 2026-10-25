@@ -53,6 +53,10 @@ AuditAction = Literal[
     "ORGANISATION_SEEDED",
     "TIMETABLE_IMPORTED",
     "TIMETABLE_ACTIVATED",
+    "TIMETABLE_FLAG_RESOLVED",
+    "TERM_UPDATED",
+    "CALENDAR_UPDATED",
+    "SETTINGS_UPDATED",
 ]
 
 AuditResourceType = Literal[

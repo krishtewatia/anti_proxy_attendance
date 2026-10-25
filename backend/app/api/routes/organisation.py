@@ -11,7 +11,7 @@ import logging
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.dependencies.auth import require_admin
 from app.database.mongodb import get_database
@@ -29,6 +29,45 @@ class ActivateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     effective_from: date
+
+
+class TermDatesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+
+class SubjectUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: Optional[str] = Field(default=None, max_length=40)
+    name: Optional[str] = Field(default=None, max_length=200)
+    code_status: Optional[str] = None
+    code_note: Optional[str] = Field(default=None, max_length=500)
+
+
+class ResolveFlagRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    note: str = Field(min_length=1, max_length=500)
+
+
+class CalendarExceptionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cohort_id: str
+    date: date
+    reason: str = Field(min_length=1, max_length=200)
+    class_id: Optional[str] = None
+
+
+class SettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    college_email_domain: Optional[str] = Field(default=None, max_length=100)
+    edit_window_hours: Optional[int] = None
+    shortage_threshold_percent: Optional[int] = None
 
 
 def _raise(exc: org.OrganisationError) -> None:
@@ -180,13 +219,15 @@ async def list_slots(
             status_code=status.HTTP_404_NOT_FOUND, detail="timetable version not found"
         )
     query: dict = {"version_id": version_id}
-    if flagged_only:
-        query["flags.0"] = {"$exists": True}
     if section:
         query["audience.section"] = section.upper()
     if set_code:
         query["audience.set_code"] = set_code.upper()
     slots = [doc async for doc in db[org.SLOTS].find(query, {"_id": 0})]
+    subjects = {doc["key"]: doc async for doc in db[org.SUBJECTS].find({}, {"_id": 0})}
+    slots = org.with_current_code_flags(slots, subjects)
+    if flagged_only:
+        slots = [slot for slot in slots if slot["flags"]]
     order = {day: i for i, day in enumerate(org.DAYS)}
     return sorted(slots, key=lambda s: (order.get(s["day"], 9), s["start_minute"], s["row"]))
 
@@ -208,3 +249,126 @@ async def activate(version_id: str, payload: ActivateRequest, admin: Admin) -> d
         {"cohort_id": version["cohort_id"], "effective_from": version["effective_from"]},
     )
     return version
+
+
+@router.patch("/terms/{term_id}", summary="Set the term's start and end dates")
+async def set_term_dates(term_id: str, payload: TermDatesRequest, admin: Admin) -> dict:
+    try:
+        term = await org.update_term_dates(
+            get_database(), term_id, payload.start_date, payload.end_date
+        )
+    except org.OrganisationError as exc:
+        _raise(exc)
+    await _audit(
+        admin,
+        "TERM_UPDATED",
+        term_id,
+        {"start_date": term["start_date"], "end_date": term["end_date"]},
+    )
+    return term
+
+
+@router.patch("/subjects/{key}", summary="Correct a subject's ERP code, name or code status")
+async def update_subject(key: str, payload: SubjectUpdateRequest, admin: Admin) -> dict:
+    db = get_database()
+    before = await db[org.SUBJECTS].find_one({"key": key}, {"_id": 0}) or {}
+    try:
+        subject = await org.update_subject(db, key, payload.model_dump(exclude_none=True))
+    except org.OrganisationError as exc:
+        _raise(exc)
+    changed = {
+        k: {"from": before.get(k), "to": subject.get(k)}
+        for k in ("code", "name", "code_status")
+        if before.get(k) != subject.get(k)
+    }
+    if changed:
+        await _audit(admin, "SUBJECT_UPDATED", key, {"changes": changed})
+    return subject
+
+
+@router.post(
+    "/timetable/slots/{slot_id}/flags/{kind}/resolve",
+    summary="Mark a timetable flag as checked, with a note",
+)
+async def resolve_flag(slot_id: str, kind: str, payload: ResolveFlagRequest, admin: Admin) -> dict:
+    try:
+        slot = await org.resolve_flag(
+            get_database(), slot_id, kind.upper(), payload.note, actor_user_id=admin["user_id"]
+        )
+    except org.OrganisationError as exc:
+        _raise(exc)
+    await _audit(
+        admin, "TIMETABLE_FLAG_RESOLVED", slot_id, {"kind": kind.upper(), "row": slot.get("row")}
+    )
+    return slot
+
+
+@router.get("/calendar", summary="Holidays and cancelled classes of a cohort")
+async def list_calendar(admin: Admin, cohort_id: Optional[str] = None) -> list[dict]:
+    db = get_database()
+    query = {"cohort_id": cohort_id} if cohort_id else {}
+    return [doc async for doc in db[org.CALENDAR].find(query, {"_id": 0}).sort("date", 1)]
+
+
+@router.post(
+    "/calendar",
+    status_code=status.HTTP_201_CREATED,
+    summary="Record a holiday or a cancelled class",
+)
+async def add_calendar(payload: CalendarExceptionRequest, admin: Admin) -> dict:
+    try:
+        doc = await org.add_calendar_exception(
+            get_database(),
+            cohort_id=payload.cohort_id,
+            on=payload.date,
+            reason=payload.reason,
+            class_id=payload.class_id,
+            actor_user_id=admin["user_id"],
+        )
+    except org.OrganisationError as exc:
+        _raise(exc)
+    await _audit(
+        admin,
+        "CALENDAR_UPDATED",
+        doc["exception_id"],
+        {"date": doc["date"], "class_id": doc["class_id"], "added": True},
+    )
+    doc.pop("_id", None)
+    return doc
+
+
+@router.delete("/calendar/{exception_id}", summary="Remove a holiday or cancelled class")
+async def delete_calendar(exception_id: str, admin: Admin) -> dict:
+    db = get_database()
+    doc = await db[org.CALENDAR].find_one({"exception_id": exception_id})
+    if doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="calendar entry not found"
+        )
+    await db[org.CALENDAR].delete_one({"exception_id": exception_id})
+    await _audit(
+        admin,
+        "CALENDAR_UPDATED",
+        exception_id,
+        {"date": doc["date"], "class_id": doc.get("class_id"), "added": False},
+    )
+    return {"deleted": exception_id}
+
+
+@router.get("/settings", summary="Pilot settings")
+async def get_settings(admin: Admin) -> dict:
+    return await org.get_settings(get_database())
+
+
+@router.put("/settings", summary="Change pilot settings")
+async def put_settings(payload: SettingsRequest, admin: Admin) -> dict:
+    db = get_database()
+    before = await org.get_settings(db)
+    try:
+        after = await org.update_settings(db, payload.model_dump(exclude_none=True))
+    except org.OrganisationError as exc:
+        _raise(exc)
+    changed = {k: {"from": before[k], "to": after[k]} for k in after if before[k] != after[k]}
+    if changed:
+        await _audit(admin, "SETTINGS_UPDATED", org.SETTINGS_ID, {"changes": changed})
+    return after

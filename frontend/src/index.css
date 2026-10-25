@@ -224,6 +224,12 @@ a:hover {
   border: 1px solid var(--erp-info-border);
 }
 
+.status-badge.warning {
+  background-color: var(--erp-warning-bg);
+  color: var(--erp-warning-text);
+  border: 1px solid var(--erp-warning-border);
+}
+
 .status-badge.completed {
   background-color: var(--erp-surface-subtle);
   color: var(--erp-text-on-subtle);

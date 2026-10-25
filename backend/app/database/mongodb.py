@@ -114,6 +114,8 @@ async def init_indexes(db: AsyncIOMotorDatabase):
         ("org_classes", [("class_id", 1)], "uq_org_classes"),
         ("timetable_versions", [("version_id", 1)], "uq_timetable_versions"),
         ("timetable_slots", [("slot_id", 1)], "uq_timetable_slots"),
+        ("calendar_exceptions", [("exception_id", 1)], "uq_calendar_exceptions"),
+        ("org_settings", [("settings_id", 1)], "uq_org_settings"),
     ):
         await db[collection].create_index(keys, unique=True, name=name)
     await db["timetable_slots"].create_index(
