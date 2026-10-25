@@ -119,6 +119,7 @@ async def init_indexes(db: AsyncIOMotorDatabase):
         ("consents", [("user_id", 1), ("notice_version", 1)], "uq_consents"),
         ("enrolment_requests", [("request_id", 1)], "uq_enrolment_requests"),
         ("enrolments", [("user_id", 1), ("term_id", 1)], "uq_enrolments"),
+        ("section_lists", [("cohort_id", 1)], "uq_section_lists"),
     ):
         await db[collection].create_index(keys, unique=True, name=name)
     await db["timetable_slots"].create_index(

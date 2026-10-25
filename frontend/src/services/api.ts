@@ -33,6 +33,7 @@ import { clearStoredAuth, getStoredToken, setMustChangePassword } from "./auth.t
 import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
 import type { ReportsSummary } from "../utils/reports.ts";
 import type { ConsentStatus, RegistrationRules } from "../utils/registration.ts";
+import type { ListSummary, ListUploadReport, MatchReport } from "../utils/sectionList.ts";
 import type { MySetup, PhotoCheckResult, SetupOptions, SetupRequest, SetupRequestList, requestBody } from "../utils/enrolment.ts";
 import type {
   CalendarEntry,
@@ -444,6 +445,35 @@ export const api = {
     return request<{ done: string[] }>("/api/v1/admin/enrolment/requests/bulk", {
       method: "POST",
       body: JSON.stringify({ action, request_ids, ...(reason ? { reason } : {}) }),
+    });
+  },
+
+  // --- Admin: the official section list ---
+  uploadSectionList(cohortId: string, csvText: string, sourceName: string, dryRun: boolean): Promise<ListUploadReport> {
+    const query = new URLSearchParams({ dry_run: String(dryRun), source_name: sourceName });
+    return request<ListUploadReport>(`/api/v1/admin/enrolment/section-lists/${encodeURIComponent(cohortId)}?${query.toString()}`, {
+      method: "POST",
+      headers: { "Content-Type": "text/csv" },
+      body: csvText,
+    });
+  },
+
+  getSectionList(cohortId: string): Promise<ListSummary> {
+    return request<ListSummary>(`/api/v1/admin/enrolment/section-lists/${encodeURIComponent(cohortId)}`);
+  },
+
+  deleteSectionList(cohortId: string): Promise<{ deleted: boolean }> {
+    return request<{ deleted: boolean }>(`/api/v1/admin/enrolment/section-lists/${encodeURIComponent(cohortId)}`, { method: "DELETE" });
+  },
+
+  getSectionListReport(cohortId: string): Promise<MatchReport> {
+    return request<MatchReport>(`/api/v1/admin/enrolment/section-lists/${encodeURIComponent(cohortId)}/report`);
+  },
+
+  approveMatching(cohortId: string, requestIds: string[]): Promise<{ done: string[] }> {
+    return request<{ done: string[] }>(`/api/v1/admin/enrolment/section-lists/${encodeURIComponent(cohortId)}/approve-matching`, {
+      method: "POST",
+      body: JSON.stringify({ request_ids: requestIds }),
     });
   },
 

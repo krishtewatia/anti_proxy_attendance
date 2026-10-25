@@ -8,12 +8,14 @@ import { ClassesSection } from "./academic/ClassesSection";
 import { TimetableSection } from "./academic/TimetableSection";
 import { CalendarSection } from "./academic/CalendarSection";
 import { SettingsSection } from "./academic/SettingsSection";
+import { SectionListsSection } from "./academic/SectionListsSection";
 
 const SECTIONS = [
   { id: "structure", label: "Structure" },
   { id: "subjects", label: "Subjects" },
   { id: "classes", label: "Classes" },
   { id: "timetable", label: "Timetable" },
+  { id: "sectionLists", label: "Section lists" },
   { id: "calendar", label: "Calendar" },
   { id: "settings", label: "Settings" },
 ] as const;
@@ -151,6 +153,8 @@ export const AcademicSetupTab: React.FC<{ notify: (banner: Banner) => void }> = 
                 return <ClassesSection {...props} />;
               case "timetable":
                 return <TimetableSection {...props} />;
+              case "sectionLists":
+                return <SectionListsSection {...props} />;
               case "calendar":
                 return <CalendarSection {...props} />;
               case "settings":

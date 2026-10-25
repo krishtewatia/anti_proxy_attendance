@@ -2,13 +2,14 @@
 
 from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.dependencies.auth import require_admin, require_student
 from app.api.dependencies.rate_limiter import check_registration_rate_limit
 from app.database.mongodb import get_database
 from app.services import enrolment_service as enrolment
+from app.services import section_list_service as section_lists
 from app.services.photo_quality import MAX_PHOTOS
 
 router = APIRouter(tags=["enrolment"])
@@ -190,5 +191,105 @@ async def bulk_setup_decision(
             actor=current_user,
             reason=payload.reason,
         )
+    except enrolment.EnrolmentError as exc:
+        raise _http(exc) from exc
+
+
+# ------------------------------------------------------------------ section lists
+
+
+class MatchingApprovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_ids: list[str] = Field(min_length=1, max_length=500)
+
+
+def _list_http(exc: section_lists.SectionListError) -> HTTPException:
+    detail: object = str(exc)
+    if exc.details is not None:
+        detail = {"message": str(exc), **exc.details}
+    return HTTPException(status_code=exc.status_code, detail=detail)
+
+
+@router.get(
+    f"{ADMIN}/section-lists/template.csv", summary="An empty section list with the expected columns"
+)
+async def section_list_template(current_user: Annotated[dict, Depends(require_admin)]) -> Response:
+    return Response(
+        content=section_lists.TEMPLATE,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="section_list_template.csv"'},
+    )
+
+
+@router.post(
+    f"{ADMIN}/section-lists/{{cohort_id}}", summary="Check (and store) the official section list"
+)
+async def upload_section_list(
+    cohort_id: str,
+    current_user: Annotated[dict, Depends(require_admin)],
+    body: Annotated[str, Body(media_type="text/csv")],
+    dry_run: bool = True,
+    source_name: Annotated[str, Query(max_length=120)] = "section_list.csv",
+) -> dict:
+    try:
+        return await section_lists.upload_list(
+            get_database(),
+            cohort_id,
+            body,
+            source_name=source_name,
+            actor=current_user,
+            dry_run=dry_run,
+        )
+    except section_lists.SectionListError as exc:
+        raise _list_http(exc) from exc
+
+
+@router.get(f"{ADMIN}/section-lists/{{cohort_id}}", summary="Whether a section list is stored")
+async def section_list_summary(
+    cohort_id: str, current_user: Annotated[dict, Depends(require_admin)]
+) -> dict:
+    return await section_lists.list_summary(get_database(), cohort_id)
+
+
+@router.delete(f"{ADMIN}/section-lists/{{cohort_id}}", summary="Delete the section list")
+async def delete_section_list(
+    cohort_id: str, current_user: Annotated[dict, Depends(require_admin)]
+) -> dict:
+    try:
+        return await section_lists.delete_list(get_database(), cohort_id, current_user)
+    except section_lists.SectionListError as exc:
+        raise _list_http(exc) from exc
+
+
+@router.get(
+    f"{ADMIN}/section-lists/{{cohort_id}}/report", summary="The section list against setups"
+)
+async def section_list_report(
+    cohort_id: str,
+    current_user: Annotated[dict, Depends(require_admin)],
+    section: Annotated[Optional[str], Query(max_length=8)] = None,
+) -> dict:
+    try:
+        return await section_lists.report(get_database(), cohort_id, section)
+    except section_lists.SectionListError as exc:
+        raise _list_http(exc) from exc
+
+
+@router.post(
+    f"{ADMIN}/section-lists/{{cohort_id}}/approve-matching",
+    summary="Approve requests that match the section list (all or nothing)",
+)
+async def approve_matching_requests(
+    cohort_id: str,
+    payload: MatchingApprovalRequest,
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> dict:
+    try:
+        return await section_lists.approve_matching(
+            get_database(), cohort_id, payload.request_ids, actor=current_user
+        )
+    except section_lists.SectionListError as exc:
+        raise _list_http(exc) from exc
     except enrolment.EnrolmentError as exc:
         raise _http(exc) from exc
