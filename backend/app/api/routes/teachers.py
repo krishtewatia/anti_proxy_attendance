@@ -4,7 +4,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.dependencies.rate_limiter import check_registration_rate_limit
+from app.api.dependencies.rate_limiter import (
+    check_registration_identity,
+    check_registration_rate_limit,
+)
 from app.api.dependencies.auth import require_teacher
 from app.schemas.teacher import (
     TeacherDashboardResponse,
@@ -34,6 +37,7 @@ router = APIRouter(
 async def register_teacher_endpoint(
     payload: TeacherRegisterRequest,
 ) -> TeacherProfileResponse:
+    await check_registration_identity(payload.email)
     try:
         return await register_teacher_account(payload)
     except DuplicateTeacherError as exc:

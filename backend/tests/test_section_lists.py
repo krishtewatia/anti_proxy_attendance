@@ -51,7 +51,7 @@ async def fresh_db(monkeypatch):
     monkeypatch.setattr(approval_service, "_refresh_vision_gallery", fake_refresh)
     monkeypatch.setattr(student_biometric_service, "httpx", SimpleNamespace(AsyncClient=_Vision))
     # These tests register more students in a minute than the public sign-up limit allows.
-    monkeypatch.setattr(settings, "REGISTRATION_RATE_LIMIT_PER_MINUTE", 100)
+    monkeypatch.setattr(settings, "REGISTRATION_RATE_LIMIT_PER_HOUR", 100)
     yield refreshes
     mongodb._client = AsyncMongoMockClient()
 

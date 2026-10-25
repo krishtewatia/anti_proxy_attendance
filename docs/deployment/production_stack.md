@@ -44,7 +44,7 @@ create the first administrator when none exists; that account must change its
 password at first sign-in. Remove both once it exists.
 
 Optional: `DATABASE_NAME`, `LIVENESS_MODE`, `LIVENESS_THRESHOLD`,
-`REGISTRATION_RATE_LIMIT_PER_MINUTE`, and `ACME_CA` (set it to
+`REGISTRATION_RATE_LIMIT_PER_HOUR`, `REGISTRATION_ATTEMPTS_PER_IDENTITY_PER_HOUR`, `PHOTO_CHECKS_PER_HOUR`, and `ACME_CA` (set it to
 `https://acme-staging-v02.api.letsencrypt.org/directory` for trial runs, so
 rebuilding the host repeatedly does not use up the weekly limit of real
 certificates).
@@ -80,9 +80,16 @@ not registered is counted and locked in exactly the same way, and takes the
 same time to refuse, so neither the limit nor the timing shows which emails
 exist.
 
-The address limit is higher than the account limit because a whole campus
-can share one public address. Settings: `LOGIN_MAX_FAILURES_PER_ACCOUNT`,
-`LOGIN_MAX_FAILURES_PER_ADDRESS`, `LOGIN_FAILURE_WINDOW_SECONDS`.
+On campus Wi-Fi a whole class shares one public address, so the limits that
+bite are per account (5 failures in 15 minutes) and, for sign-up, per email
+and per roll number (5 attempts an hour). The per-address limits (1000 failed
+sign-ins in 15 minutes; 300 sign-ups an hour) are only ceilings against
+password spraying and floods: 60 students signing up, or mistyping their
+password a few times, from one address are never stopped. Photo checks in the
+student setup are limited per signed-in student (30 an hour). Settings:
+`LOGIN_MAX_FAILURES_PER_ACCOUNT`, `LOGIN_MAX_FAILURES_PER_ADDRESS`,
+`LOGIN_FAILURE_WINDOW_SECONDS`, `REGISTRATION_RATE_LIMIT_PER_HOUR`,
+`REGISTRATION_ATTEMPTS_PER_IDENTITY_PER_HOUR`, `PHOTO_CHECKS_PER_HOUR`.
 
 Someone who knows a user's email can lock that account for 15 minutes by
 failing five times on purpose. That is the price of a per-account limit; the

@@ -53,11 +53,18 @@ async def assign_teacher_classes(user_id: str, classes: tuple[str, ...] = (TEST_
 @pytest.fixture(autouse=True)
 def fresh_registration_rate_limit():
     """Each test starts with an empty registration budget (the limiter is process-wide)."""
-    from app.api.dependencies.rate_limiter import registration_rate_limiter
+    from app.api.dependencies.rate_limiter import (
+        photo_check_rate_limiter,
+        registration_identity_rate_limiter,
+        registration_rate_limiter,
+    )
 
-    registration_rate_limiter.reset()
+    limiters = (registration_rate_limiter, registration_identity_rate_limiter, photo_check_rate_limiter)
+    for limiter in limiters:
+        limiter.reset()
     yield
-    registration_rate_limiter.reset()
+    for limiter in limiters:
+        limiter.reset()
 
 
 @pytest.fixture(autouse=True)

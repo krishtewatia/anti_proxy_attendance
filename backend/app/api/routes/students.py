@@ -5,7 +5,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.api.dependencies.rate_limiter import check_registration_rate_limit
+from app.api.dependencies.rate_limiter import (
+    check_registration_identity,
+    check_registration_rate_limit,
+)
 from app.api.dependencies.auth import (
     get_current_user,
     require_student,
@@ -69,6 +72,7 @@ async def register_student_endpoint(
     payload: StudentRegisterRequest,
 ) -> StudentProfileResponse:
     """Register student account, assign to academic class (branch/section), and generate face embedding."""
+    await check_registration_identity(payload.email, payload.roll_number)
     try:
         profile = await register_student_account(payload, enrolled_by="self")
         return profile

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, st
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.dependencies.auth import require_admin, require_student
-from app.api.dependencies.rate_limiter import check_registration_rate_limit
+from app.api.dependencies.rate_limiter import photo_check_rate_limiter
 from app.database.mongodb import get_database
 from app.services import enrolment_service as enrolment
 from app.services import section_list_service as section_lists
@@ -78,14 +78,12 @@ async def my_setup(current_user: Annotated[dict, Depends(require_student)]) -> d
     return await enrolment.my_status(get_database(), current_user)
 
 
-@router.post(
-    f"{STUDENT}/photos/check",
-    summary="Check one face photo (nothing is stored)",
-    dependencies=[Depends(check_registration_rate_limit)],
-)
+@router.post(f"{STUDENT}/photos/check", summary="Check one face photo (nothing is stored)")
 async def check_photo(
     payload: PhotoCheckRequest, current_user: Annotated[dict, Depends(require_student)]
 ) -> dict:
+    # Per student, not per address: a whole class shares one campus address.
+    await photo_check_rate_limiter.check(f"photo:{current_user['user_id']}", "photo checks")
     try:
         return (await enrolment.check_one_photo(payload.photo_base64)).public()
     except enrolment.EnrolmentError as exc:
