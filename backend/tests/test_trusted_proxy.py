@@ -111,7 +111,7 @@ def test_a_trusted_network_and_a_bad_entry(monkeypatch):
 @pytest.mark.anyio
 async def test_an_outsider_cannot_dodge_the_rate_limit_with_a_spoofed_header(monkeypatch):
     monkeypatch.setattr(settings, "TRUSTED_PROXY_IPS", [PROXY])
-    monkeypatch.setattr(settings, "REGISTRATION_RATE_LIMIT_PER_MINUTE", 2)
+    monkeypatch.setattr(settings, "REGISTRATION_RATE_LIMIT_PER_HOUR", 2)
     async with _client_from(OUTSIDER) as client:
         # A different made-up address on every request: all counted as one caller.
         statuses = [await _register(client, n, f"198.51.100.{n}") for n in range(1, 5)]
@@ -121,7 +121,7 @@ async def test_an_outsider_cannot_dodge_the_rate_limit_with_a_spoofed_header(mon
 @pytest.mark.anyio
 async def test_clients_behind_the_proxy_each_get_their_own_budget(monkeypatch):
     monkeypatch.setattr(settings, "TRUSTED_PROXY_IPS", [PROXY])
-    monkeypatch.setattr(settings, "REGISTRATION_RATE_LIMIT_PER_MINUTE", 2)
+    monkeypatch.setattr(settings, "REGISTRATION_RATE_LIMIT_PER_HOUR", 2)
     async with _client_from(PROXY) as client:
         first_client = [await _register(client, n, "198.51.100.7") for n in range(1, 4)]
         second_client = [await _register(client, n, "198.51.100.8") for n in range(4, 6)]
@@ -133,7 +133,7 @@ async def test_clients_behind_the_proxy_each_get_their_own_budget(monkeypatch):
 @pytest.mark.anyio
 async def test_without_a_trusted_proxy_everything_from_one_peer_shares_a_budget(monkeypatch):
     monkeypatch.setattr(settings, "TRUSTED_PROXY_IPS", [])
-    monkeypatch.setattr(settings, "REGISTRATION_RATE_LIMIT_PER_MINUTE", 2)
+    monkeypatch.setattr(settings, "REGISTRATION_RATE_LIMIT_PER_HOUR", 2)
     async with _client_from(PROXY) as client:
         statuses = [await _register(client, n, f"198.51.100.{n}") for n in range(1, 4)]
     assert statuses == [201, 201, 429]

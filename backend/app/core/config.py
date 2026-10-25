@@ -59,16 +59,24 @@ class Settings:
     # Frame path protection (browser -> backend -> vision service)
     FRAME_MAX_BYTES: int = int(os.getenv("FRAME_MAX_BYTES", str(5 * 1024 * 1024)))
     FRAME_RATE_LIMIT_PER_MINUTE: int = int(os.getenv("FRAME_RATE_LIMIT_PER_MINUTE", "300"))
-    # Public registration: requests per client address per minute, across the
-    # three registration routes together.
-    REGISTRATION_RATE_LIMIT_PER_MINUTE: int = int(
-        os.getenv("REGISTRATION_RATE_LIMIT_PER_MINUTE", "5")
+    # Public registration, across the three registration routes together.
+    # A whole campus shares one public address, so the per-address budget is
+    # only a ceiling against floods; the tight limits are per email and per
+    # roll number (attempts, successful or not, in a sliding hour).
+    REGISTRATION_RATE_LIMIT_PER_HOUR: int = int(
+        os.getenv("REGISTRATION_RATE_LIMIT_PER_HOUR", "300")
     )
+    REGISTRATION_ATTEMPTS_PER_IDENTITY_PER_HOUR: int = int(
+        os.getenv("REGISTRATION_ATTEMPTS_PER_IDENTITY_PER_HOUR", "5")
+    )
+    # Face photo checks in the student setup, per signed-in student per hour.
+    PHOTO_CHECKS_PER_HOUR: int = int(os.getenv("PHOTO_CHECKS_PER_HOUR", "30"))
     # Failed sign-ins: after this many inside the window, further attempts
     # are refused (429) for that account or that client address. The address
-    # limit is higher because a whole campus can share one address.
+    # limit is only a ceiling against password spraying: a whole campus
+    # shares one address, so it is far higher than the per-account one.
     LOGIN_MAX_FAILURES_PER_ACCOUNT: int = int(os.getenv("LOGIN_MAX_FAILURES_PER_ACCOUNT", "5"))
-    LOGIN_MAX_FAILURES_PER_ADDRESS: int = int(os.getenv("LOGIN_MAX_FAILURES_PER_ADDRESS", "20"))
+    LOGIN_MAX_FAILURES_PER_ADDRESS: int = int(os.getenv("LOGIN_MAX_FAILURES_PER_ADDRESS", "1000"))
     LOGIN_FAILURE_WINDOW_SECONDS: int = int(os.getenv("LOGIN_FAILURE_WINDOW_SECONDS", "900"))
     TEACHER_FRAME_RATE_LIMIT_PER_MINUTE: int = int(
         os.getenv("TEACHER_FRAME_RATE_LIMIT_PER_MINUTE", "600")

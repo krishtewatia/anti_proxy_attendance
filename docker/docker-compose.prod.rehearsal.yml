@@ -34,7 +34,7 @@ services:
         condition: service_healthy
     environment:
       # The run registers a handful of accounts from one address in a few seconds.
-      REGISTRATION_RATE_LIMIT_PER_MINUTE: "30"
+      REGISTRATION_RATE_LIMIT_PER_HOUR: "300"
 
   frontend:
     build:

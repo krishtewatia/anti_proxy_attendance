@@ -40,7 +40,7 @@ services:
       BOOTSTRAP_ADMIN_EMAIL: ${SMOKE_BOOTSTRAP_ADMIN_EMAIL:?set by scripts/smoke_e2e.py}
       BOOTSTRAP_ADMIN_PASSWORD: ${SMOKE_BOOTSTRAP_ADMIN_PASSWORD:?set by scripts/smoke_e2e.py}
       # The run registers a handful of accounts from one address in a few seconds.
-      REGISTRATION_RATE_LIMIT_PER_MINUTE: "30"
+      REGISTRATION_RATE_LIMIT_PER_HOUR: "300"
       LIVENESS_MODE: ${SMOKE_LIVENESS_MODE:-observe}
       VISION_SERVICE_URL: http://vision-service:8088
     ports:

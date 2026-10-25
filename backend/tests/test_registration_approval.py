@@ -631,7 +631,7 @@ async def test_review_routes_need_an_admin(method, path):
 async def test_public_registration_is_rate_limited_across_the_three_routes(monkeypatch):
     from app.core.config import settings
 
-    monkeypatch.setattr(settings, "REGISTRATION_RATE_LIMIT_PER_MINUTE", 3)
+    monkeypatch.setattr(settings, "REGISTRATION_RATE_LIMIT_PER_HOUR", 3)
     async with _client() as client:
         first = await client.post(
             "/api/v1/auth/register", json={"email": "r1@approval.test", "password": PASSWORD, "role": "TEACHER"}

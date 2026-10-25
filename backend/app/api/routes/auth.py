@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.api.dependencies.rate_limiter import check_registration_rate_limit
+from app.api.dependencies.rate_limiter import (
+    check_registration_identity,
+    check_registration_rate_limit,
+)
 from app.core.client_ip import client_ip
 from app.database.mongodb import get_database
 from app.services.login_throttle import login_throttle
@@ -40,6 +43,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     dependencies=[Depends(check_registration_rate_limit)],
 )
 async def register(user: UserCreate) -> UserResponse:
+    await check_registration_identity(user.email)
     try:
         return await register_user(user)
     except DuplicateUserError as exc:
