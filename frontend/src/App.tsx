@@ -255,6 +255,7 @@ export function App() {
               onLogout={handleLogout}
               onNavigate={navigate}
               activeNavId={activeNavId}
+              onSelectNav={handleNavSelect}
               onPendingCountChange={setPendingApprovals}
             />
           </AppLayout>

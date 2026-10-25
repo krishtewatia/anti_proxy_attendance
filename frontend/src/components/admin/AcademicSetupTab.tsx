@@ -78,7 +78,7 @@ export const AcademicSetupTab: React.FC<{ notify: (banner: Banner) => void }> = 
       <div className="erp-page-header">
         <h1 className="erp-page-title">Academic Setup</h1>
         <p className="erp-page-subtitle">
-          Branch → year and semester → sections, year-wide groups, subjects, classes and timetable
+          Year → branch → sections and year-wide groups, subjects, classes and timetable
         </p>
       </div>
 

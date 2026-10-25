@@ -385,8 +385,11 @@ python infra/scripts/tf.py github-vars
 ```
 
 prints five `gh variable set ...` commands (role ARN, region, instance id,
-document name, site URL; none is a secret). Run them. To switch automatic
-deployment off: `gh variable delete AWS_DEPLOY_ROLE_ARN`.
+document name, site URL; none is a secret). Run them. If one is missing, the
+deploy job fails with "Not deployed: repository variable(s) ... not set"
+(it used to be skipped silently, which left the site on an old version). To
+switch automatic deployment off on purpose: `gh variable set DEPLOY_ENABLED
+--body false`.
 
 `python infra/scripts/tf.py deploy` deploys the current `origin/main` by
 hand. `tf.py start` already does this when the instance is behind.

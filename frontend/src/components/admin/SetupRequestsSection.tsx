@@ -3,8 +3,13 @@ import { api } from "../../services";
 import { AuthenticatedImage } from "../common/AuthenticatedImage";
 import { choiceLabel, selectBy, type AdminSetupRequest, type SetupRequestList } from "../../utils/enrolment.ts";
 import { listBadge, matchingRequestIds, type MatchReport } from "../../utils/sectionList.ts";
+import type { NavSelection, NavYear } from "../../utils/orgNavigator.ts";
+import { OrgNavigator } from "./OrgNavigator";
 
 interface SetupRequestsSectionProps {
+  years: NavYear[];
+  selection: NavSelection;
+  onSelect: (next: NavSelection) => void;
   // Called after a decision, with the message to show (the list may now be empty).
   onChanged: (message: string) => void;
 }
@@ -25,11 +30,10 @@ const placeholder = (label: string) => (
 
 // Students' setup requests: branch -> year -> section, filters by group,
 // a photo grid per request, and approve or reject one by one or in bulk.
-export const SetupRequestsSection: React.FC<SetupRequestsSectionProps> = ({ onChanged }) => {
+export const SetupRequestsSection: React.FC<SetupRequestsSectionProps> = ({ onChanged, years, selection, onSelect }) => {
   const [data, setData] = useState<SetupRequestList | null>(null);
-  const [section, setSection] = useState("");
-  const [setCode, setSetCode] = useState("");
-  const [group, setGroup] = useState("");
+  // Year > Branch > Section (and group) from the shared navigator.
+  const { section, setCode, group } = selection;
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -67,16 +71,24 @@ export const SetupRequestsSection: React.FC<SetupRequestsSectionProps> = ({ onCh
   );
   const visible = useMemo(() => {
     const ids = new Set(selectBy(requests, { section: section || undefined, setCode: setCode || undefined, group: group || undefined }));
-    return requests.filter((r) => ids.has(r.request_id) && (!matchingOnly || matching.has(r.request_id)));
-  }, [requests, section, setCode, group, matchingOnly, matching]);
+    return requests.filter(
+      (r) => (!selection.cohortId || r.cohort_id === selection.cohortId) && ids.has(r.request_id) && (!matchingOnly || matching.has(r.request_id)),
+    );
+  }, [requests, selection.cohortId, section, setCode, group, matchingOnly, matching]);
   const visibleMatching = visible.filter((r) => matching.has(r.request_id));
   const hasList = Object.keys(reports).length > 0;
 
-  const setCodes = useMemo(() => [...new Set(requests.flatMap((r) => Object.keys(r.choices)))].sort(), [requests]);
-  const groups = useMemo(
-    () => (setCode ? [...new Set(requests.map((r) => r.choices[setCode]?.group).filter(Boolean))].sort() : []),
-    [requests, setCode],
-  );
+  // Waiting requests per year and branch, and per section, for the navigator.
+  const counts = useMemo(() => {
+    const out: Record<string, { total: number; approved: number; waiting: number; sections: Record<string, { total: number; approved: number; waiting: number }> }> = {};
+    for (const r of requests) {
+      const entry = (out[r.cohort_id] ??= { total: 0, approved: 0, waiting: 0, sections: {} });
+      const level = (entry.sections[r.section] ??= { total: 0, approved: 0, waiting: 0 });
+      entry.total += 1;
+      level.total += 1;
+    }
+    return out;
+  }, [requests]);
 
   if (!data || requests.length === 0) {
     return banner ? (
@@ -197,35 +209,9 @@ export const SetupRequestsSection: React.FC<SetupRequestsSectionProps> = ({ onCh
         </div>
       )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
-        {data.counts.map((branch) =>
-          branch.years.map((year) => (
-            <div key={year.cohort_id} style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
-              <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{branch.branch} · Year {year.year}</span>
-              <button type="button" className={`erp-btn ${section === "" ? "erp-btn-primary" : "erp-btn-secondary"}`} style={{ padding: "0.3rem 0.7rem" }} onClick={() => setSection("")}>
-                All ({year.total})
-              </button>
-              {Object.entries(year.sections).map(([code, count]) => (
-                <button key={code} type="button" className={`erp-btn ${section === code ? "erp-btn-primary" : "erp-btn-secondary"}`} style={{ padding: "0.3rem 0.7rem" }} onClick={() => setSection(code)}>
-                  Section {code} ({count})
-                </button>
-              ))}
-            </div>
-          )),
-        )}
-      </div>
+      <OrgNavigator years={years} value={selection} onChange={onSelect} counts={counts} />
 
       <div className="erp-table-action-bar" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-        <select className="erp-select-input" style={{ width: "auto" }} aria-label="Group set" value={setCode} onChange={(e) => { setSetCode(e.target.value); setGroup(""); }}>
-          <option value="">Any group</option>
-          {setCodes.map((code) => <option key={code} value={code}>{code}</option>)}
-        </select>
-        {setCode && (
-          <select className="erp-select-input" style={{ width: "auto" }} aria-label="Group" value={group} onChange={(e) => setGroup(e.target.value)}>
-            <option value="">Every {setCode} group</option>
-            {groups.map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
-        )}
         <button type="button" className="erp-btn erp-btn-secondary" onClick={() => setSelected(allVisibleSelected ? [] : visible.map((r) => r.request_id))}>
           {allVisibleSelected ? "Clear selection" : `Select all shown (${visible.length})`}
         </button>

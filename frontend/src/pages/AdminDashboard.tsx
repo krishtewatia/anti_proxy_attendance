@@ -13,6 +13,10 @@ import { StudentsTab } from "../components/admin/StudentsTab";
 import { SubjectsTab } from "../components/admin/SubjectsTab";
 import { AcademicSetupTab } from "../components/admin/AcademicSetupTab";
 import { TeachersTab } from "../components/admin/TeachersTab";
+import { StudentRegistryTab } from "../components/admin/StudentRegistryTab";
+import { SectionOverview } from "../components/admin/SectionOverview";
+import { TeacherRegistryTab } from "../components/admin/TeacherRegistryTab";
+import { useOrgNavigator } from "../hooks/useOrgNavigator.ts";
 import { errorText, type AdminData, type Banner } from "../components/admin/adminShared.ts";
 
 interface Props {
@@ -21,6 +25,7 @@ interface Props {
   onNavigate?: (path: string) => void;
   activeNavId?: string;
   onPendingCountChange?: (total: number) => void;
+  onSelectNav?: (navId: string) => void;
 }
 
 const EMPTY_DATA: AdminData = { students: [], teachers: [], academic: null, sessions: [] };
@@ -31,6 +36,7 @@ export const AdminDashboard: React.FC<Props> = ({
   onNavigate,
   activeNavId: _activeNavId = "dashboard",
   onPendingCountChange,
+  onSelectNav,
 }) => {
   const [activeTab, setActiveTab] = useState<string>(_activeNavId || "dashboard");
 
@@ -88,6 +94,11 @@ export const AdminDashboard: React.FC<Props> = ({
   }, [loadAllData]);
 
   const tabProps = { ...data, notify: setBanner, reload: loadAllData };
+  // Year > Branch > Section. Without the pilot structure (a development
+  // database) the older flat screens are shown instead.
+  const org = useOrgNavigator();
+  const [legacyAcademic, setLegacyAcademic] = useState<"classes" | "subjects" | "pilot">("classes");
+  const navigatorProps = { years: org.years, selection: org.selection, onSelect: org.setSelection, notify: setBanner };
 
   return (
     <div className="erp-admin-container">
@@ -113,14 +124,54 @@ export const AdminDashboard: React.FC<Props> = ({
           classCodes={(data.academic?.classes || []).map((c) => c.class_code)}
           branches={data.academic?.branches || []}
           onCountChange={onPendingCountChange}
+          years={org.years}
+          selection={org.selection}
+          onSelect={org.setSelection}
         />
       )}
-      {activeTab === "dashboard" && <OverviewTab {...data} />}
-      {activeTab === "students" && <StudentsTab {...tabProps} />}
-      {activeTab === "teachers" && <TeachersTab {...tabProps} />}
-      {activeTab === "classes" && <ClassesTab {...tabProps} />}
-      {activeTab === "subjects" && <SubjectsTab {...tabProps} />}
-      {activeTab === "academic" && <AcademicSetupTab notify={setBanner} />}
+      {activeTab === "dashboard" && (
+        <>
+          {org.pilot && <SectionOverview years={org.years} />}
+          <OverviewTab {...data} />
+        </>
+      )}
+      {activeTab === "students" &&
+        (org.pilot ? (
+          <StudentRegistryTab {...navigatorProps} onOpenApprovals={() => (onSelectNav ? onSelectNav("approvals") : setActiveTab("approvals"))} />
+        ) : (
+          <StudentsTab {...tabProps} />
+        ))}
+      {activeTab === "teachers" && (org.pilot ? <TeacherRegistryTab {...navigatorProps} /> : <TeachersTab {...tabProps} />)}
+      {activeTab === "academic" &&
+        (org.pilot || !org.loaded ? (
+          <AcademicSetupTab notify={setBanner} />
+        ) : (
+          <div>
+            <div role="tablist" aria-label="Academic" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+              {(
+                [
+                  ["classes", "Classes"],
+                  ["subjects", "Subjects"],
+                  ["pilot", "Pilot structure"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={legacyAcademic === id}
+                  className={`erp-btn ${legacyAcademic === id ? "erp-btn-primary" : "erp-btn-secondary"}`}
+                  onClick={() => setLegacyAcademic(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {legacyAcademic === "classes" && <ClassesTab {...tabProps} />}
+            {legacyAcademic === "subjects" && <SubjectsTab {...tabProps} />}
+            {legacyAcademic === "pilot" && <AcademicSetupTab notify={setBanner} />}
+          </div>
+        ))}
       {activeTab === "sessions" && <SessionsTab {...tabProps} />}
       {activeTab === "reports" && <ReportsTab />}
       {activeTab === "admins" && <AdminsTab user={user} notify={setBanner} />}

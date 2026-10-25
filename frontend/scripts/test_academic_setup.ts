@@ -144,9 +144,9 @@ async function run() {
 
   console.log("[5/5] The menu entry and the screens are wired, in the existing style...");
   const layout = readFileSync("src/components/layout/AppLayout.tsx", "utf-8");
-  expect(layout.includes('id: "academic"') && layout.includes('label: "Academic Setup"'), "the admin menu must have Academic Setup");
+  expect(layout.includes('id: "academic"') && layout.includes('label: "Academic"'), "the admin menu must have Academic");
   const dashboard = readFileSync("src/pages/AdminDashboard.tsx", "utf-8");
-  expect(dashboard.includes('activeTab === "academic" && <AcademicSetupTab'), "the admin page must show the Academic Setup tab");
+  expect(dashboard.includes('activeTab === "academic"') && dashboard.includes("<AcademicSetupTab notify={setBanner} />"), "the admin page must show the Academic Setup tab");
   const tab = readFileSync("src/components/admin/AcademicSetupTab.tsx", "utf-8");
   for (const name of ["Structure", "Subjects", "Classes", "Timetable", "Calendar", "Settings"]) {
     expect(tab.includes(`label: "${name}"`), `Academic Setup must have a ${name} section`);

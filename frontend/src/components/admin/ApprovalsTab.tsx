@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../../services";
 import { AuthenticatedImage } from "../common/AuthenticatedImage";
 import { SetupRequestsSection } from "./SetupRequestsSection";
+import { EMPTY_SELECTION, type NavSelection, type NavYear } from "../../utils/orgNavigator.ts";
 import {
   daysUntilPurge,
   normalizeClassCodes,
@@ -18,6 +19,9 @@ interface ApprovalsTabProps {
   classCodes: string[];
   branches: Array<{ name: string; sections: string[] }>;
   onCountChange?: (total: number) => void;
+  years?: NavYear[];
+  selection?: NavSelection;
+  onSelect?: (next: NavSelection) => void;
 }
 
 const photoStyle: React.CSSProperties = {
@@ -45,7 +49,7 @@ const PhotoPlaceholder: React.FC<{ label: string }> = ({ label }) => (
   </div>
 );
 
-export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches, onCountChange }) => {
+export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches, onCountChange, years = [], selection = EMPTY_SELECTION, onSelect = () => {} }) => {
   const [pending, setPending] = useState<PendingApprovals | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -172,7 +176,7 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches
         </div>
       )}
 
-      {counts && counts.setup_requests > 0 && <SetupRequestsSection onChanged={(text) => { setBanner({ type: "success", text }); void load(); }} />}
+      {counts && counts.setup_requests > 0 && <SetupRequestsSection years={years} selection={selection} onSelect={onSelect} onChanged={(text) => { setBanner({ type: "success", text }); void load(); }} />}
 
       {nothing && (
         <div className="erp-card" style={{ padding: "2rem", textAlign: "center", color: "var(--erp-text-muted)" }}>

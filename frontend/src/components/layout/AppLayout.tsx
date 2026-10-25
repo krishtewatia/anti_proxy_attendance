@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import type { UserResponse, UserRole } from "../../types";
 import "./layout.css";
 import { pendingBadgeText } from "../../utils/approvals.ts";
@@ -128,20 +128,20 @@ function getNavigationItems(role: UserRole): NavItem[] {
     case "ADMIN":
       return [
         {
-          id: "approvals",
-          label: "Pending Approvals",
+          id: "dashboard",
+          label: "Overview",
           icon: (
             <svg className="nav-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
             </svg>
           ),
         },
         {
-          id: "dashboard",
-          label: "Dashboard",
+          id: "approvals",
+          label: "Approvals",
           icon: (
             <svg className="nav-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           ),
         },
@@ -164,29 +164,11 @@ function getNavigationItems(role: UserRole): NavItem[] {
           ),
         },
         {
-          id: "classes",
-          label: "Classes",
-          icon: (
-            <svg className="nav-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
-            </svg>
-          ),
-        },
-        {
           id: "academic",
-          label: "Academic Setup",
+          label: "Academic",
           icon: (
             <svg className="nav-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-            </svg>
-          ),
-        },
-        {
-          id: "subjects",
-          label: "Subjects",
-          icon: (
-            <svg className="nav-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
             </svg>
           ),
         },
@@ -200,29 +182,11 @@ function getNavigationItems(role: UserRole): NavItem[] {
           ),
         },
         {
-          id: "admins",
-          label: "Administrators",
-          icon: (
-            <svg className="nav-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-            </svg>
-          ),
-        },
-        {
           id: "reports",
           label: "Reports",
           icon: (
             <svg className="nav-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-            </svg>
-          ),
-        },
-        {
-          id: "profile",
-          label: "Profile",
-          icon: (
-            <svg className="nav-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.964 0a9 9 0 10-11.963 0m11.964 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           ),
         },
@@ -254,6 +218,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   children,
 }) => {
   const navItems = getNavigationItems(user.role);
+  const [accountOpen, setAccountOpen] = useState(false);
 
   const getRoleDisplayName = (r: UserRole) => {
     switch (r) {
@@ -308,15 +273,65 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             </div>
           </div>
 
-          {onChangePassword && (
-            <button
-              type="button"
-              className="erp-btn-logout erp-btn-account"
-              onClick={onChangePassword}
-              title="Change your password"
-            >
-              <span>Change Password</span>
-            </button>
+          {user.role === "ADMIN" ? (
+            // Administrators, profile and password live in one account menu,
+            // keeping the side menu to the everyday screens.
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                className="erp-btn-logout erp-btn-account erp-btn-menu"
+                aria-haspopup="menu"
+                aria-expanded={accountOpen}
+                onClick={() => setAccountOpen((open) => !open)}
+              >
+                <span>Account ▾</span>
+              </button>
+              {accountOpen && (
+                <div role="menu" className="erp-card erp-account-menu">
+                  {[
+                    { id: "profile", label: "My profile" },
+                    { id: "admins", label: "Administrators" },
+                  ].map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      role="menuitem"
+                      className="erp-btn erp-btn-secondary"
+                      onClick={() => {
+                        setAccountOpen(false);
+                        onSelectNav?.(entry.id);
+                      }}
+                    >
+                      {entry.label}
+                    </button>
+                  ))}
+                  {onChangePassword && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="erp-btn erp-btn-secondary"
+                      onClick={() => {
+                        setAccountOpen(false);
+                        onChangePassword();
+                      }}
+                    >
+                      Change password
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            onChangePassword && (
+              <button
+                type="button"
+                className="erp-btn-logout erp-btn-account"
+                onClick={onChangePassword}
+                title="Change your password"
+              >
+                <span>Change Password</span>
+              </button>
+            )
           )}
 
           <button

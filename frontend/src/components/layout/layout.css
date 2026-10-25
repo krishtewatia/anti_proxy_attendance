@@ -310,12 +310,12 @@
   }
   .erp-brand-subtitle,
   .erp-user-info,
-  .erp-btn-account span,
+  .erp-btn-account:not(.erp-btn-menu) span,
   .erp-sidebar-heading,
   .erp-sidebar-footer {
     display: none;
   }
-  .erp-btn-account::after {
+  .erp-btn-account:not(.erp-btn-menu)::after {
     content: "Password";
   }
   .erp-brand-title {

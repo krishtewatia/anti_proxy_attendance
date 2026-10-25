@@ -10,6 +10,7 @@ from app.api.dependencies.rate_limiter import photo_check_rate_limiter
 from app.database.mongodb import get_database
 from app.services import enrolment_service as enrolment
 from app.services import section_list_service as section_lists
+from app.services import registry_service as registry
 from app.services.photo_quality import MAX_PHOTOS
 
 router = APIRouter(tags=["enrolment"])
@@ -291,3 +292,39 @@ async def approve_matching_requests(
         raise _list_http(exc) from exc
     except enrolment.EnrolmentError as exc:
         raise _http(exc) from exc
+
+
+# ------------------------------------------------------------------ registries
+
+
+@router.get(
+    "/api/v1/admin/registry/students",
+    summary="Every student, approved or not, Year > Branch > Section",
+)
+async def student_registry(
+    current_user: Annotated[dict, Depends(require_admin)],
+    cohort_id: Annotated[Optional[str], Query(max_length=64)] = None,
+    section: Annotated[Optional[str], Query(max_length=8)] = None,
+    set_code: Annotated[Optional[str], Query(max_length=16)] = None,
+    option: Annotated[Optional[str], Query(max_length=16)] = None,
+    group: Annotated[Optional[str], Query(max_length=16)] = None,
+    student_status: Annotated[Optional[str], Query(alias="status", max_length=16)] = None,
+    q: Annotated[Optional[str], Query(max_length=64)] = None,
+) -> dict:
+    return await registry.students(
+        get_database(),
+        {
+            "cohort_id": cohort_id,
+            "section": section,
+            "set_code": set_code,
+            "option": option,
+            "group": group,
+            "status": student_status.upper() if student_status else None,
+            "q": q,
+        },
+    )
+
+
+@router.get("/api/v1/admin/registry/teachers", summary="Every teacher with the classes they take")
+async def teacher_registry(current_user: Annotated[dict, Depends(require_admin)]) -> dict:
+    return await registry.teachers(get_database())

@@ -163,3 +163,62 @@ Built as a responsive Single Page Application using React 18, TypeScript, Vite, 
 4. **Data Minimization Boundary**:
    - Raw facial photos and camera video streams are never transmitted to or stored in MongoDB.
    - Only 512-dimensional numerical float vectors (embeddings) and metadata timestamps are persisted.
+
+## NIET pilot (CSE-DS, 3rd year): how the college is organised
+
+The pilot adds an organisation model alongside the original one. Everything an
+administrator sees is organised **Year > Branch > Section**, with year-wide
+groups under the year and branch:
+
+```
+3rd year
+└── CSE-DS (cohort CSE-DS-Y3-2026-27-ODD, term 2026-27-ODD)
+    ├── Sections A, B, C, D            core subjects, from each section's timetable
+    ├── DE-II   PA: G1 G2 G3 | AJ: AJ  elective groups (theory and lab together)
+    ├── DE-III  PROD: G1 G2 G3 | DP: DP
+    └── DLDA    DL1 to DL4             workshop groups, independent of electives
+```
+
+A **class** is one subject taught to one audience (a section, or one group),
+for example "Section B · Computer Networks" or "DE-II PA G2 · Predictive
+Analytics". Timetable slots, teachers and attendance attach to classes.
+Untracked subjects (ESD/BVAC0551, MOOCs) have no classes and are never counted.
+
+### From sign-up to the attendance list
+
+1. A student signs up (name, digit roll number, college email, password) and
+   can sign in at once.
+2. Under My Setup they choose year and section (core subjects follow), their
+   DE-II, DE-III and DLDA groups by code, and add 2 to 3 checked face photos
+   after accepting the photo notice.
+3. An administrator approves the request: one by one, in bulk by section or
+   group, or all requests that match the college's official section list.
+4. Only then is the student on rosters and recognisable. A later change waits
+   for approval while the approved setup stays in force.
+
+Teachers sign up with their college email; the administrator assigns the
+classes they take (sections or groups, and subjects).
+
+### Panels
+
+| Role | Menu |
+| --- | --- |
+| Administrator | Overview, Approvals, Students, Teachers, Academic, Attendance Sessions, Reports; account menu: profile, administrators, password |
+| Teacher | Dashboard, sessions; timetable and "start from slot" next |
+| Student | Home (setup status, attendance), My Setup, attendance, profile |
+
+The Students, Teachers and Approvals screens share one navigator
+(Year > Branch > Section, then groups), built from the organisation model, so
+adding the 2nd year or another branch needs no code change.
+
+### Still to come in Phase 1
+
+- Teacher class assignment and the teacher timetable with "start from slot".
+- Attendance in two rounds (ENTRY and EXIT): a single period counts present
+  only with both rounds; a double period gives one lecture per round. The CR
+  takes faces one by one on the teacher's phone; the vision service is
+  unchanged.
+- Per-session CSV (ENTRY, EXIT, final), class lists per section or group,
+  registers for copying into the college ERP, and the student's subject-wise
+  view.
+- Always-on hosting for the pilot, monitoring, and a backup/restore drill.

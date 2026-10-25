@@ -133,15 +133,18 @@ jobs:
   # ============================================================================
   # 3. Deploy the new images, then check the site from outside
   #
-  # Runs only when the deployment exists (repository variable
-  # AWS_DEPLOY_ROLE_ARN is set). No AWS key is stored anywhere: the job proves
+  # Runs on every publish. If a deployment variable is missing the job fails
+  # with a plain message instead of being skipped (a skipped deploy once left
+  # the site on an old version while every run looked green). To publish
+  # images without deploying, set the repository variable DEPLOY_ENABLED to
+  # "false" on purpose. No AWS key is stored anywhere: the job proves
   # its identity to AWS with a short-lived GitHub token (OIDC), and the role it
   # receives can only run one fixed deploy command on the one instance.
   # ============================================================================
   deploy:
     name: Deploy And Check
     needs: publish
-    if: vars.AWS_DEPLOY_ROLE_ARN != ''
+    if: vars.DEPLOY_ENABLED != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -157,6 +160,25 @@ jobs:
       SITE_URL: ${{ vars.SITE_URL }}
       RELEASE: ${{ github.sha }}
     steps:
+      - name: Are the deployment variables set?
+        env:
+          ROLE: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          missing=""
+          [ -n "$ROLE" ] || missing="$missing AWS_DEPLOY_ROLE_ARN"
+          [ -n "$AWS_REGION" ] || missing="$missing AWS_REGION"
+          [ -n "$INSTANCE_ID" ] || missing="$missing AWS_INSTANCE_ID"
+          [ -n "$DEPLOY_DOCUMENT" ] || missing="$missing AWS_DEPLOY_DOCUMENT"
+          [ -n "$SITE_URL" ] || missing="$missing SITE_URL"
+          if [ -n "$missing" ]; then
+            message="Not deployed: repository variable(s)$missing not set. The images are published. Run 'python infra/scripts/tf.py github-vars' and set them (or set DEPLOY_ENABLED=false to publish without deploying)."
+            echo "::error title=Not deployed (missing variables)::$message"
+            echo "### Not deployed" >> "$GITHUB_STEP_SUMMARY"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "All deployment variables are set."
+
       - name: Checkout Source Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
