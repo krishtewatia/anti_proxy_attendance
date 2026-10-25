@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../services";
 import { AuthenticatedImage } from "../common/AuthenticatedImage";
 import { choiceLabel, selectBy, type AdminSetupRequest, type SetupRequestList } from "../../utils/enrolment.ts";
+import { listBadge, matchingRequestIds, type MatchReport } from "../../utils/sectionList.ts";
 
 interface SetupRequestsSectionProps {
   // Called after a decision, with the message to show (the list may now be empty).
@@ -32,10 +33,24 @@ export const SetupRequestsSection: React.FC<SetupRequestsSectionProps> = ({ onCh
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  // The official section list's comparison, per cohort (absent when no list is stored).
+  const [reports, setReports] = useState<Record<string, MatchReport>>({});
+  const [matchingOnly, setMatchingOnly] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setData(await api.getSetupRequests());
+      const list = await api.getSetupRequests();
+      setData(list);
+      const cohortIds = [...new Set(list.requests.map((r) => r.cohort_id))];
+      const loaded: Record<string, MatchReport> = {};
+      for (const cohortId of cohortIds) {
+        try {
+          loaded[cohortId] = await api.getSectionListReport(cohortId);
+        } catch {
+          // No section list for this cohort: no comparison.
+        }
+      }
+      setReports(loaded);
     } catch (err) {
       setBanner({ type: "error", text: err instanceof Error ? err.message : "Could not load setup requests." });
     }
@@ -46,10 +61,16 @@ export const SetupRequestsSection: React.FC<SetupRequestsSectionProps> = ({ onCh
   }, [load]);
 
   const requests = useMemo(() => data?.requests ?? [], [data]);
+  const matching = useMemo(
+    () => new Set(Object.values(reports).flatMap((report) => matchingRequestIds(report))),
+    [reports],
+  );
   const visible = useMemo(() => {
     const ids = new Set(selectBy(requests, { section: section || undefined, setCode: setCode || undefined, group: group || undefined }));
-    return requests.filter((r) => ids.has(r.request_id));
-  }, [requests, section, setCode, group]);
+    return requests.filter((r) => ids.has(r.request_id) && (!matchingOnly || matching.has(r.request_id)));
+  }, [requests, section, setCode, group, matchingOnly, matching]);
+  const visibleMatching = visible.filter((r) => matching.has(r.request_id));
+  const hasList = Object.keys(reports).length > 0;
 
   const setCodes = useMemo(() => [...new Set(requests.flatMap((r) => Object.keys(r.choices)))].sort(), [requests]);
   const groups = useMemo(
@@ -79,12 +100,44 @@ export const SetupRequestsSection: React.FC<SetupRequestsSectionProps> = ({ onCh
     try {
       const result = await api.decideSetupRequests(action, ids, reason);
       const message = `${result.done.length} setup request${result.done.length === 1 ? "" : "s"} ${action === "approve" ? "approved" : "rejected"}.`;
-      setBanner({ type: "success", text: message });
       setSelected([]);
       await load();
+      // The approvals page shows the message (this list may now be empty).
       onChanged(message);
     } catch (err) {
       setBanner({ type: "error", text: err instanceof Error ? err.message : "The decision could not be saved." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Approve every shown request that matches the official list. The server
+  // checks again and approves nothing if any of them stopped matching.
+  const approveMatching = async () => {
+    if (!matchingOnly) {
+      setMatchingOnly(true);
+      setBanner({ type: "success", text: "Showing only the requests that match the list. Check their photos, then press the button again." });
+      return;
+    }
+    const ids = visibleMatching.map((r) => r.request_id);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Approve ${ids.length} request${ids.length === 1 ? "" : "s"} that match the section list?`)) return;
+    setBusy(true);
+    setBanner(null);
+    try {
+      let done = 0;
+      for (const cohortId of [...new Set(visibleMatching.map((r) => r.cohort_id))]) {
+        const forCohort = visibleMatching.filter((r) => r.cohort_id === cohortId).map((r) => r.request_id);
+        done += (await api.approveMatching(cohortId, forCohort)).done.length;
+      }
+      const message = `${done} setup request${done === 1 ? "" : "s"} matching the section list approved.`;
+      setSelected([]);
+      setMatchingOnly(false);
+      await load();
+      onChanged(message);
+    } catch (err) {
+      setBanner({ type: "error", text: err instanceof Error ? err.message : "The approval could not be saved." });
+      await load();
     } finally {
       setBusy(false);
     }
@@ -101,6 +154,15 @@ export const SetupRequestsSection: React.FC<SetupRequestsSectionProps> = ({ onCh
             Section {request.section} · {Object.entries(request.choices).map(([code, choice]) => choiceLabel(code, choice)).join(" · ")}
           </div>
           {request.kind === "CHANGE" && <span className="status-badge warning">Change</span>}
+          {(() => {
+            const onList = listBadge(reports[request.cohort_id] ?? null, request.request_id);
+            return onList ? (
+              <div style={{ marginTop: "0.25rem" }}>
+                <span className={`status-badge ${onList.badge}`}>{onList.label}</span>
+                {onList.detail && <div style={{ fontSize: "0.75rem", color: "var(--erp-text-muted)" }}>{onList.detail}</div>}
+              </div>
+            ) : null;
+          })()}
         </div>
       </label>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
@@ -173,6 +235,17 @@ export const SetupRequestsSection: React.FC<SetupRequestsSectionProps> = ({ onCh
         <button type="button" className="erp-btn erp-btn-secondary" disabled={busy || selected.length === 0} onClick={() => void decide("reject", selected)}>
           Reject selected
         </button>
+        {hasList && (
+          <>
+            <label style={{ display: "flex", gap: "0.35rem", alignItems: "center", fontSize: "0.85rem" }}>
+              <input type="checkbox" checked={matchingOnly} onChange={(e) => setMatchingOnly(e.target.checked)} />
+              Matching the list only
+            </label>
+            <button type="button" className="erp-btn erp-btn-primary" disabled={busy || visibleMatching.length === 0} onClick={() => void approveMatching()}>
+              Approve all {visibleMatching.length} matching{section ? ` in Section ${section}` : ""}
+            </button>
+          </>
+        )}
       </div>
 
       <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))" }}>

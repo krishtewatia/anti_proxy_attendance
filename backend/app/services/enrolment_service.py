@@ -464,7 +464,9 @@ async def _pending_request(db: AsyncIOMotorDatabase, request_id: str) -> dict:
     return request
 
 
-async def _apply_approval(db: AsyncIOMotorDatabase, request: dict, actor: dict) -> bool:
+async def _apply_approval(
+    db: AsyncIOMotorDatabase, request: dict, actor: dict, via: Optional[str] = None
+) -> bool:
     """Make the request's data the student's; returns whether the face template changed."""
     now = _now()
     user_id, identity = request["user_id"], request["identity"]
@@ -546,6 +548,7 @@ async def _apply_approval(db: AsyncIOMotorDatabase, request: dict, actor: dict) 
             "section": request["section"],
             "classes": len(request["class_ids"]),
             "face_template_changed": template_changed,
+            **({"via": via} if via else {}),
         },
     )
     return template_changed
@@ -591,6 +594,7 @@ async def decide(
     action: str,
     actor: dict,
     reason: Optional[str] = None,
+    via: Optional[str] = None,
 ) -> dict:
     """Approve or reject one or more waiting requests. Each one is audited on its own."""
     if action not in ("approve", "reject"):
@@ -602,7 +606,7 @@ async def decide(
     template_changed = False
     for request in requests:
         if action == "approve":
-            template_changed = await _apply_approval(db, request, actor) or template_changed
+            template_changed = await _apply_approval(db, request, actor, via) or template_changed
         else:
             await _apply_rejection(db, request, actor, text)
     refreshed = await student_deletion._refresh_vision_gallery() if action == "approve" else False

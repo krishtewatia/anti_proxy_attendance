@@ -123,3 +123,32 @@ first photo becomes the profile photo). A change keeps the approved setup and
 template until it is approved. Rejecting needs a reason, keeps the account and
 deletes the waiting photos. The 14-day purge never removes a student whose
 request is waiting.
+
+## Official section list and bulk approval
+
+An administrator uploads the college's section list per cohort (Academic
+Setup → Section lists). Columns: `roll_no, name, email, section, de2, de3,
+dlda` (common header names such as "Roll No" or "DE-II" are accepted; a group
+is written `PA G2`, `PA-G2`, `PA/G2`, or alone when it belongs to one option,
+e.g. `AJ`, `DP`, `DL3`). The file is always checked first; a list with any
+error is not stored. One list per cohort (`section_lists`), replaced by a new
+upload, deletable; audit entries hold counts only.
+
+The match report is computed on demand, by roll number:
+
+| Category | Meaning |
+| --- | --- |
+| MATCH | waiting request; section, DE-II, DE-III, DLDA and email agree with the list |
+| DIFFERENT | waiting request; section or a group differs (both shown) |
+| EMAIL_DIFFERS | roll number on the list, but registered with another email |
+| NOT_ON_LIST | waiting request, roll number not on the list |
+| NO_REQUEST | registered, no setup sent |
+| NOT_REGISTERED | on the list, no account |
+| APPROVED_AGREES / APPROVED_DIFFERS | already approved; agrees or not |
+
+A name that differs only in spaces or case is not a difference; another
+spelling is a warning. Under Pending Approvals each request shows its
+category; "Approve all matching" first shows the matching requests' photos,
+then approves them through a route that re-checks every request and approves
+none if any no longer matches. Each approval is audited with `via:
+section_list`.
