@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
 
-from app.core.account_status import is_approved
+from app.core.account_status import can_sign_in
 from app.database.users import get_user_by_id
 from app.security.jwt import decode_access_token
 
@@ -49,7 +49,7 @@ async def get_authenticated_user(
 
     user = await get_user_by_id(user_id)
 
-    if user is None or not user.get("is_active", False) or not is_approved(user):
+    if user is None or not user.get("is_active", False) or not can_sign_in(user):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User account is unavailable",

@@ -33,6 +33,7 @@ import { clearStoredAuth, getStoredToken, setMustChangePassword } from "./auth.t
 import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
 import type { ReportsSummary } from "../utils/reports.ts";
 import type { ConsentStatus, RegistrationRules } from "../utils/registration.ts";
+import type { MySetup, PhotoCheckResult, SetupOptions, SetupRequest, SetupRequestList, requestBody } from "../utils/enrolment.ts";
 import type {
   CalendarEntry,
   ImportReport,
@@ -404,6 +405,46 @@ export const api = {
 
   getStudentDashboard(): Promise<StudentAttendanceDashboardResponse> {
     return request<StudentAttendanceDashboardResponse>("/api/v1/students/dashboard");
+  },
+
+  // --- Student self-setup (section, groups, photos) ---
+  getSetupOptions(): Promise<SetupOptions> {
+    return request<SetupOptions>("/api/v1/enrolment/options");
+  },
+
+  getMySetup(): Promise<MySetup> {
+    return request<MySetup>("/api/v1/enrolment/me");
+  },
+
+  checkSetupPhoto(photo_base64: string): Promise<PhotoCheckResult> {
+    return request<PhotoCheckResult>("/api/v1/enrolment/photos/check", {
+      method: "POST",
+      body: JSON.stringify({ photo_base64 }),
+    });
+  },
+
+  submitSetup(body: ReturnType<typeof requestBody>): Promise<SetupRequest> {
+    return request<SetupRequest>("/api/v1/enrolment/requests", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  withdrawSetup(): Promise<{ status: string; request_id: string }> {
+    return request<{ status: string; request_id: string }>("/api/v1/enrolment/requests/current", { method: "DELETE" });
+  },
+
+  // --- Admin: setup requests ---
+  getSetupRequests(params: Record<string, string> = {}): Promise<SetupRequestList> {
+    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
+    return request<SetupRequestList>(`/api/v1/admin/enrolment/requests${query ? `?${query}` : ""}`);
+  },
+
+  decideSetupRequests(action: "approve" | "reject", request_ids: string[], reason?: string): Promise<{ done: string[] }> {
+    return request<{ done: string[] }>("/api/v1/admin/enrolment/requests/bulk", {
+      method: "POST",
+      body: JSON.stringify({ action, request_ids, ...(reason ? { reason } : {}) }),
+    });
   },
 
   // The notice a student accepts before sending a photo of their face.

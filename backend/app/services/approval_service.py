@@ -91,6 +91,10 @@ async def list_pending(db: AsyncIOMotorDatabase) -> dict[str, Any]:
         }
         if user.get("role") == "STUDENT":
             profile = await db["student_profiles"].find_one({"user_id": user["user_id"]}) or {}
+            # A pilot student (signed up without a class) is approved through
+            # their setup request, listed separately; not from this list.
+            if profile and not profile.get("class_code"):
+                continue
             if profile:
                 students.append(
                     {
@@ -139,6 +143,7 @@ async def list_pending(db: AsyncIOMotorDatabase) -> dict[str, Any]:
             }
         )
 
+    setup_requests = await db["enrolment_requests"].count_documents({"status": "PENDING"})
     return {
         "students": students,
         "teachers": teachers,
@@ -149,7 +154,12 @@ async def list_pending(db: AsyncIOMotorDatabase) -> dict[str, Any]:
             "teachers": len(teachers),
             "accounts": len(accounts),
             "photo_changes": len(photo_changes),
-            "total": len(students) + len(teachers) + len(accounts) + len(photo_changes),
+            "setup_requests": setup_requests,
+            "total": len(students)
+            + len(teachers)
+            + len(accounts)
+            + len(photo_changes)
+            + setup_requests,
         },
     }
 
@@ -336,6 +346,12 @@ async def purge_stale_registrations(
         if created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
         if created > cutoff:
+            continue
+        # A student who sent their setup is waiting for an administrator,
+        # not abandoned: never removed here.
+        if await db["enrolment_requests"].find_one(
+            {"user_id": user["user_id"], "status": "PENDING"}, {"_id": 1}
+        ):
             continue
         try:
             await purge_registration(

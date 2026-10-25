@@ -5,7 +5,7 @@ import { emailPlaceholder, registrationProblem, type RegistrationRules } from ".
 import { ConsentNotice } from "./ConsentNotice";
 
 interface RegisterFormProps {
-  onSuccess: (registeredEmail: string) => void;
+  onSuccess: (registeredEmail: string, role: "STUDENT" | "TEACHER") => void;
   onSwitchToLogin: () => void;
 }
 
@@ -69,6 +69,9 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   }, []);
 
   const domain = rules?.college_email_domain ?? null;
+  // With the college's academic structure in place, a student chooses their
+  // section and adds photos in their setup after signing in.
+  const pilot = domain !== null;
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -103,7 +106,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
         password,
         confirmPassword,
         rollNumber,
-        hasPhoto: Boolean(photoBase64),
+        hasPhoto: !pilot && Boolean(photoBase64),
         consentAccepted,
       },
       domain,
@@ -117,7 +120,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
 
     try {
       if (role === "STUDENT") {
-        if (!classCode) {
+        if (!pilot && !classCode) {
           setErrorMessage("Please choose your class.");
           setLoading(false);
           return;
@@ -128,9 +131,13 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
           email: trimmedEmail,
           password,
           roll_number: rollNumber.trim(),
-          class_code: classCode,
-          photo_base64: photoBase64 || undefined,
-          consent_version: photoBase64 && rules ? rules.consent_notice.version : undefined,
+          ...(pilot
+            ? {}
+            : {
+                class_code: classCode,
+                photo_base64: photoBase64 || undefined,
+                consent_version: photoBase64 && rules ? rules.consent_notice.version : undefined,
+              }),
         });
       } else {
         await api.registerTeacher({
@@ -144,7 +151,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
         });
       }
 
-      onSuccess(trimmedEmail);
+      onSuccess(trimmedEmail, role);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("409") || message.toLowerCase().includes("already exists")) {
@@ -262,6 +269,12 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
             />
           </div>
 
+          {pilot ? (
+            <p style={{ margin: "0 0 0.85rem", fontSize: "0.8rem", color: "#64748b" }}>
+              After signing in you choose your section, electives and DLDA group and add your photos under My Setup.
+            </p>
+          ) : (
+            <>
           <div className="form-group" style={{ marginBottom: "0.85rem" }}>
             <label className="form-label" htmlFor="register-class">Class</label>
             <select
@@ -320,6 +333,8 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
             <div style={{ marginBottom: "1rem" }}>
               <ConsentNotice notice={rules.consent_notice} accepted={consentAccepted} onChange={setConsentAccepted} disabled={loading} />
             </div>
+          )}
+            </>
           )}
         </>
       )}

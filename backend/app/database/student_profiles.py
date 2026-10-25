@@ -91,7 +91,10 @@ async def upsert_student_profile(
     coll = db[STUDENT_PROFILES_COLLECTION]
     now = datetime.now(timezone.utc)
 
-    computed_class_code = class_code or normalize_class_code(branch, section)
+    # A pilot student signs up with no class yet: no code is made up for them.
+    computed_class_code = class_code or (
+        normalize_class_code(branch, section) if (branch or section) else ""
+    )
 
     doc = {
         "user_id": user_id,

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Annotated, Optional
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.services.registration_rules import ROLL_NUMBER_PATTERN
 
@@ -61,13 +61,15 @@ class StudentRegisterRequest(BaseModel):
     # student registering themselves includes a photo.
     consent_version: Optional[str] = Field(default=None, max_length=64)
 
-    @model_validator(mode="after")
-    def class_or_branch_and_section(self) -> "StudentRegisterRequest":
-        if not (self.class_code and self.class_code.strip()) and not (
+    def has_class(self) -> bool:
+        """A class code, or both a branch and a section.
+
+        Required only where the pilot's academic structure does not exist
+        yet; with it, students choose their section later in their setup.
+        """
+        return bool(self.class_code and self.class_code.strip()) or bool(
             self.branch.strip() and self.section.strip()
-        ):
-            raise ValueError("Choose a class, or give both a branch and a section")
-        return self
+        )
 
 
 class StudentProfileResponse(BaseModel):

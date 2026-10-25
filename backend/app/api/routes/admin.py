@@ -44,7 +44,7 @@ from app.services.student_deletion import (
     delete_student_completely,
 )
 from app.services.session_finalization import finalize_session_attendance
-from app.services.student_service import register_student_account
+from app.services.student_service import ClassRequiredError, register_student_account
 from app.services.teacher_service import register_teacher_account
 
 logger = logging.getLogger(__name__)
@@ -209,6 +209,10 @@ async def admin_create_student(
         created = await register_student_account(
             payload, enrolled_by=current_user["user_id"], approved=True
         )
+    except ClassRequiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
