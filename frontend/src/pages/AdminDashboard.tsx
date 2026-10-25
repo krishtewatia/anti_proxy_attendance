@@ -11,6 +11,7 @@ import { ReportsTab } from "../components/admin/ReportsTab";
 import { SessionsTab } from "../components/admin/SessionsTab";
 import { StudentsTab } from "../components/admin/StudentsTab";
 import { SubjectsTab } from "../components/admin/SubjectsTab";
+import { AcademicSetupTab } from "../components/admin/AcademicSetupTab";
 import { TeachersTab } from "../components/admin/TeachersTab";
 import { errorText, type AdminData, type Banner } from "../components/admin/adminShared.ts";
 
@@ -119,6 +120,7 @@ export const AdminDashboard: React.FC<Props> = ({
       {activeTab === "teachers" && <TeachersTab {...tabProps} />}
       {activeTab === "classes" && <ClassesTab {...tabProps} />}
       {activeTab === "subjects" && <SubjectsTab {...tabProps} />}
+      {activeTab === "academic" && <AcademicSetupTab notify={setBanner} />}
       {activeTab === "sessions" && <SessionsTab {...tabProps} />}
       {activeTab === "reports" && <ReportsTab />}
       {activeTab === "admins" && <AdminsTab user={user} notify={setBanner} />}

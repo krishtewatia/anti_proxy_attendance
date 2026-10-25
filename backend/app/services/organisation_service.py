@@ -551,3 +551,184 @@ def valid_group_choice(group_set: dict, option_code: str, group_code: str) -> bo
         option["option_code"] == option_code and group_code in option["groups"]
         for option in group_set["options"]
     )
+
+
+# ------------------------------------------------------------------------------
+# Administrator edits: term dates, subject codes, flags, calendar, settings
+# ------------------------------------------------------------------------------
+
+SETTINGS = "org_settings"
+CALENDAR = "calendar_exceptions"
+SETTINGS_ID = "pilot"
+DEFAULT_SETTINGS = {
+    "college_email_domain": "niet.co.in",
+    # Teachers may correct a session until they finalize it or this many hours
+    # after it, whichever is first; then only an administrator can unlock it.
+    "edit_window_hours": 48,
+    "shortage_threshold_percent": 75,
+}
+CODE_STATUSES = ("CONFIRMED", "INCOMPLETE", "MISMATCH")
+SUBJECT_FLAG_KINDS = {"INCOMPLETE_CODE", "CODE_MISMATCH"}
+
+
+async def update_term_dates(
+    db: AsyncIOMotorDatabase, term_id: str, start_date: date | None, end_date: date | None
+) -> dict:
+    if start_date and end_date and end_date < start_date:
+        raise OrganisationError("the term cannot end before it starts")
+    term = await db[TERMS].find_one({"term_id": term_id})
+    if term is None:
+        raise OrganisationError("term not found", status_code=404)
+    await db[TERMS].update_one(
+        {"term_id": term_id},
+        {
+            "$set": {
+                "start_date": start_date.isoformat() if start_date else None,
+                "end_date": end_date.isoformat() if end_date else None,
+                "updated_at": _now(),
+            }
+        },
+    )
+    return await db[TERMS].find_one({"term_id": term_id}, {"_id": 0})
+
+
+async def update_subject(db: AsyncIOMotorDatabase, key: str, changes: dict) -> dict:
+    """Correct a subject's ERP code, name or code status. The key never changes."""
+    subject = await db[SUBJECTS].find_one({"key": key})
+    if subject is None:
+        raise OrganisationError("subject not found", status_code=404)
+    update: dict = {}
+    for name in ("code", "name", "code_note"):
+        if changes.get(name) is not None:
+            value = str(changes[name]).strip()
+            if name != "code_note" and not value:
+                raise OrganisationError(f"{name} cannot be empty")
+            update[name] = value
+    if changes.get("code_status") is not None:
+        if changes["code_status"] not in CODE_STATUSES:
+            raise OrganisationError(f"code status must be one of {', '.join(CODE_STATUSES)}")
+        update["code_status"] = changes["code_status"]
+    if "code" in update and update["code"] != subject["code"]:
+        clash = await db[SUBJECTS].find_one({"code": update["code"], "key": {"$ne": key}})
+        if clash:
+            raise OrganisationError(
+                f"code {update['code']} is already used by {clash['name']}", status_code=409
+            )
+    if not update:
+        return {k: v for k, v in subject.items() if k != "_id"}
+    update["updated_at"] = _now()
+    await db[SUBJECTS].update_one({"key": key}, {"$set": update})
+    return await db[SUBJECTS].find_one({"key": key}, {"_id": 0})
+
+
+async def resolve_flag(
+    db: AsyncIOMotorDatabase, slot_id: str, kind: str, note: str, *, actor_user_id: str
+) -> dict:
+    """Mark one flag of a slot as checked, with a note. The slot itself does not change:
+    a correction to the timetable is made by importing a corrected sheet."""
+    slot = await db[SLOTS].find_one({"slot_id": slot_id})
+    if slot is None:
+        raise OrganisationError("timetable slot not found", status_code=404)
+    if not note.strip():
+        raise OrganisationError("say what was checked")
+    flags = slot.get("flags", [])
+    if not any(flag["kind"] == kind for flag in flags):
+        raise OrganisationError(f"this slot has no {kind} flag", status_code=404)
+    for flag in flags:
+        if flag["kind"] == kind:
+            flag.update(
+                {
+                    "resolved": True,
+                    "resolved_note": note.strip(),
+                    "resolved_by": actor_user_id,
+                    "resolved_at": _now(),
+                }
+            )
+    await db[SLOTS].update_one({"slot_id": slot_id}, {"$set": {"flags": flags}})
+    return await db[SLOTS].find_one({"slot_id": slot_id}, {"_id": 0})
+
+
+async def add_calendar_exception(
+    db: AsyncIOMotorDatabase,
+    *,
+    cohort_id: str,
+    on: date,
+    reason: str,
+    class_id: str | None,
+    actor_user_id: str,
+) -> dict:
+    """A day without teaching: for the whole cohort (a holiday) or one class (cancelled)."""
+    if await db[COHORTS].find_one({"cohort_id": cohort_id}) is None:
+        raise OrganisationError("cohort not found", status_code=404)
+    if (
+        class_id
+        and await db[CLASSES].find_one({"class_id": class_id, "cohort_id": cohort_id}) is None
+    ):
+        raise OrganisationError("class not found in this cohort", status_code=404)
+    if not reason.strip():
+        raise OrganisationError("give a reason")
+    duplicate = await db[CALENDAR].find_one(
+        {"cohort_id": cohort_id, "date": on.isoformat(), "class_id": class_id}
+    )
+    if duplicate:
+        raise OrganisationError("that day is already recorded", status_code=409)
+    doc = {
+        "exception_id": f"cal_{uuid4().hex}",
+        "cohort_id": cohort_id,
+        "date": on.isoformat(),
+        "class_id": class_id,
+        "reason": reason.strip(),
+        "created_by": actor_user_id,
+        "created_at": _now(),
+    }
+    await db[CALENDAR].insert_one(dict(doc))
+    return doc
+
+
+async def get_settings(db: AsyncIOMotorDatabase) -> dict:
+    stored = await db[SETTINGS].find_one({"settings_id": SETTINGS_ID}, {"_id": 0}) or {}
+    return {**DEFAULT_SETTINGS, **{k: v for k, v in stored.items() if k in DEFAULT_SETTINGS}}
+
+
+async def update_settings(db: AsyncIOMotorDatabase, changes: dict) -> dict:
+    update: dict = {}
+    if changes.get("college_email_domain") is not None:
+        domain = str(changes["college_email_domain"]).strip().lower().lstrip("@")
+        if not domain or "." not in domain or " " in domain or "@" in domain:
+            raise OrganisationError("give a domain such as niet.co.in")
+        update["college_email_domain"] = domain
+    if changes.get("edit_window_hours") is not None:
+        hours = int(changes["edit_window_hours"])
+        if not 1 <= hours <= 24 * 14:
+            raise OrganisationError("the edit window must be between 1 hour and 14 days")
+        update["edit_window_hours"] = hours
+    if changes.get("shortage_threshold_percent") is not None:
+        threshold = int(changes["shortage_threshold_percent"])
+        if not 1 <= threshold <= 100:
+            raise OrganisationError("the shortage threshold must be between 1 and 100")
+        update["shortage_threshold_percent"] = threshold
+    if update:
+        await db[SETTINGS].update_one(
+            {"settings_id": SETTINGS_ID},
+            {
+                "$set": {**update, "updated_at": _now()},
+                "$setOnInsert": {"settings_id": SETTINGS_ID},
+            },
+            upsert=True,
+        )
+    return await get_settings(db)
+
+
+def with_current_code_flags(slots: list[dict], subjects: dict[str, dict]) -> list[dict]:
+    """Code flags follow the catalog: once an administrator confirms a subject's
+    code, its slots stop showing the flag; other flags stay as imported."""
+    for slot in slots:
+        subject = subjects.get(slot["subject_key"], {})
+        kept = [f for f in slot.get("flags", []) if f["kind"] not in SUBJECT_FLAG_KINDS]
+        if subject.get("code_status") == "INCOMPLETE":
+            kept.append({"kind": "INCOMPLETE_CODE", "text": subject.get("code_note", "")})
+        elif subject.get("code_status") == "MISMATCH":
+            kept.append({"kind": "CODE_MISMATCH", "text": subject.get("code_note", "")})
+        slot["flags"] = kept
+        slot["open_flags"] = sum(1 for f in kept if not f.get("resolved"))
+    return slots

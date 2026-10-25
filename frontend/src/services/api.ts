@@ -32,6 +32,17 @@ import { validationMessage } from "../utils/apiErrors.ts";
 import { clearStoredAuth, getStoredToken, setMustChangePassword } from "./auth.ts";
 import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
 import type { ReportsSummary } from "../utils/reports.ts";
+import type {
+  CalendarEntry,
+  ImportReport,
+  OrgClass,
+  OrgSlot,
+  OrgStructure,
+  OrgSubject,
+  PilotSettings,
+  Term,
+  TimetableVersion,
+} from "../utils/organisation.ts";
 import type { AdminAccount, StudentEditFields, TeacherEditFields } from "../utils/accounts.ts";
 import type {
   AdminClassRow,
@@ -599,6 +610,98 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     });
+  },
+
+  // --- Academic setup (pilot organisation model) ---
+
+  seedPilotStructure(): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>("/api/v1/admin/org/seed-pilot", { method: "POST" });
+  },
+
+  getOrgStructure(): Promise<OrgStructure> {
+    return request<OrgStructure>("/api/v1/admin/org/structure");
+  },
+
+  setTermDates(termId: string, startDate: string | null, endDate: string | null): Promise<Term> {
+    return request<Term>(`/api/v1/admin/org/terms/${encodeURIComponent(termId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ start_date: startDate || null, end_date: endDate || null }),
+    });
+  },
+
+  getOrgSubjects(): Promise<OrgSubject[]> {
+    return request<OrgSubject[]>("/api/v1/admin/org/subjects");
+  },
+
+  updateOrgSubject(
+    key: string,
+    changes: Partial<Pick<OrgSubject, "code" | "name" | "code_status" | "code_note">>,
+  ): Promise<OrgSubject> {
+    return request<OrgSubject>(`/api/v1/admin/org/subjects/${encodeURIComponent(key)}`, {
+      method: "PATCH",
+      body: JSON.stringify(changes),
+    });
+  },
+
+  getOrgClasses(cohortId?: string): Promise<OrgClass[]> {
+    const query = cohortId ? `?cohort_id=${encodeURIComponent(cohortId)}` : "";
+    return request<OrgClass[]>(`/api/v1/admin/org/classes${query}`);
+  },
+
+  // The CSV goes as the request body. dryRun only checks it.
+  importTimetable(cohortId: string, csvText: string, sourceName: string, dryRun: boolean): Promise<ImportReport> {
+    const query = new URLSearchParams({ cohort_id: cohortId, dry_run: String(dryRun), source_name: sourceName });
+    return request<ImportReport>(`/api/v1/admin/org/timetable/import?${query.toString()}`, {
+      method: "POST",
+      headers: { "Content-Type": "text/csv" },
+      body: csvText,
+    });
+  },
+
+  getTimetableVersions(cohortId: string): Promise<TimetableVersion[]> {
+    return request<TimetableVersion[]>(`/api/v1/admin/org/timetable/versions?cohort_id=${encodeURIComponent(cohortId)}`);
+  },
+
+  getTimetableSlots(versionId: string, flaggedOnly = false): Promise<OrgSlot[]> {
+    return request<OrgSlot[]>(
+      `/api/v1/admin/org/timetable/versions/${encodeURIComponent(versionId)}/slots?flagged_only=${flaggedOnly}`,
+    );
+  },
+
+  activateTimetableVersion(versionId: string, effectiveFrom: string): Promise<TimetableVersion> {
+    return request<TimetableVersion>(`/api/v1/admin/org/timetable/versions/${encodeURIComponent(versionId)}/activate`, {
+      method: "POST",
+      body: JSON.stringify({ effective_from: effectiveFrom }),
+    });
+  },
+
+  resolveTimetableFlag(slotId: string, kind: string, note: string): Promise<OrgSlot> {
+    return request<OrgSlot>(
+      `/api/v1/admin/org/timetable/slots/${encodeURIComponent(slotId)}/flags/${encodeURIComponent(kind)}/resolve`,
+      { method: "POST", body: JSON.stringify({ note }) },
+    );
+  },
+
+  getCalendar(cohortId: string): Promise<CalendarEntry[]> {
+    return request<CalendarEntry[]>(`/api/v1/admin/org/calendar?cohort_id=${encodeURIComponent(cohortId)}`);
+  },
+
+  addCalendarEntry(entry: { cohort_id: string; date: string; reason: string; class_id?: string | null }): Promise<CalendarEntry> {
+    return request<CalendarEntry>("/api/v1/admin/org/calendar", { method: "POST", body: JSON.stringify(entry) });
+  },
+
+  deleteCalendarEntry(exceptionId: string): Promise<{ deleted: string }> {
+    return request<{ deleted: string }>(`/api/v1/admin/org/calendar/${encodeURIComponent(exceptionId)}`, {
+      method: "DELETE",
+    });
+  },
+
+  getPilotSettings(): Promise<PilotSettings> {
+    return request<PilotSettings>("/api/v1/admin/org/settings");
+  },
+
+  updatePilotSettings(changes: Partial<PilotSettings>): Promise<PilotSettings> {
+    return request<PilotSettings>("/api/v1/admin/org/settings", { method: "PUT", body: JSON.stringify(changes) });
   },
 
   // --- Classes and subjects ---

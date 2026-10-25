@@ -175,7 +175,14 @@ jobs:
       - name: Is the instance running?
         run: |
           state=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
-            --query 'Reservations[0].Instances[0].State.Name' --output text)
+            --query 'Reservations[0].Instances[0].State.Name' --output text || echo "None")
+          if [ "$state" = "None" ] || [ "$state" = "terminated" ] || [ -z "$state" ]; then
+            message="Not deployed: no instance $INSTANCE_ID exists (it was probably recreated). Nothing was changed. Run 'python infra/scripts/tf.py github-vars' and set AWS_INSTANCE_ID again."
+            echo "::error title=Not deployed (instance not found)::$message"
+            echo "### Not deployed" >> "$GITHUB_STEP_SUMMARY"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           if [ "$state" != "running" ]; then
             message="Not deployed: the instance is $state. Nothing was changed. The images for this commit are published; 'python infra/scripts/tf.py start' will start the instance on the newest release."
             echo "::error title=Not deployed (instance is $state)::$message"
