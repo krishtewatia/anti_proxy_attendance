@@ -3,6 +3,8 @@ import { api } from "../../services";
 import { AuthenticatedImage } from "../common/AuthenticatedImage";
 import { SetupRequestsSection } from "./SetupRequestsSection";
 import { EMPTY_SELECTION, type NavSelection, type NavYear } from "../../utils/orgNavigator.ts";
+import type { Cohort } from "../../utils/organisation.ts";
+import { SectionListsSection } from "./academic/SectionListsSection";
 import {
   daysUntilPurge,
   normalizeClassCodes,
@@ -22,6 +24,8 @@ interface ApprovalsTabProps {
   years?: NavYear[];
   selection?: NavSelection;
   onSelect?: (next: NavSelection) => void;
+  // The chosen year and branch, for the official section list.
+  cohort?: Cohort;
 }
 
 const photoStyle: React.CSSProperties = {
@@ -49,7 +53,8 @@ const PhotoPlaceholder: React.FC<{ label: string }> = ({ label }) => (
   </div>
 );
 
-export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches, onCountChange, years = [], selection = EMPTY_SELECTION, onSelect = () => {} }) => {
+export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches, onCountChange, years = [], selection = EMPTY_SELECTION, onSelect = () => {}, cohort }) => {
+  const [listOpen, setListOpen] = useState(false);
   const [pending, setPending] = useState<PendingApprovals | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -165,7 +170,7 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches
       <div className="erp-page-header">
         <h1 className="erp-page-title">Pending Approvals</h1>
         <p className="erp-page-subtitle">
-          New teachers cannot log in until approved here. Students can sign in at once, but are not on any attendance list, and their face is not recognized, until their setup is approved here.
+          Teachers and students can sign in at once. A teacher takes attendance only once approved here; a student is on attendance lists, and their face is recognized, only once their setup is approved here.
           Registrations left untouched for 14 days are removed automatically.
         </p>
       </div>
@@ -173,6 +178,34 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches
       {banner && (
         <div className={`alert-banner ${banner.type}`} role={banner.type === "error" ? "alert" : "status"} style={{ marginBottom: "1rem" }}>
           <span>{banner.text}</span>
+        </div>
+      )}
+
+      {cohort && (
+        <div className="erp-card" style={{ marginBottom: "1.5rem", padding: "1rem 1.25rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+            <div>
+              <h2 className="erp-section-title" style={{ margin: 0 }}>Official section list</h2>
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.85rem", color: "var(--erp-text-muted)" }}>
+                Upload the college's list for {cohort.name} to compare it with students' setups and approve the matching ones together.
+              </p>
+            </div>
+            <button type="button" className="erp-btn erp-btn-secondary" aria-expanded={listOpen} onClick={() => setListOpen((open) => !open)}>
+              {listOpen ? "Hide" : "Open"}
+            </button>
+          </div>
+          {listOpen && (
+            <div style={{ marginTop: "1rem" }}>
+              <SectionListsSection
+                cohort={cohort}
+                groupSets={[...cohort.elective_sets, ...cohort.workshop_sets]}
+                notify={setBanner}
+                refreshStructure={async () => {
+                  await load();
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
 

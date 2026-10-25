@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
 
-from app.core.account_status import can_sign_in
+from app.core.account_status import can_sign_in, is_pending_teacher
 from app.database.users import get_user_by_id
 from app.security.jwt import decode_access_token
 
@@ -83,6 +83,16 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=PASSWORD_CHANGE_REQUIRED_DETAIL,
+        )
+    # A teacher waiting for approval is signed in but may do nothing yet:
+    # no sessions, rosters, students, frames or records.
+    if is_pending_teacher(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "teacher_pending",
+                "message": "Waiting for an administrator to approve you and assign your classes.",
+            },
         )
     return user
 

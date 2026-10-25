@@ -70,8 +70,8 @@ async function run() {
   expect(rowsIn(report, "ALL", "B").length === 3 && rowsIn(report, "MATCH").length === 2, "filters");
 
   console.log("[3/3] The screens are wired...");
-  const tab = readFileSync("src/components/admin/AcademicSetupTab.tsx", "utf-8");
-  expect(tab.includes('label: "Section lists"') && tab.includes("<SectionListsSection"), "Section lists sub-tab");
+  const tab = readFileSync("src/components/admin/ApprovalsTab.tsx", "utf-8");
+  expect(tab.includes("Official section list") && tab.includes("<SectionListsSection"), "the section list is under Approvals, where it is used");
   const lists = readFileSync("src/components/admin/academic/SectionListsSection.tsx", "utf-8");
   expect(lists.includes("uploadSectionList(cohort.cohort_id, text, file.name, true)"), "a list is always checked first");
   const requests = readFileSync("src/components/admin/SetupRequestsSection.tsx", "utf-8");

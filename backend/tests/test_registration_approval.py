@@ -145,18 +145,23 @@ async def test_all_three_public_registration_routes_create_pending_accounts(stub
 
 @pytest.mark.anyio
 async def test_pending_account_cannot_log_in_and_is_told_why(stub_vision_embedding):
-    # A pending teacher cannot log in. (A pending student can: for a student,
-    # approval decides eligibility for attendance; see test_enrolment_requests.)
+    # A pending teacher signs in but can do nothing until approved, and is told
+    # why. (A pending student can use their own dashboard and setup: for a
+    # student, approval decides eligibility for attendance.)
     async with _client() as client:
         await client.post("/api/v1/teachers/register", json=_teacher_payload())
         correct = await _login(client, "t.apr1@approval.test")
         wrong = await _login(client, "t.apr1@approval.test", "not-the-password")
         unknown = await _login(client, "nobody@approval.test")
+        headers = {"Authorization": f"Bearer {correct.json()['access_token']}"}
+        dashboard = await client.get("/api/v1/teachers/dashboard", headers=headers)
+        sessions = await client.get("/api/v1/sessions", headers=headers)
 
-    assert correct.status_code == 403
-    assert correct.json()["detail"]["code"] == "account_pending"
-    assert "awaiting admin approval" in correct.json()["detail"]["message"]
-    assert "access_token" not in correct.text
+    assert correct.status_code == 200
+    for refused in (dashboard, sessions):
+        assert refused.status_code == 403
+        assert refused.json()["detail"]["code"] == "teacher_pending"
+        assert "assign your classes" in refused.json()["detail"]["message"]
     # The message appears only after the right password, so it cannot be used
     # to find out whether an email is registered.
     assert wrong.status_code == unknown.status_code == 401
@@ -170,7 +175,8 @@ async def test_a_token_for_a_pending_account_is_refused(stub_vision_embedding):
         user_id = registered.json()["user_id"]
         forged = {"Authorization": f"Bearer {create_access_token(user_id=user_id, role='TEACHER')}"}
         response = await client.get("/api/v1/sessions", headers=forged)
-    assert response.status_code == 401
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "teacher_pending"
 
 
 @pytest.mark.anyio
@@ -284,7 +290,7 @@ async def test_approving_a_teacher_requires_and_sets_assigned_classes():
         unknown = await client.post(
             f"{APPROVALS}/{user_id}/approve", headers=admin, json={"assigned_classes": ["NOPE-Z"]}
         )
-        assert (await _login(client, "t.apr1@approval.test")).status_code == 403
+        await _assert_pending_teacher_is_refused(client, "t.apr1@approval.test")
 
         approved = await client.post(
             f"{APPROVALS}/{user_id}/approve",
@@ -471,8 +477,8 @@ async def test_a_self_registered_teacher_cannot_reach_another_classes_students(s
         teacher = await client.post("/api/v1/teachers/register", json=_teacher_payload())
         teacher_id = teacher.json()["user_id"]
 
-        # Not approved: cannot log in at all
-        assert (await _login(client, "t.apr1@approval.test")).status_code == 403
+        # Not approved: signed in, but refused everywhere
+        await _assert_pending_teacher_is_refused(client, "t.apr1@approval.test")
 
         # Approved for CS-A only, although the form asked for DS-B as well
         await client.post(
@@ -521,6 +527,15 @@ async def test_roster_edit_still_accepts_own_class_students_and_plain_identities
 # ------------------------------------------------------------------------------
 # Photo changes are reviewed
 # ------------------------------------------------------------------------------
+
+
+async def _assert_pending_teacher_is_refused(client: AsyncClient, email: str) -> None:
+    login = await _login(client, email)
+    assert login.status_code == 200
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    for path in ("/api/v1/teachers/dashboard", "/api/v1/sessions"):
+        response = await client.get(path, headers=headers)
+        assert response.status_code == 403 and response.json()["detail"]["code"] == "teacher_pending"
 
 
 async def _approved_student(client: AsyncClient, admin: dict) -> dict[str, str]:
@@ -652,7 +667,7 @@ async def test_public_registration_is_rate_limited_across_the_three_routes(monke
 
     assert (first.status_code, second.status_code, third.status_code) == (201, 201, 201)
     assert [r.status_code for r in limited] == [429, 429, 429]
-    assert login.status_code == 403
+    assert login.status_code == 200
     assert await mongodb.get_database()["users"].count_documents({}) == 3
 
 

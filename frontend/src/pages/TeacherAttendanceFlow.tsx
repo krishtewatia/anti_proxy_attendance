@@ -11,6 +11,7 @@ import "./teacher-attendance-flow.css";
 import { paginate, sessionStatusBadgeClass, sessionStatusLabel } from "../utils/sessions.ts";
 import { formatDate, formatSessionTurnout } from "../utils/dates.ts";
 import { Pagination } from "../components/common/Pagination";
+import { TEACHER_PENDING_TEXT, isTeacherPendingError } from "../utils/registration.ts";
 
 const SESSIONS_PAGE_SIZE = 15;
 
@@ -177,6 +178,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   };
 
   // Fetch teacher dashboard data
+  const [waitingForApproval, setWaitingForApproval] = useState(false);
+
   const fetchTeacherData = async () => {
     try {
       const data = await api.getTeacherDashboard();
@@ -188,6 +191,11 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       setSelectedClass((current) => (classes.includes(current) ? current : classes[0] ?? ""));
       setSelectedSubject((current) => (subjects.includes(current) ? current : subjects[0] ?? ""));
     } catch (err: unknown) {
+      if (isTeacherPendingError(err)) {
+        // Signed in, but not approved yet: one card, nothing else to do.
+        setWaitingForApproval(true);
+        return;
+      }
       setErrorMessage(
         `Could not load your classes: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -1274,11 +1282,26 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       )}
 
       {/* Render view based on active sidebar tab */}
-      {activeNavId === "dashboard" && renderDashboardView()}
-      {activeNavId === "attendance" && renderAttendanceWorkflow()}
-      {activeNavId === "classes" && renderClassesView()}
-      {activeNavId === "sessions" && renderSessionsView()}
-      {activeNavId === "profile" && renderProfileView()}
+      {waitingForApproval ? (
+        <div className="erp-card" style={{ padding: "2rem", maxWidth: "640px" }}>
+          <h1 className="erp-page-title" style={{ marginTop: 0 }}>Welcome</h1>
+          <div className="alert-banner warning" role="status">
+            <span>{TEACHER_PENDING_TEXT} You can sign in meanwhile; nothing else is needed from you.</span>
+          </div>
+        </div>
+      ) : (
+        <>
+          {activeNavId === "dashboard" && (
+            <>
+              {renderDashboardView()}
+              {renderClassesView()}
+            </>
+          )}
+          {activeNavId === "attendance" && renderAttendanceWorkflow()}
+          {activeNavId === "sessions" && renderSessionsView()}
+          {activeNavId === "profile" && renderProfileView()}
+        </>
+      )}
     </div>
   );
 };

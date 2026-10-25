@@ -8,16 +8,13 @@ import { ClassesSection } from "./academic/ClassesSection";
 import { TimetableSection } from "./academic/TimetableSection";
 import { CalendarSection } from "./academic/CalendarSection";
 import { SettingsSection } from "./academic/SettingsSection";
-import { SectionListsSection } from "./academic/SectionListsSection";
 
+// Four clear sections; nothing changes until a button is pressed.
 const SECTIONS = [
   { id: "structure", label: "Structure" },
-  { id: "subjects", label: "Subjects" },
-  { id: "classes", label: "Classes" },
   { id: "timetable", label: "Timetable" },
-  { id: "sectionLists", label: "Section lists" },
-  { id: "calendar", label: "Calendar" },
-  { id: "settings", label: "Settings" },
+  { id: "subjects", label: "Subjects and classes" },
+  { id: "calendar", label: "Calendar and settings" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -148,17 +145,24 @@ export const AcademicSetupTab: React.FC<{ notify: (banner: Banner) => void }> = 
               case "structure":
                 return <StructureSection {...props} terms={structure?.terms ?? []} />;
               case "subjects":
-                return <SubjectsSection {...props} />;
-              case "classes":
-                return <ClassesSection {...props} />;
+                return (
+                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "1.5rem" }}>
+                    <SubjectsSection {...props} />
+                    <div>
+                      <h2 className="erp-section-title">Classes (a subject for one section or group)</h2>
+                      <ClassesSection {...props} />
+                    </div>
+                  </div>
+                );
               case "timetable":
                 return <TimetableSection {...props} />;
-              case "sectionLists":
-                return <SectionListsSection {...props} />;
               case "calendar":
-                return <CalendarSection {...props} />;
-              case "settings":
-                return <SettingsSection {...props} />;
+                return (
+                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "1.5rem" }}>
+                    <CalendarSection {...props} />
+                    <SettingsSection {...props} />
+                  </div>
+                );
             }
           })()}
         </>

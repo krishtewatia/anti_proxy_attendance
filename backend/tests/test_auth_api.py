@@ -154,14 +154,18 @@ async def test_login_api_success():
         assert reg_res.status_code == 201
         registered_id = reg_res.json()["user_id"]
 
-        # A new registration cannot log in until an administrator approves it
+        # A new teacher signs in but can do nothing until an administrator approves them
         pending_res = await client.post(
             "/api/v1/auth/login",
             json={"email": "login.user@example.com", "password": "correctSecretPassword123!"},
         )
-        assert pending_res.status_code == 403
-        assert pending_res.json()["detail"]["code"] == "account_pending"
-        assert "awaiting admin approval" in pending_res.json()["detail"]["message"]
+        assert pending_res.status_code == 200
+        refused = await client.get(
+            "/api/v1/teachers/dashboard",
+            headers={"Authorization": f"Bearer {pending_res.json()['access_token']}"},
+        )
+        assert refused.status_code == 403
+        assert refused.json()["detail"]["code"] == "teacher_pending"
         await approve_account(registered_id)
 
         # Login

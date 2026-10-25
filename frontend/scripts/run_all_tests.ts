@@ -27,6 +27,7 @@ const testSuites: TestSuite[] = [
   { name: "Student Setup: Section, Groups, Photos, Review", file: "test_enrolment.ts", category: "Unit" },
   { name: "Section List: Matching And Bulk Approval", file: "test_section_lists.ts", category: "Unit" },
   { name: "Organised Admin Panel: Year > Branch > Section", file: "test_org_navigator.ts", category: "Unit" },
+  { name: "Simple Panels: Academic, Student, Teacher", file: "test_simple_panels.ts", category: "Unit" },
   { name: "Create Session Form Validation & Lifecycle", file: "test_create_session.ts", category: "Unit" },
   { name: "Attendance Correction Validation & Audit History", file: "test_attendance_correction.ts", category: "Unit" },
   { name: "Audit Trail Contracts & Verification", file: "test_audit_logs.ts", category: "Contract" },

@@ -26,7 +26,14 @@ export interface ConsentStatus {
 export function registeredMessage(role: "STUDENT" | "TEACHER"): string {
   return role === "STUDENT"
     ? "Account created. Sign in now, then choose your section and add your photos under My Setup. You join the attendance list once an administrator approves your setup."
-    : "Registration received. An administrator must approve your account before you can sign in.";
+    : "Account created. Sign in now; you can take attendance once an administrator approves you and assigns your classes.";
+}
+
+// The server's answer to a teacher who is signed in but not approved yet.
+export const TEACHER_PENDING_TEXT = "Waiting for an administrator to approve you and assign your classes.";
+
+export function isTeacherPendingError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("Waiting for an administrator to approve you");
 }
 
 export const FORGOT_PASSWORD_HINT = "Forgot your password? Ask an administrator to reset it.";
