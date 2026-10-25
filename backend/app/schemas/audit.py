@@ -50,6 +50,9 @@ AuditAction = Literal[
     "SUBJECT_ARCHIVED",
     "SUBJECT_UNARCHIVED",
     "SUBJECT_DELETED",
+    "ORGANISATION_SEEDED",
+    "TIMETABLE_IMPORTED",
+    "TIMETABLE_ACTIVATED",
 ]
 
 AuditResourceType = Literal[

@@ -1,0 +1,93 @@
+scope,group,day,start,end,periods,subject_short,subject_name,room,note
+ALL,G1,MON,09:10,10:00,1,PROD,Product Analytics (DE-III),E203,cohort-wide elective group
+ALL,G2,MON,09:10,10:00,1,PROD,Product Analytics (DE-III),E204,cohort-wide elective group
+ALL,G3,MON,09:10,10:00,1,PROD,Product Analytics (DE-III),B317,cohort-wide elective group
+ALL,DP,MON,09:10,10:00,1,DP,Design Pattern (DE-III),B310,cohort-wide elective group
+ALL,G1,MON,11:40,12:30,1,PRED,Predictive Analytics (DE-II),E203,cohort-wide elective group
+ALL,G2,MON,11:40,12:30,1,PRED,Predictive Analytics (DE-II),E204,cohort-wide elective group
+ALL,G3,MON,11:40,12:30,1,PRED,Predictive Analytics (DE-II),B317,cohort-wide elective group
+ALL,AJ,MON,11:40,12:30,1,AJAVA,Advance Java Programming (DE-II),B310,cohort-wide elective group
+ALL,G1,THU,10:50,11:40,1,PRED,Predictive Analytics (DE-II),E203,cohort-wide elective group
+ALL,G2,THU,10:50,11:40,1,PRED,Predictive Analytics (DE-II),E204,cohort-wide elective group
+ALL,G3,THU,10:50,11:40,1,PRED,Predictive Analytics (DE-II),B317,cohort-wide elective group
+ALL,AJ,THU,10:50,11:40,1,AJAVA,Advance Java Programming (DE-II),B310,Section D sheet shows room E306 - confirm
+ALL,G1,THU,11:40,12:30,1,PROD,Product Analytics (DE-III),E203,cohort-wide elective group
+ALL,G2,THU,11:40,12:30,1,PROD,Product Analytics (DE-III),E204,cohort-wide elective group
+ALL,G3,THU,11:40,12:30,1,PROD,Product Analytics (DE-III),B317,cohort-wide elective group
+ALL,DP,THU,11:40,12:30,1,DP,Design Pattern (DE-III),B310,Section D sheet shows room E306 - confirm
+ALL,DL1,THU,13:30,15:20,2,DLDA,Deep Learning for Data Analytics,B317,DLDA workshop group (separate from elective groups)
+ALL,DL2,THU,13:30,15:20,2,DLDA,Deep Learning for Data Analytics,E203,DLDA workshop group (separate from elective groups)
+ALL,DL3,THU,13:30,15:20,2,DLDA,Deep Learning for Data Analytics,B310,DLDA workshop group (separate from elective groups)
+ALL,DL4,THU,13:30,15:20,2,DLDA,Deep Learning for Data Analytics,E204,DLDA workshop group (separate from elective groups)
+ALL,G1,FRI,09:10,10:50,2,PRED_LAB,Predictive Analytics Lab (DE-II),E203,cohort-wide elective group
+ALL,G2,FRI,09:10,10:50,2,PRED_LAB,Predictive Analytics Lab (DE-II),E204,cohort-wide elective group
+ALL,G3,FRI,09:10,10:50,2,PRED_LAB,Predictive Analytics Lab (DE-II),B317,cohort-wide elective group
+ALL,AJ,FRI,09:10,10:50,2,AJAVA_LAB,Advance Java Programming Lab (DE-II),B310,cohort-wide elective group
+ALL,G1,FRI,13:30,14:30,1,PRED,Predictive Analytics (DE-II),E303,cohort-wide elective group
+ALL,G2,FRI,13:30,14:30,1,PRED,Predictive Analytics (DE-II),E204,cohort-wide elective group
+ALL,G3,FRI,13:30,14:30,1,PRED,Predictive Analytics (DE-II),B317,cohort-wide elective group
+ALL,AJ,FRI,13:30,14:30,1,AJAVA,Advance Java Programming (DE-II),B104,cohort-wide elective group
+ALL,G1,FRI,14:30,15:20,1,PROD,Product Analytics (DE-III),E303,cohort-wide elective group
+ALL,G2,FRI,14:30,15:20,1,PROD,Product Analytics (DE-III),E204,cohort-wide elective group
+ALL,G3,FRI,14:30,15:20,1,PROD,Product Analytics (DE-III),B317,cohort-wide elective group
+ALL,DP,FRI,14:30,15:20,1,DP,Design Pattern (DE-III),B104,cohort-wide elective group
+A,,MON,10:00,10:50,1,CN,Computer Networks,B317,
+A,,MON,10:50,11:40,1,RM_LAB,Research Methodology Lab,B317,single-period lab
+A,,MON,13:30,14:30,1,RM_LAB,Research Methodology Lab,B317,single-period lab
+A,,MON,14:30,15:20,1,DT,Design Thinking-II,B317,
+A,,TUE,09:10,10:50,2,CN_LAB,Computer Networks Lab,B317,
+A,,TUE,10:50,12:30,2,DCC,DevOps and Cloud Computing,B317,sheet says Devops (double period)
+A,,TUE,13:30,14:30,1,DT,Design Thinking-II,B317,adjacent single cells - confirm single or double
+A,,TUE,14:30,15:20,1,DT,Design Thinking-II,B317,adjacent single cells - confirm single or double
+A,,WED,09:10,10:00,1,CN,Computer Networks,B317,
+A,,WED,10:00,10:50,1,INTERN,Internship-II,E301,
+A,,WED,10:50,12:30,2,CN_LAB,Computer Networks Lab,B317,
+A,,WED,13:30,15:20,2,DCC_LAB,DevOps and Cloud Computing Lab,B317,
+A,,THU,09:10,10:50,2,DCC,DevOps and Cloud Computing,B317,sheet says Devops (double period)
+A,,FRI,10:50,11:40,1,CN,Computer Networks,E317,adjacent single cells - confirm single or double
+A,,FRI,11:40,12:30,1,CN,Computer Networks,E317,adjacent single cells - confirm single or double
+B,,MON,10:00,10:50,1,CN,Computer Networks,315B1,
+B,,MON,10:50,11:40,1,DT,Design Thinking-II,E204,
+B,,MON,13:30,15:20,2,DCC,DevOps and Cloud Computing,B310,sheet says Devops (double period)
+B,,TUE,09:10,10:00,1,DCC_LAB,DevOps and Cloud Computing Lab,B310,single-period lab
+B,,TUE,10:00,10:50,1,INTERN,Internship-II,,
+B,,TUE,10:50,12:30,2,CN_LAB,Computer Networks Lab,B310,
+B,,TUE,13:30,15:20,2,DCC,DevOps and Cloud Computing,B310,sheet says Devops (double period)
+B,,WED,09:10,10:00,1,CN,Computer Networks,315B1,
+B,,WED,10:00,10:50,1,DCC_LAB,DevOps and Cloud Computing Lab,B310,single-period lab
+B,,WED,10:50,12:30,2,CN_LAB,Computer Networks Lab,B310,
+B,,WED,13:30,14:30,1,DT,Design Thinking-II,E204,adjacent single cells - confirm single or double
+B,,WED,14:30,15:20,1,DT,Design Thinking-II,E204,adjacent single cells - confirm single or double
+B,,THU,09:10,10:50,2,RM_LAB,Research Methodology Lab,B310,
+B,,FRI,10:50,11:40,1,CN,Computer Networks,B310,adjacent single cells - confirm single or double
+B,,FRI,11:40,12:30,1,CN,Computer Networks,B310,adjacent single cells - confirm single or double
+C,,MON,10:00,10:50,1,DT,Design Thinking-II,E203,
+C,,MON,10:50,11:40,1,CN,Computer Networks,E203,
+C,,MON,13:30,15:20,2,DCC,DevOps and Cloud Computing,E203,sheet says Devops (double period)
+C,,TUE,09:10,10:50,2,RM_LAB,Research Methodology Lab,E203,
+C,,TUE,10:50,11:40,1,INTERN,Internship-II,E304,
+C,,TUE,11:40,12:30,1,CN,Computer Networks,E203,
+C,,TUE,13:30,15:20,2,CN_LAB,Computer Networks Lab,E203,
+C,,WED,09:10,10:50,2,CN_LAB,Computer Networks Lab,E203,
+C,,WED,10:50,11:40,1,CN,Computer Networks,E203,
+C,,WED,11:40,12:30,1,DCC,DevOps and Cloud Computing,E304,
+C,,WED,13:30,14:30,1,DT,Design Thinking-II,E203,adjacent single cells - confirm single or double
+C,,WED,14:30,15:20,1,DT,Design Thinking-II,E203,adjacent single cells - confirm single or double
+C,,THU,09:10,10:00,1,CN,Computer Networks,E304,
+C,,THU,10:00,10:50,1,DCC,DevOps and Cloud Computing,E304,
+C,,FRI,10:50,12:30,2,DCC,DevOps and Cloud Computing,E203,sheet says Devops (double period)
+D,,MON,10:00,10:50,1,CN,Computer Networks,B310,
+D,,MON,10:50,11:40,1,DCC,DevOps and Cloud Computing,B310,
+D,,MON,13:30,15:20,2,CN_LAB,Computer Networks Lab,E204,
+D,,TUE,09:10,10:50,2,CN_LAB,Computer Networks Lab,E204,
+D,,TUE,10:50,11:40,1,DT,Design Thinking-II,E204,
+D,,TUE,11:40,12:30,1,INTERN,Internship-II,,
+D,,TUE,13:30,15:20,2,DCC,DevOps and Cloud Computing,E204,sheet says Devops (double period)
+D,,WED,09:10,10:50,2,DCC,DevOps and Cloud Computing,E204,sheet says Devops (double period)
+D,,WED,10:50,12:30,2,RM_LAB,Research Methodology Lab,E204,
+D,,WED,13:30,14:30,1,DCC,DevOps and Cloud Computing,B310,sheet lists the CN teacher for this Devops slot - confirm subject
+D,,WED,14:30,15:20,1,CN,Computer Networks,B310,
+D,,THU,09:10,10:00,1,DT,Design Thinking-II,E204,adjacent single cells - confirm single or double
+D,,THU,10:00,10:50,1,DT,Design Thinking-II,E204,adjacent single cells - confirm single or double
+D,,FRI,10:50,11:40,1,CN,Computer Networks,E204,adjacent single cells - confirm single or double
+D,,FRI,11:40,12:30,1,CN,Computer Networks,E204,adjacent single cells - confirm single or double
