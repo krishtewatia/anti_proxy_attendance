@@ -263,3 +263,16 @@ export function versionStatusLabel(version: TimetableVersion, today: string): st
   if (version.effective_from && version.effective_from > today) return `Active from ${version.effective_from}`;
   return "Active";
 }
+
+// The timetable's four steps, as the admin sees them: choose the CSV, review
+// the check, save it as a draft, activate it from a date.
+export type StepState = "done" | "current" | "todo";
+
+export function timetableSteps(opts: { checking: boolean; hasDraft: boolean; inForce: boolean }): { label: string; state: StepState }[] {
+  const labels = ["Choose the timetable CSV", "Review the check", "Save as draft", "Activate from a date"];
+  let current = 0;
+  if (opts.checking) current = 1;
+  else if (opts.hasDraft) current = 3;
+  else if (opts.inForce) current = 4;
+  return labels.map((label, i) => ({ label, state: i < current ? "done" : i === current ? "current" : "todo" }));
+}

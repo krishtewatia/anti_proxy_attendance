@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../../../services";
 import {
+  timetableSteps,
   DAY_NAMES,
   FLAG_LABELS,
   audienceFilterLabel,
@@ -138,8 +139,17 @@ export const TimetableSection: React.FC<AcademicSectionProps> = ({ cohort, group
   const flagged = slots.filter((s) => openFlags(s).length > 0);
   const grid = weekGrid(shown);
 
+  const steps = timetableSteps({ checking: Boolean(pending), hasDraft: versions.some((v) => v.status === "DRAFT"), inForce: Boolean(inForce) });
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "1.5rem" }}>
+      <ol aria-label="Timetable steps" style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", listStyle: "none", margin: 0, padding: 0 }}>
+        {steps.map((step, i) => (
+          <li key={step.label} className={`status-badge ${step.state === "done" ? "present" : step.state === "current" ? "warning" : "completed"}`} aria-current={step.state === "current" ? "step" : undefined}>
+            {i + 1}. {step.label}
+          </li>
+        ))}
+      </ol>
       <div className="erp-card" style={{ padding: "1.25rem 1.5rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
           <div>
@@ -149,7 +159,7 @@ export const TimetableSection: React.FC<AcademicSectionProps> = ({ cohort, group
             </p>
           </div>
           <label className="erp-btn erp-btn-primary" style={{ cursor: busy ? "wait" : "pointer" }}>
-            {busy && !pending ? "Checking..." : "Import a sheet (CSV)"}
+            {busy && !pending ? "Checking..." : "1. Choose the timetable CSV"}
             <input
               type="file"
               accept=".csv,text/csv"
@@ -208,7 +218,7 @@ export const TimetableSection: React.FC<AcademicSectionProps> = ({ cohort, group
                             setEffectiveFrom(today());
                           }}
                         >
-                          Activate
+                          4. Activate
                         </button>
                       )}
                     </td>
@@ -366,7 +376,7 @@ export const TimetableSection: React.FC<AcademicSectionProps> = ({ cohort, group
           title={`Check of ${pending.name}`}
           onClose={() => setPending(null)}
           onSubmit={pending.report.errors.length ? undefined : () => void storeDraft()}
-          submitLabel="STORE AS DRAFT"
+          submitLabel="3. SAVE AS DRAFT"
           busy={busy}
         >
           <p style={{ marginTop: 0 }}>

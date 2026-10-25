@@ -480,8 +480,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
       {/* Render view based on active sidebar tab */}
       {activeNavId === "dashboard" && renderDashboardView()}
-      {activeNavId === "attendance" && renderAttendanceView()}
-      {activeNavId === "history" && renderHistoryView()}
+      {activeNavId === "attendance" && (
+        <>
+          {renderAttendanceView()}
+          {renderHistoryView()}
+        </>
+      )}
       {activeNavId === "profile" && renderProfileView()}
       {activeNavId === "setup" && renderSetupView()}
     </div>

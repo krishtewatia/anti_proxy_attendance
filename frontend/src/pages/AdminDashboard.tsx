@@ -127,6 +127,7 @@ export const AdminDashboard: React.FC<Props> = ({
           years={org.years}
           selection={org.selection}
           onSelect={org.setSelection}
+          cohort={org.structure?.branches.flatMap((b) => b.cohorts).find((c) => c.cohort_id === org.selection.cohortId)}
         />
       )}
       {activeTab === "dashboard" && (

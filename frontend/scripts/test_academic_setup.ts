@@ -148,7 +148,8 @@ async function run() {
   const dashboard = readFileSync("src/pages/AdminDashboard.tsx", "utf-8");
   expect(dashboard.includes('activeTab === "academic"') && dashboard.includes("<AcademicSetupTab notify={setBanner} />"), "the admin page must show the Academic Setup tab");
   const tab = readFileSync("src/components/admin/AcademicSetupTab.tsx", "utf-8");
-  for (const name of ["Structure", "Subjects", "Classes", "Timetable", "Calendar", "Settings"]) {
+  // Four clear sections; subjects and classes together, calendar and settings together.
+  for (const name of ["Structure", "Timetable", "Subjects and classes", "Calendar and settings"]) {
     expect(tab.includes(`label: "${name}"`), `Academic Setup must have a ${name} section`);
   }
   for (const file of ["StructureSection", "SubjectsSection", "ClassesSection", "TimetableSection", "CalendarSection", "SettingsSection"]) {

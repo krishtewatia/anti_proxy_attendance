@@ -212,7 +212,9 @@ async def test_a_pending_account_with_the_right_password_is_not_a_failed_guess(c
     await _user("pending@limit.test", status="PENDING")
     async with _client() as client:
         statuses = [(await _login(client, "pending@limit.test", PASSWORD)).status_code for _ in range(8)]
-    assert statuses == [403] * 8
+    # A pending teacher signs in (and can do nothing else until approved);
+    # the right password is never counted as a failure.
+    assert statuses == [200] * 8
 
 
 def test_the_table_of_tracked_keys_cannot_grow_without_bound(monkeypatch):
