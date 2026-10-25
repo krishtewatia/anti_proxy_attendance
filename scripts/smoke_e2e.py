@@ -89,6 +89,7 @@ import sys
 import time
 import urllib.parse
 import uuid
+import zlib
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 COMPOSE_FILE = PROJECT_ROOT / "docker" / "docker-compose.smoke.yml"
@@ -620,7 +621,9 @@ def run_flow(
                     "email": f"{student_id.lower()}@smoke.test",
                     "password": secrets.token_urlsafe(18) + "aA1!",
                     "student_id": student_id,
-                    "roll_number": f"SMOKE-{label}",
+                    # Digits only, like a college roll number; the same student
+                    # gets the same roll number on every run.
+                    "roll_number": f"99{zlib.crc32(student_id.encode()):010d}",
                     "branch": branch,
                     "section": section,
                     "photo_base64": base64.b64encode(people[index][0]).decode(),

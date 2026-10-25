@@ -227,7 +227,7 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
 
           <div className="form-group" style={fieldGap}>
             <label className="form-label">Roll No</label>
-            <input type="text" required minLength={2} placeholder="e.g. 0241CSDS030" value={newStudent.roll_number} onChange={(e) => setNewStudent({ ...newStudent, roll_number: e.target.value })} className="auth-input" />
+            <input type="text" required minLength={2} placeholder="e.g. 2401331540142" inputMode="numeric" value={newStudent.roll_number} onChange={(e) => setNewStudent({ ...newStudent, roll_number: e.target.value })} className="auth-input" />
           </div>
 
           <div className="form-group" style={fieldGap}>

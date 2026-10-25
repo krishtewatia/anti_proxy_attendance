@@ -46,7 +46,9 @@ CONSENT_NOTICE = {
     ],
 }
 
-ROLL_NUMBER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9/_.\-]*$"
+# The college roll number: digits only, of varying length (e.g. 2401331540142).
+# It is not derived from the email address.
+ROLL_NUMBER_PATTERN = r"^[0-9]{8,20}$"
 _ROLL_RE = re.compile(ROLL_NUMBER_PATTERN)
 
 
@@ -66,7 +68,7 @@ def clean_roll_number(value: str) -> str:
     roll = (value or "").strip()
     if not roll or not _ROLL_RE.match(roll):
         raise RegistrationRuleError(
-            "Enter your roll number using letters, digits, '/', '.', '_' or '-'."
+            "Enter your roll number: digits only, 8 to 20 of them (e.g. 2401331540142)."
         )
     return roll
 

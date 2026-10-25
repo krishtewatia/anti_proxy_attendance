@@ -7,6 +7,7 @@ if the service would start with such a location, or if a student ID could be
 used to write outside the uploads directory.
 """
 
+import zlib
 from pathlib import Path
 import secrets
 
@@ -82,7 +83,7 @@ def _registration(student_id: str) -> dict:
         "email": f"{abs(hash(student_id))}@uploads.test",
         "password": "StudentSecurePass123!",
         "student_id": student_id,
-        "roll_number": f"2026-{student_id}",
+        "roll_number": f"2026{zlib.crc32(student_id.encode()):010d}",
         "branch": "Data Science",
         "section": "B",
         "photo_base64": PLACEHOLDER_PHOTO_B64,

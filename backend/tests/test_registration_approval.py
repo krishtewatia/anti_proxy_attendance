@@ -8,6 +8,7 @@ Rejecting removes everything the registration created.
 The vision service is stubbed and photos are placeholder bytes.
 """
 
+import zlib
 from datetime import datetime, timedelta, timezone
 import json
 
@@ -73,8 +74,8 @@ def _student_payload(student_id: str = "APR001", email: str = "apr001@approval.t
         "email": email,
         "password": PASSWORD,
         "student_id": student_id,
-        # Roll numbers are unique: one per email in these tests.
-        "roll_number": f"2026-{email.split('@')[0]}",
+        # Roll numbers are digits only and unique: one per email in these tests.
+        "roll_number": f"2026{zlib.crc32(email.encode()):010d}",
         "branch": "Data Science",
         "section": "B",
         "photo_base64": PHOTO_B64,

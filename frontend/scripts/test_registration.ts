@@ -20,10 +20,10 @@ function expect(condition: boolean, message: string): void {
 const student: RegistrationFields = {
   role: "STUDENT",
   name: "Pilot Student",
-  email: "0241csds030@niet.co.in",
+  email: "any.name@niet.co.in",
   password: "secret123",
   confirmPassword: "secret123",
-  rollNumber: "0241CSDS030",
+  rollNumber: "2401331540142",
   hasPhoto: false,
   consentAccepted: false,
 };
@@ -48,7 +48,11 @@ async function run() {
     "outside the domain",
   );
   expect(registrationProblem({ ...student, rollNumber: " " }, null) === "Please enter your roll number.", "roll number required");
-  expect(registrationProblem({ ...student, rollNumber: "../x" }, null)?.startsWith("Your roll number") === true, "unsafe roll number");
+  for (const bad of ["../x", "0241CSDS030", "2401-3315", "1234567", "1".repeat(21)]) {
+    expect(registrationProblem({ ...student, rollNumber: bad }, null)?.startsWith("Your roll number is digits only") === true, `roll number ${bad} must be refused`);
+  }
+  expect(registrationProblem({ ...student, rollNumber: " 2401331540142 " }, null) === null, "spaces around the roll number are fine");
+  expect(registrationProblem({ ...student, rollNumber: "12345678" }, null) === null, "8 digits is fine");
   expect(registrationProblem({ ...student, confirmPassword: "other" }, null) === "Passwords do not match.", "passwords match");
   const teacher: RegistrationFields = { ...student, role: "TEACHER", email: "a.teacher@niet.co.in", rollNumber: "" };
   expect(registrationProblem(teacher, "niet.co.in") === null, "a teacher needs no roll number and no teacher ID");

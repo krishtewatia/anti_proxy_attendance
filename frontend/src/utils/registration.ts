@@ -24,7 +24,8 @@ export interface ConsentStatus {
 export const FORGOT_PASSWORD_HINT = "Forgot your password? Ask an administrator to reset it.";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ROLL_REGEX = /^[A-Za-z0-9][A-Za-z0-9/_.-]*$/;
+// Digits only, of varying length (e.g. 2401331540142); not derived from the email.
+const ROLL_REGEX = /^[0-9]{8,20}$/;
 
 export function emailPlaceholder(domain: string | null, role: "STUDENT" | "TEACHER"): string {
   if (!domain) return "your.email@college.edu";
@@ -57,8 +58,8 @@ export function registrationProblem(fields: RegistrationFields, domain: string |
   if (fields.password !== fields.confirmPassword) return "Passwords do not match.";
   if (fields.role === "STUDENT") {
     const roll = fields.rollNumber.trim();
-    if (roll.length < 2) return "Please enter your roll number.";
-    if (!ROLL_REGEX.test(roll)) return "Your roll number can only use letters, digits, '/', '.', '_' or '-'.";
+    if (!roll) return "Please enter your roll number.";
+    if (!ROLL_REGEX.test(roll)) return "Your roll number is digits only, 8 to 20 of them (e.g. 2401331540142).";
     if (fields.hasPhoto && !fields.consentAccepted) return "Read the notice about your photo and tick that you accept it.";
   }
   return null;

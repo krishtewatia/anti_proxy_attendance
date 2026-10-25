@@ -45,7 +45,7 @@ class StudentRegisterRequest(BaseModel):
         min_length=2,
         max_length=32,
         pattern=ROLL_NUMBER_PATTERN,
-        description="College roll number e.g. 0241CSDS030 (unique)",
+        description="College roll number, digits only e.g. 2401331540142 (unique)",
     )
     # The class is given by its code (the registration form's list of active
     # classes), or the older way by branch and section.

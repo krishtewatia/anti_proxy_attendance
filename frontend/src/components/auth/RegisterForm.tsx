@@ -254,7 +254,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
               id="register-roll-no"
               type="text"
               className="auth-input"
-              placeholder="e.g. 0241CSDS030"
+              placeholder="e.g. 2401331540142" inputMode="numeric"
               value={rollNumber}
               onChange={(e) => setRollNumber(e.target.value)}
               required
