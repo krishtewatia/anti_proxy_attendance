@@ -100,8 +100,7 @@ async def teacher_may_edit(db: AsyncIOMotorDatabase, session: dict) -> bool:
     unlocked = _aware(session.get("unlocked_until"))
     if unlocked and unlocked > now:
         return True
-    if session.get("status") == "FINALIZED":
-        return False
+    # Ended or not, a teacher may correct until the window closes.
     until = await editable_until(db, session)
     return until is None or now <= until
 

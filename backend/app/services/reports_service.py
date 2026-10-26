@@ -25,7 +25,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.services import enrolment_service as enrolment
 from app.services import organisation_service as org
-from app.services.rounds_service import held_rounds
+from app.services.rounds_service import editable_until, held_rounds, teacher_may_edit
 from app.services.teaching_service import COLLEGE_TZ, DAY_CODES
 
 RECORD_FIELDS = {"identity": 1, "session_id": 1, "lectures": 1, "rounds": 1}
@@ -323,62 +323,69 @@ async def teacher_classes(db: AsyncIOMotorDatabase, user: dict) -> list[dict]:
     return out
 
 
+def _choices(student: dict) -> dict[str, str]:
+    """The student's DE-II / DE-III / DLDA group, e.g. "G1" or "AI G2"."""
+    choices = student["enrolment"].get("choices") or {}
+
+    def pick(code: str) -> str:
+        c = choices.get(code)
+        if not c:
+            return ""
+        return c["group"] if c["option"] in (c["group"], code) else f"{c['option']} {c['group']}"
+
+    return {"de2": pick("DE-II"), "de3": pick("DE-III"), "dlda": pick("DLDA")}
+
+
 async def class_list_csv(db: AsyncIOMotorDatabase, cls: dict) -> str:
     rows: list[list[Any]] = [["Roll No", "Name", "Email", "Section", "DE-II", "DE-III", "DLDA"]]
     for s in await _class_students(db, cls["class_id"]):
-        choices = s["enrolment"].get("choices") or {}
-
-        def pick(code: str) -> str:
-            c = choices.get(code)
-            if not c:
-                return ""
-            return (
-                c["group"] if c["option"] in (c["group"], code) else f"{c['option']} {c['group']}"
-            )
-
+        groups = _choices(s)
         rows.append(
             [
                 s.get("roll_number", ""),
                 s.get("name", ""),
                 s.get("email", ""),
                 s["enrolment"].get("section", ""),
-                pick("DE-II"),
-                pick("DE-III"),
-                pick("DLDA"),
+                groups["de2"],
+                groups["de3"],
+                groups["dlda"],
             ]
         )
     return _csv(rows)
 
 
-async def register_csv(
+def _identity(student: dict) -> str:
+    return student.get("identity") or student.get("student_id")
+
+
+async def _records(
+    db: AsyncIOMotorDatabase, session_ids: list[str], identities: list[str]
+) -> dict[tuple[str, str], dict]:
+    records: dict[tuple[str, str], dict] = {}
+    async for r in db["attendance_records"].find(
+        {"session_id": {"$in": session_ids}, "identity": {"$in": identities}}, RECORD_FIELDS
+    ):
+        records[(r["session_id"], r["identity"])] = r
+    return records
+
+
+async def _register(
     db: AsyncIOMotorDatabase, cls: dict, since: Optional[date], until: Optional[date]
-) -> str:
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """The class's held sessions, its students, and per student the lecture
+    cells ("P", "A" or "-" when not on that session's roster) with totals."""
     until = until or today()
     sessions = await _held_sessions(db, [cls["class_id"]], until, since)
     students = await _class_students(db, cls["class_id"])
-    identities = [s.get("identity") or s.get("student_id") for s in students]
-    records: dict[tuple[str, str], dict] = {}
-    async for r in db["attendance_records"].find(
-        {
-            "session_id": {"$in": [s["session_id"] for s in sessions]},
-            "identity": {"$in": identities},
-        },
-        RECORD_FIELDS,
-    ):
-        records[(r["session_id"], r["identity"])] = r
-    columns: list[tuple[str, int]] = []  # (session_id, lecture index)
-    header = ["Roll No", "Name"]
-    for session in sessions:
-        label = date.fromisoformat(session["date"]).strftime("%d %b")
-        periods = int(session.get("periods") or 1)
-        for i in range(periods):
-            columns.append((session["session_id"], i))
-            header.append(
-                f"{label} {_local_time(session.get('start_time'))} L{i + 1}".replace("  ", " ")
-            )
-    header += ["Present", "Held", "%"]
-    rows: list[list[Any]] = [header]
-    for student, ident in zip(students, identities):
+    identities = [_identity(s) for s in students]
+    records = await _records(db, [s["session_id"] for s in sessions], identities)
+    columns = [
+        (session["session_id"], i)
+        for session in sessions
+        for i in range(int(session.get("periods") or 1))
+    ]
+    rows = []
+    for ident in identities:
         cells, present, held = [], 0, 0
         for session_id, i in columns:
             lectures = (records.get((session_id, ident)) or {}).get("lectures")
@@ -388,18 +395,115 @@ async def register_csv(
             cells.append(lectures[i])
             held += 1
             present += lectures[i] == "P"
-        pct = percentage(present, held)
+        rows.append({"cells": cells, "present": present, "held": held})
+    return sessions, students, rows
+
+
+async def register_csv(
+    db: AsyncIOMotorDatabase, cls: dict, since: Optional[date], until: Optional[date]
+) -> str:
+    sessions, students, counts = await _register(db, cls, since, until)
+    header = ["Roll No", "Name"]
+    for session in sessions:
+        label = date.fromisoformat(session["date"]).strftime("%d %b")
+        for i in range(int(session.get("periods") or 1)):
+            header.append(
+                f"{label} {_local_time(session.get('start_time'))} L{i + 1}".replace("  ", " ")
+            )
+    header += ["Present", "Held", "%"]
+    rows: list[list[Any]] = [header]
+    for student, count in zip(students, counts):
+        pct = percentage(count["present"], count["held"])
         rows.append(
             [
                 student.get("roll_number", ""),
                 student.get("name", ""),
-                *cells,
-                present,
-                held,
+                *count["cells"],
+                count["present"],
+                count["held"],
                 "" if pct is None else pct,
             ]
         )
     return _csv(rows)
+
+
+async def class_overview(db: AsyncIOMotorDatabase, cls: dict) -> dict:
+    """The class's students with their attendance in it so far (the register's totals)."""
+    threshold = float((await org.get_settings(db))["shortage_threshold_percent"])
+    sessions, students, counts = await _register(db, cls, None, None)
+    rows = []
+    for student, count in zip(students, counts):
+        pct = percentage(count["present"], count["held"])
+        rows.append(
+            {
+                "identity": _identity(student),
+                "roll_number": student.get("roll_number", ""),
+                "name": student.get("name", ""),
+                "email": student.get("email", ""),
+                "section": student["enrolment"].get("section", ""),
+                **_choices(student),
+                "present": count["present"],
+                "absent": count["held"] - count["present"],
+                "held": count["held"],
+                "percentage": pct,
+                "shortage": pct is not None and pct < threshold,
+            }
+        )
+    counted = [r["percentage"] for r in rows if r["percentage"] is not None]
+    return {
+        "class_id": cls["class_id"],
+        "label": cls.get("label"),
+        "threshold": threshold,
+        "students": rows,
+        "summary": {
+            "students": len(rows),
+            "lectures_held": sum(int(s.get("periods") or 1) for s in sessions),
+            "average": round(sum(counted) / len(counted), 1) if counted else None,
+            "below_threshold": sum(1 for r in rows if r["shortage"]),
+        },
+    }
+
+
+async def session_sheet(db: AsyncIOMotorDatabase, cls: dict, session_id: str) -> dict:
+    """One session of the class: each student's ENTRY / EXIT marks and lectures."""
+    session = await db["sessions"].find_one(
+        {"session_id": session_id, "class_id": cls["class_id"]}, {"_id": 0}
+    )
+    if session is None:
+        raise ReportError("Session not found for this class.", 404)
+    roster = await db["session_rosters"].find_one({"session_id": session_id}) or {}
+    on_roster = set(roster.get("identities") or [])
+    students = await _class_students(db, cls["class_id"])
+    identities = [_identity(s) for s in students]
+    records = await _records(db, [session_id], identities)
+    rows = []
+    for student, ident in zip(students, identities):
+        record = records.get((session_id, ident)) or {}
+        marks = record.get("rounds") or {}
+        rows.append(
+            {
+                "identity": ident,
+                "roll_number": student.get("roll_number", ""),
+                "name": student.get("name", ""),
+                "on_roster": ident in on_roster,
+                "entry": (marks.get("ENTRY") or {}).get("status") or "ABSENT",
+                "exit": (marks.get("EXIT") or {}).get("status") or "ABSENT",
+                "by_hand": any((m or {}).get("source") == "MANUAL" for m in marks.values()),
+                "lectures": record.get("lectures") or [],
+            }
+        )
+    until = await editable_until(db, session)
+    return {
+        "session_id": session_id,
+        "date": session.get("date"),
+        "time": _local_time(session.get("start_time")),
+        "periods": int(session.get("periods") or 1),
+        "status": session.get("status"),
+        "rounds_held": held_rounds(session),
+        "teacher_may_edit": await teacher_may_edit(db, session),
+        "editable_until": until.isoformat() if until else None,
+        "students": rows,
+    }
 
 
 async def class_sessions(db: AsyncIOMotorDatabase, cls: dict) -> list[dict]:

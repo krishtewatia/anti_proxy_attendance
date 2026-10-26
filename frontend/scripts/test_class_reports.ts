@@ -2,7 +2,7 @@
 // that contain ":" and "/", safe file names, and the wiring of the new views.
 
 import { readFileSync } from "node:fs";
-import { classPath, fileName, percentLabel, registerPath } from "../src/utils/classReports.ts";
+import { classPath, fileName, filterStudents, percentLabel, registerPath, type ClassStudentRow } from "../src/utils/classReports.ts";
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
@@ -22,11 +22,25 @@ async function run(): Promise<void> {
   expect(registerPath("c1", "2025-11-01", "") === "/api/v1/teachers/classes/c1/register.csv?from=2025-11-01", "only the dates given are sent");
   expect(fileName("Computer Networks - Section B", "register") === "register_Computer_Networks_-_Section_B.csv", "file names are safe");
 
+
+  const row = (roll: string, name: string, percentage: number | null): ClassStudentRow => ({
+    identity: roll, roll_number: roll, name, email: "", section: "B", de2: "", de3: "", dlda: "",
+    present: 0, absent: 0, held: percentage === null ? 0 : 4, percentage, shortage: percentage !== null && percentage < 75,
+  });
+  const list = [row("2402", "Riya", 50), row("2401", "Aman", 90), row("2403", "Zoya", null)];
+  expect(filterStudents(list, "", false, "roll").map((r) => r.roll_number).join() === "2401,2402,2403", "sorted by roll number");
+  expect(filterStudents(list, "", false, "percentage").map((r) => r.roll_number).join() === "2402,2401,2403", "lowest % first, none held last");
+  expect(filterStudents(list, "riy", false, "roll").length === 1 && filterStudents(list, "2403", false, "roll").length === 1, "search by name or roll number");
+  expect(filterStudents(list, "", true, "roll").map((r) => r.roll_number).join() === "2402", "below the threshold only");
+  expect(list[0].roll_number === "2402", "filtering does not reorder the loaded list");
+  const students = readFileSync(new URL("../src/components/teacher/ClassStudents.tsx", import.meta.url), "utf-8");
+  expect(students.includes("api.markRound(") && !/method: "(DELETE|PATCH|PUT)"/.test(students), "corrections go only through the round marks");
   const api = readFileSync(new URL("../src/services/api.ts", import.meta.url), "utf-8");
   expect(api.includes("Authorization: `Bearer ${token}`") && api.includes("downloadFile"), "downloads carry the user's token");
   const flow = readFileSync(new URL("../src/pages/TeacherAttendanceFlow.tsx", import.meta.url), "utf-8");
   expect(!flow.includes(":8000"), "the session CSV no longer uses a hard-coded port");
   expect(flow.includes("<ClassDownloads />"), "teachers see Downloads in Sessions");
+  expect(readFileSync(new URL("../src/components/teacher/MyClasses.tsx", import.meta.url), "utf-8").includes("<ClassStudents />"), "teachers see their students in My Classes");
   const student = readFileSync(new URL("../src/pages/StudentDashboard.tsx", import.meta.url), "utf-8");
   expect(student.includes("<SubjectAttendance />"), "students see attendance by subject");
 }

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../../services";
+import { ClassStudents } from "./ClassStudents";
 import {
   choiceFromClassIds,
   choiceProblem,
@@ -194,6 +195,7 @@ export const MyClasses: React.FC = () => {
           </div>
         </div>
       )}
+      <ClassStudents />
     </div>
   );
 };

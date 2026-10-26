@@ -181,7 +181,8 @@ async def test_the_edit_window_and_the_admin_unlock():
             {"$set": {"status": "ACTIVE", "unlocked_until": None, "end_time": datetime.now(timezone.utc) - timedelta(hours=49)}},
         )
         late = await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/marks", headers=teacher, json=mark)
-    assert after_finalize.status_code == 403
+    # Ended, but within 48 h of the class end: the teacher may still correct it.
+    assert after_finalize.status_code == 200
     assert admin_no_reason.status_code == 400 and admin_mark.status_code == 200
     assert unlock.status_code == 200 and after_unlock.status_code == 200
     assert teacher_unlock.status_code == 403
