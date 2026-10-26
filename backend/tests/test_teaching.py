@@ -176,3 +176,44 @@ async def test_four_sections_run_sessions_at_the_same_time_with_their_own_roster
     assert again.json()["created"] is False and again.json()["session_id"] == started["A"]["session_id"]
     assert (other_class.status_code, wrong_day.status_code) == (403, 409)
     assert await db["sessions"].count_documents({}) == 4
+
+
+@pytest.mark.anyio
+async def test_a_finished_class_does_not_block_the_next_one():
+    """A teacher's earlier class, left running after its time, is ended when the next one starts."""
+    from datetime import datetime, timezone
+
+    admin = await _user("admin_t", "ADMIN")
+    teacher = await _user("t_two_classes", "TEACHER")
+    db = mongodb.get_database()
+    first_cls, second_cls = [
+        c["class_id"] async for c in db[org.CLASSES].find({"audience.section": "B", "subject_key": {"$in": ["CN", "DCC"]}}).sort("subject_key", 1)
+    ]
+    first_slot = await db[org.SLOTS].find_one({"class_id": first_cls})
+    second_slot = await db[org.SLOTS].find_one({"class_id": second_cls})
+    async with _client() as client:
+        await client.put("/api/v1/admin/org/teachers/t_two_classes/classes", headers=admin, json={"class_ids": [first_cls, second_cls]})
+        day1 = MONDAY + timedelta(days=DAYS.index(first_slot["day"]))
+        day2 = MONDAY + timedelta(days=DAYS.index(second_slot["day"]))
+        one = (await client.post("/api/v1/teachers/sessions/from-slot", headers=teacher, json={"slot_id": first_slot["slot_id"], "date": day1.isoformat()})).json()
+        await client.post(f"/api/v1/sessions/{one['session_id']}/start", headers=teacher)
+        two = (await client.post("/api/v1/teachers/sessions/from-slot", headers=teacher, json={"slot_id": second_slot["slot_id"], "date": day2.isoformat()})).json()
+        # The first class is still in progress: refused, and the message names it.
+        await db["sessions"].update_one({"session_id": one["session_id"]}, {"$set": {"end_time": datetime(2099, 1, 1, tzinfo=timezone.utc)}})
+        refused = await client.post(f"/api/v1/sessions/{two['session_id']}/start", headers=teacher)
+        # Its time is over: starting the next class ends it automatically.
+        await db["sessions"].update_one({"session_id": one["session_id"]}, {"$set": {"end_time": datetime(2020, 1, 1, tzinfo=timezone.utc)}})
+        started = await client.post(f"/api/v1/sessions/{two['session_id']}/start", headers=teacher)
+        today = (await client.get("/api/v1/teachers/timetable", headers=teacher, params={"date": day1.isoformat()})).json()
+    assert refused.status_code == 400 and "is still running" in refused.json()["detail"]
+    assert one["course_name"] in refused.json()["detail"]
+    assert started.status_code == 200
+    first = await db["sessions"].find_one({"session_id": one["session_id"]})
+    assert first["status"] == "FINALIZED" and first["ended_automatically"] is True
+    states = {s["class_id"]: s["state"] for s in today["today"]}
+    assert states.get(first_cls) == "DONE"
+    # A session created but never started is not shown as live.
+    await db["sessions"].update_one({"session_id": two["session_id"]}, {"$set": {"status": "SCHEDULED"}})
+    async with _client() as client:
+        later = (await client.get("/api/v1/teachers/timetable", headers=teacher, params={"date": day2.isoformat()})).json()
+    assert {s["class_id"]: s["state"] for s in later["today"]}.get(second_cls) in ("UPCOMING", "NOT_TAKEN")

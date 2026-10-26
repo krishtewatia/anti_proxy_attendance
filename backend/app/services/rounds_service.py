@@ -336,3 +336,20 @@ async def unlock(db: AsyncIOMotorDatabase, session: dict, actor: dict) -> dict:
         metadata={"hours": UNLOCK_HOURS},
     )
     return {"session_id": session["session_id"], "unlocked_until": until}
+
+
+async def end_if_class_is_over(db: AsyncIOMotorDatabase, session: dict) -> bool:
+    """End a running timetable session whose class time is over; True if it was ended.
+
+    Its marks stay as they are and the teacher can still correct them within
+    the edit window. Ad-hoc sessions are never ended this way.
+    """
+    end = _aware(session.get("end_time"))
+    if not has_rounds(session) or end is None or end > _now():
+        return False
+    await close_open_round(db, session["session_id"])
+    await db["sessions"].update_one(
+        {"session_id": session["session_id"], "status": "ACTIVE"},
+        {"$set": {"status": "FINALIZED", "ended_automatically": True}},
+    )
+    return True
