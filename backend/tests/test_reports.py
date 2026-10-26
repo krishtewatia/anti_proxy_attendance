@@ -144,3 +144,53 @@ async def test_a_group_class_id_with_slashes_works_in_the_url():
         assigned = await client.put(f"/api/v1/admin/org/classes/{quote(group_class['class_id'], safe='')}/teachers", headers=admin, json={"teacher_ids": ["t_group"]})
         listed = await client.get(f"/api/v1/teachers/classes/{quote(group_class['class_id'], safe='')}/students.csv", headers=admin)
     assert assigned.status_code == 200 and listed.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_the_teacher_sees_each_students_attendance_and_corrects_a_finalized_class():
+    admin, teacher, db, students, cn, slots = await _setup()
+    other_teacher = await _user("t_other2", "TEACHER")
+    async with _client() as client:
+        await client.put("/api/v1/admin/org/teachers/t_cn/classes", headers=admin, json={"class_ids": [cn["class_id"]]})
+        sid, _ = await _take(client, teacher, slots[0], {students[0]: ("PRESENT", "PRESENT"), students[1]: ("ABSENT", "ABSENT")})
+        await _take(client, teacher, slots[1], {students[0]: ("ABSENT", "ABSENT"), students[1]: ("PRESENT", "PRESENT")})
+        from urllib.parse import quote
+
+        base = f"/api/v1/teachers/classes/{quote(cn['class_id'], safe='')}"
+        before = (await client.get(f"{base}/students", headers=teacher)).json()
+        register = (await client.get(f"{base}/register.csv", headers=teacher)).text
+        sheet = (await client.get(f"{base}/sessions/{sid}", headers=teacher)).json()
+        # The class is finalized but within 48 h of its end: the teacher may still correct it.
+        for rnd in ("ENTRY", "EXIT"):
+            fixed = await client.post(f"/api/v1/sessions/{sid}/rounds/{rnd}/marks", headers=teacher, json={"identity": students[1], "status": "PRESENT"})
+            assert fixed.status_code == 200
+        after = (await client.get(f"{base}/students", headers=teacher)).json()
+        sheet_after = (await client.get(f"{base}/sessions/{sid}", headers=teacher)).json()
+        other_session = await client.get(f"{base}/sessions/not_this_class", headers=teacher)
+        refused = await client.get(f"{base}/students", headers=other_teacher)
+        uid0 = (await db["student_profiles"].find_one({"identity": students[0]}))["user_id"]
+        from app.security.jwt import create_access_token
+
+        as_student = await client.get(f"{base}/students", headers={"Authorization": f"Bearer {create_access_token(user_id=uid0, role='STUDENT')}"})
+        as_admin = await client.get(f"{base}/students", headers=admin)
+
+    p1, p2 = int(slots[0]["periods"]), int(slots[1]["periods"])
+    rows = {r["identity"]: r for r in before["students"]}
+    assert [r["roll_number"] for r in before["students"]] == sorted(r["roll_number"] for r in before["students"])
+    assert (rows[students[0]]["present"], rows[students[0]]["held"]) == (p1, p1 + p2)
+    assert (rows[students[1]]["present"], rows[students[1]]["absent"]) == (p2, p1)
+    # The same totals as the register.
+    for line in register.strip().splitlines()[1:]:
+        cells = line.split(",")
+        match = next(r for r in before["students"] if r["roll_number"] == cells[0])
+        assert [str(match["present"]), str(match["held"])] == cells[-3:-1]
+    assert before["summary"]["students"] == 2 and before["summary"]["lectures_held"] == p1 + p2
+    assert before["summary"]["below_threshold"] == sum(r["shortage"] for r in before["students"])
+    assert sheet["status"] == "FINALIZED" and sheet["teacher_may_edit"] is True
+    by_id = {r["identity"]: r for r in sheet["students"]}
+    assert by_id[students[1]]["entry"] == "ABSENT" and by_id[students[1]]["lectures"] == ["A"] * p1
+    assert {r["identity"]: r for r in after["students"]}[students[1]]["present"] == p1 + p2
+    fixed_row = {r["identity"]: r for r in sheet_after["students"]}[students[1]]
+    assert fixed_row["lectures"] == ["P"] * p1 and fixed_row["by_hand"] is True
+    assert other_session.status_code == 404
+    assert refused.status_code == 403 and as_student.status_code == 403 and as_admin.status_code == 200

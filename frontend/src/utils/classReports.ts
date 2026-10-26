@@ -37,6 +37,7 @@ export interface TeacherClassItem {
   label: string | null;
   subject: string;
   code: string;
+  audience?: { kind?: string };
 }
 
 export interface ClassSessionItem {
@@ -53,7 +54,7 @@ export function percentLabel(value: number | null): string {
 }
 
 // The URL path of a class's download (class ids contain ":" and "/").
-export function classPath(classId: string, file: "students.csv" | "register.csv" | "sessions"): string {
+export function classPath(classId: string, file: "students.csv" | "register.csv" | "sessions" | "students"): string {
   return `/api/v1/teachers/classes/${encodeURIComponent(classId)}/${file}`;
 }
 
@@ -66,4 +67,67 @@ export function registerPath(classId: string, from: string, to: string): string 
 // A safe file name from a class label, e.g. "Computer Networks - Section B".
 export function fileName(label: string, kind: string): string {
   return `${kind}_${label}`.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/_+/g, "_") + ".csv";
+}
+
+// A class's students with their attendance in it (the register's totals).
+export interface ClassStudentRow {
+  identity: string;
+  roll_number: string;
+  name: string;
+  email: string;
+  section: string;
+  de2: string;
+  de3: string;
+  dlda: string;
+  present: number;
+  absent: number;
+  held: number;
+  percentage: number | null;
+  shortage: boolean;
+}
+
+export interface ClassOverview {
+  class_id: string;
+  label: string | null;
+  threshold: number;
+  students: ClassStudentRow[];
+  summary: { students: number; lectures_held: number; average: number | null; below_threshold: number };
+}
+
+// One session of a class: each student's ENTRY / EXIT marks and lectures.
+export interface SessionSheetRow {
+  identity: string;
+  roll_number: string;
+  name: string;
+  on_roster: boolean;
+  entry: "PRESENT" | "ABSENT";
+  exit: "PRESENT" | "ABSENT";
+  by_hand: boolean;
+  lectures: string[];
+}
+
+export interface SessionSheet {
+  session_id: string;
+  date: string;
+  time: string;
+  periods: number;
+  status: string;
+  rounds_held: string[];
+  teacher_may_edit: boolean;
+  editable_until: string | null;
+  students: SessionSheetRow[];
+}
+
+export type StudentSort = "roll" | "percentage";
+
+// Search by name or roll number, optionally only those below the threshold;
+// sorted by roll number, or by percentage (lowest first, none held last).
+export function filterStudents(rows: ClassStudentRow[], query: string, belowOnly: boolean, sort: StudentSort): ClassStudentRow[] {
+  const q = query.trim().toLowerCase();
+  const kept = rows.filter(
+    (r) => (!belowOnly || r.shortage) && (!q || r.name.toLowerCase().includes(q) || r.roll_number.toLowerCase().includes(q)),
+  );
+  const byRoll = (a: ClassStudentRow, b: ClassStudentRow) => a.roll_number.localeCompare(b.roll_number);
+  if (sort === "roll") return kept.sort(byRoll);
+  return kept.sort((a, b) => (a.percentage ?? Infinity) - (b.percentage ?? Infinity) || byRoll(a, b));
 }

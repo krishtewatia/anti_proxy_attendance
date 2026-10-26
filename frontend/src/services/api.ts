@@ -35,7 +35,7 @@ import type { ReportsSummary } from "../utils/reports.ts";
 import type { ConsentStatus, RegistrationRules } from "../utils/registration.ts";
 import type { RegistryTeacher, StudentRegistry } from "../utils/registry.ts";
 import type { SlotSession, TeacherTimetable } from "../utils/teaching.ts";
-import { classPath, type ClassSessionItem, type LectureItem, type SubjectReport, type TeacherClassItem } from "../utils/classReports.ts";
+import { classPath, type ClassOverview, type ClassSessionItem, type SessionSheet, type LectureItem, type SubjectReport, type TeacherClassItem } from "../utils/classReports.ts";
 import type { MyTeacherSetup, TeacherSetupOptions, WaitingTeacherRequest } from "../utils/teacherSetup.ts";
 import type { ListSummary, ListUploadReport, MatchReport } from "../utils/sectionList.ts";
 import type { MySetup, PhotoCheckResult, SetupOptions, SetupRequest, SetupRequestList, requestBody } from "../utils/enrolment.ts";
@@ -463,6 +463,14 @@ export const api = {
 
   getMyTeachingClasses(): Promise<TeacherClassItem[]> {
     return request<TeacherClassItem[]>("/api/v1/teachers/classes");
+  },
+
+  getClassOverview(classId: string): Promise<ClassOverview> {
+    return request<ClassOverview>(classPath(classId, "students"));
+  },
+
+  getClassSessionSheet(classId: string, sessionId: string): Promise<SessionSheet> {
+    return request<SessionSheet>(`${classPath(classId, "sessions")}/${encodeURIComponent(sessionId)}`);
   },
 
   getClassSessions(classId: string): Promise<ClassSessionItem[]> {

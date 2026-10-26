@@ -381,3 +381,35 @@ async def class_session_list(
     except reports.ReportError as exc:
         raise _report_http(exc) from exc
     return await reports.class_sessions(db, cls)
+
+
+@router.get(
+    "/api/v1/teachers/classes/{class_id:path}/students",
+    summary="The class's students with their attendance in it",
+)
+async def class_students(
+    class_id: str, current_user: Annotated[dict, Depends(require_teacher_or_admin)]
+) -> dict:
+    db = get_database()
+    try:
+        cls = await reports.class_for(db, class_id, current_user)
+    except reports.ReportError as exc:
+        raise _report_http(exc) from exc
+    return await reports.class_overview(db, cls)
+
+
+@router.get(
+    "/api/v1/teachers/classes/{class_id:path}/sessions/{session_id}",
+    summary="One session of the class: each student's rounds and lectures",
+)
+async def class_session_sheet(
+    class_id: str,
+    session_id: str,
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
+) -> dict:
+    db = get_database()
+    try:
+        cls = await reports.class_for(db, class_id, current_user)
+        return await reports.session_sheet(db, cls, session_id)
+    except reports.ReportError as exc:
+        raise _report_http(exc) from exc
