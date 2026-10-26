@@ -35,6 +35,7 @@ import type { ReportsSummary } from "../utils/reports.ts";
 import type { ConsentStatus, RegistrationRules } from "../utils/registration.ts";
 import type { RegistryTeacher, StudentRegistry } from "../utils/registry.ts";
 import type { SlotSession, TeacherTimetable } from "../utils/teaching.ts";
+import type { MyTeacherSetup, TeacherSetupOptions, WaitingTeacherRequest } from "../utils/teacherSetup.ts";
 import type { ListSummary, ListUploadReport, MatchReport } from "../utils/sectionList.ts";
 import type { MySetup, PhotoCheckResult, SetupOptions, SetupRequest, SetupRequestList, requestBody } from "../utils/enrolment.ts";
 import type {
@@ -447,6 +448,45 @@ export const api = {
     return request<{ done: string[] }>("/api/v1/admin/enrolment/requests/bulk", {
       method: "POST",
       body: JSON.stringify({ action, request_ids, ...(reason ? { reason } : {}) }),
+    });
+  },
+
+  // --- Teachers choose their own classes ---
+  getTeacherSetupOptions(): Promise<TeacherSetupOptions> {
+    return request<TeacherSetupOptions>("/api/v1/teachers/setup/options");
+  },
+
+  getTeacherSetupOptionsAsAdmin(): Promise<TeacherSetupOptions> {
+    return request<TeacherSetupOptions>("/api/v1/admin/teacher-requests/options");
+  },
+
+  getMyTeacherSetup(): Promise<MyTeacherSetup> {
+    return request<MyTeacherSetup>("/api/v1/teachers/setup/me");
+  },
+
+  submitTeacherSetup(classIds: string[]): Promise<unknown> {
+    return request<unknown>("/api/v1/teachers/setup/requests", { method: "POST", body: JSON.stringify({ class_ids: classIds }) });
+  },
+
+  withdrawTeacherSetup(): Promise<unknown> {
+    return request<unknown>("/api/v1/teachers/setup/requests/current", { method: "DELETE" });
+  },
+
+  getTeacherRequests(): Promise<{ requests: WaitingTeacherRequest[] }> {
+    return request<{ requests: WaitingTeacherRequest[] }>("/api/v1/admin/teacher-requests");
+  },
+
+  approveTeacherRequest(requestId: string, classIds?: string[]): Promise<unknown> {
+    return request<unknown>(`/api/v1/admin/teacher-requests/${encodeURIComponent(requestId)}/approve`, {
+      method: "POST",
+      body: JSON.stringify(classIds ? { class_ids: classIds } : {}),
+    });
+  },
+
+  rejectTeacherRequest(requestId: string, reason: string): Promise<unknown> {
+    return request<unknown>(`/api/v1/admin/teacher-requests/${encodeURIComponent(requestId)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
     });
   },
 

@@ -144,6 +144,9 @@ async def list_pending(db: AsyncIOMotorDatabase) -> dict[str, Any]:
         )
 
     setup_requests = await db["enrolment_requests"].count_documents({"status": "PENDING"})
+    teacher_requests = await db["teacher_requests"].count_documents({"status": "PENDING"})
+    if await db["org_terms"].count_documents({}, limit=1):
+        teachers = []
     return {
         "students": students,
         "teachers": teachers,
@@ -155,11 +158,13 @@ async def list_pending(db: AsyncIOMotorDatabase) -> dict[str, Any]:
             "accounts": len(accounts),
             "photo_changes": len(photo_changes),
             "setup_requests": setup_requests,
+            "teacher_requests": teacher_requests,
             "total": len(students)
             + len(teachers)
             + len(accounts)
             + len(photo_changes)
-            + setup_requests,
+            + setup_requests
+            + teacher_requests,
         },
     }
 

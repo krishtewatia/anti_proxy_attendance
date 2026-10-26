@@ -127,6 +127,23 @@ def require_roles(allowed_roles: set[str]):
 
 
 require_teacher = require_role("TEACHER")
+
+
+async def require_teacher_signed_in(
+    user: Annotated[dict, Depends(get_authenticated_user)],
+) -> dict:
+    """A teacher, approved or still waiting: only for choosing their own classes."""
+    if user.get("must_change_password"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=PASSWORD_CHANGE_REQUIRED_DETAIL
+        )
+    if user.get("role") != "TEACHER":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
+    return user
+
+
 require_student = require_role("STUDENT")
 require_admin = require_role("ADMIN")
 require_teacher_or_admin = require_roles({"TEACHER", "ADMIN"})

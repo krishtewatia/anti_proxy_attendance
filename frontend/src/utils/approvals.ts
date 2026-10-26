@@ -51,6 +51,8 @@ export interface PendingCounts {
   photo_changes: number;
   // Student setup requests waiting (section, groups, photos).
   setup_requests: number;
+  // Teachers' own choice of subjects and sections, waiting.
+  teacher_requests: number;
   total: number;
 }
 
@@ -68,6 +70,7 @@ export const EMPTY_COUNTS: PendingCounts = {
   accounts: 0,
   photo_changes: 0,
   setup_requests: 0,
+  teacher_requests: 0,
   total: 0,
 };
 

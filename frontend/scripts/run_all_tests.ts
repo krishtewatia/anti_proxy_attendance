@@ -30,6 +30,7 @@ const testSuites: TestSuite[] = [
   { name: "Simple Panels: Academic, Student, Teacher", file: "test_simple_panels.ts", category: "Unit" },
   { name: "Teachers On The Timetable", file: "test_teaching.ts", category: "Unit" },
   { name: "Rounds: ENTRY And EXIT", file: "test_rounds.ts", category: "Unit" },
+  { name: "Teachers Choose Their Classes", file: "test_teacher_setup.ts", category: "Unit" },
   { name: "Create Session Form Validation & Lifecycle", file: "test_create_session.ts", category: "Unit" },
   { name: "Attendance Correction Validation & Audit History", file: "test_attendance_correction.ts", category: "Unit" },
   { name: "Audit Trail Contracts & Verification", file: "test_audit_logs.ts", category: "Contract" },

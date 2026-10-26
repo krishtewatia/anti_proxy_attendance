@@ -11,9 +11,11 @@ from app.api.dependencies.auth import (
     require_admin,
     require_teacher,
     require_teacher_or_admin,
+    require_teacher_signed_in,
 )
 from app.database.mongodb import get_database
 from app.services import rounds_service as rounds
+from app.services import teacher_setup_service as setup
 from app.services import teaching_service as teaching
 
 router = APIRouter(tags=["teaching"])
@@ -172,3 +174,108 @@ async def unlock_session(
 ) -> dict:
     session = await get_owned_session(session_id, current_user)
     return await rounds.unlock(get_database(), session, current_user)
+
+
+# ------------------------------------------------------------------ teachers choose their classes
+
+
+class ClassChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    class_ids: list[str] = Field(min_length=1, max_length=200)
+
+
+class AdjustedApproval(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    class_ids: Optional[list[str]] = Field(default=None, max_length=200)
+
+
+class Rejection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(default="", max_length=300)
+
+
+def _setup_http(exc: setup.TeacherSetupError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=str(exc))
+
+
+@router.get(
+    "/api/v1/teachers/setup/options",
+    summary="Subjects you can choose, with their sections and groups",
+)
+async def teacher_setup_options(
+    current_user: Annotated[dict, Depends(require_teacher_signed_in)],
+) -> dict:
+    return await setup.options(get_database())
+
+
+@router.get("/api/v1/teachers/setup/me", summary="Your approved classes and your latest request")
+async def teacher_setup_me(
+    current_user: Annotated[dict, Depends(require_teacher_signed_in)],
+) -> dict:
+    return await setup.my_status(get_database(), current_user)
+
+
+@router.post(
+    "/api/v1/teachers/setup/requests",
+    status_code=201,
+    summary="Send your subjects and sections for approval",
+)
+async def teacher_setup_submit(
+    payload: ClassChoice, current_user: Annotated[dict, Depends(require_teacher_signed_in)]
+) -> dict:
+    try:
+        return await setup.submit(get_database(), current_user, payload.class_ids)
+    except setup.TeacherSetupError as exc:
+        raise _setup_http(exc) from exc
+
+
+@router.delete("/api/v1/teachers/setup/requests/current", summary="Withdraw your waiting request")
+async def teacher_setup_withdraw(
+    current_user: Annotated[dict, Depends(require_teacher_signed_in)],
+) -> dict:
+    try:
+        return await setup.withdraw(get_database(), current_user)
+    except setup.TeacherSetupError as exc:
+        raise _setup_http(exc) from exc
+
+
+@router.get(
+    "/api/v1/admin/teacher-requests", summary="Teachers' class requests waiting for approval"
+)
+async def teacher_requests(current_user: Annotated[dict, Depends(require_admin)]) -> dict:
+    return {"requests": await setup.waiting(get_database())}
+
+
+@router.post(
+    "/api/v1/admin/teacher-requests/{request_id}/approve", summary="Approve (optionally adjusted)"
+)
+async def approve_teacher_request(
+    request_id: str,
+    payload: AdjustedApproval,
+    current_user: Annotated[dict, Depends(require_admin)],
+) -> dict:
+    try:
+        return await setup.approve(get_database(), request_id, current_user, payload.class_ids)
+    except setup.TeacherSetupError as exc:
+        raise _setup_http(exc) from exc
+
+
+@router.post("/api/v1/admin/teacher-requests/{request_id}/reject", summary="Reject with a reason")
+async def reject_teacher_request(
+    request_id: str, payload: Rejection, current_user: Annotated[dict, Depends(require_admin)]
+) -> dict:
+    try:
+        return await setup.reject(get_database(), request_id, current_user, payload.reason)
+    except setup.TeacherSetupError as exc:
+        raise _setup_http(exc) from exc
+
+
+@router.get(
+    "/api/v1/admin/teacher-requests/options",
+    summary="Subjects with their sections and groups (for adjusting)",
+)
+async def teacher_request_options(current_user: Annotated[dict, Depends(require_admin)]) -> dict:
+    return await setup.options(get_database())
