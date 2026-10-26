@@ -33,6 +33,7 @@ from app.services.academic_admin_service import (
     refuse_archived_session_target,
 )
 from app.services.audit_service import record_audit_event
+from app.services.rounds_service import end_if_class_is_over
 from app.services.live_session_service import compute_session_live_snapshot
 
 logger = logging.getLogger(__name__)
@@ -213,10 +214,20 @@ async def start_session_endpoint(
     # Check if another session is already active
     active_sess = await get_active_session_by_teacher(current_user["user_id"])
     if active_sess and active_sess["session_id"] != session_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You already have an active attendance session. Please finish the current session before starting another.",
-        )
+        # A timetable class that is already over is ended automatically: the
+        # teacher can still correct it for the edit window. One still in
+        # progress has to be ended first, and the message says which one.
+        if await end_if_class_is_over(get_database(), active_sess):
+            await _audit_status_change(current_user, active_sess["session_id"], "FINALIZED")
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Your session for {active_sess.get('course_name') or 'another class'}"
+                    f"{' (' + active_sess['class_code'] + ')' if active_sess.get('class_code') else ''}"
+                    " is still running. End it first, then start this one."
+                ),
+            )
 
     await update_session_status(session_id, "ACTIVE")
     session["status"] = "ACTIVE"

@@ -244,8 +244,10 @@ async def timetable(db: AsyncIOMotorDatabase, teacher_id: str, day: date) -> dic
     for slot in today_slots:
         session = sessions.get(slot["slot_id"])
         start, end = _slot_window(slot, day)
-        if session is not None:
-            state = "DONE" if session.get("status") == "FINALIZED" else "LIVE"
+        if session is not None and session.get("status") == "FINALIZED":
+            state = "DONE"
+        elif session is not None and session.get("status") == "ACTIVE":
+            state = "LIVE"
         elif now > end:
             state = "NOT_TAKEN"
         else:
