@@ -152,3 +152,27 @@ category; "Approve all matching" first shows the matching requests' photos,
 then approves them through a route that re-checks every request and approves
 none if any no longer matches. Each approval is audited with `via:
 section_list`.
+
+## ENTRY and EXIT rounds, and lectures
+
+A session started from the timetable has two rounds. The teacher opens ENTRY
+at the start and EXIT at the end (one round open at a time; a round can be
+reopened for latecomers). Recognition marks only the open round, and the
+teacher's screen sends no frames while no round is open.
+
+| Periods | ENTRY | EXIT | Lectures |
+| --- | --- | --- | --- |
+| 1 | P | P | P |
+| 1 | P or A | A or P (not both P) | A |
+| 2 | P | P | P, P |
+| 2 | P | A | P, A |
+| 2 | A | P | A, P |
+| 2 | A | A | A, A |
+
+If one round was never held, the held round counts for both. A manual mark
+(also how attendance is taken without a camera, in manual mode) locks that
+round against recognition and is audited with its round and reason. Teachers
+may mark until they finalize or 48 hours after the class (the edit-window
+setting); after that only an administrator, or the teacher again once an
+administrator unlocks the session for 48 hours. The session CSV lists Roll
+No, name, ENTRY and its time, EXIT and its time, and lectures (e.g. 1/2).

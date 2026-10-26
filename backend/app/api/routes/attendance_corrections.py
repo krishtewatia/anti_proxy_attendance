@@ -49,7 +49,13 @@ async def correct_session_attendance(
     4. Service Execution: Executes audit logging and atomic record update.
     """
     # 1. Enforce session existence and ownership
-    await get_owned_session(session_id, current_user)
+    owned = await get_owned_session(session_id, current_user)
+    if owned.get("slot_id"):
+        # Timetable sessions are marked per round (ENTRY / EXIT).
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Mark this session per round: /api/v1/sessions/{session_id}/rounds/{round}/marks",
+        )
 
     # 2. Enforce attendance record existence and session boundary
     record = await get_attendance_record(attendance_id)

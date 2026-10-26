@@ -148,6 +148,8 @@ async def test_four_sections_run_sessions_at_the_same_time_with_their_own_roster
         wrong_day = await client.post("/api/v1/teachers/sessions/from-slot", headers=teachers["A"], json={"slot_id": slots["A"]["slot_id"], "date": (day + timedelta(days=1)).isoformat()})
         for section in "ABCD":
             assert (await client.post(f"/api/v1/sessions/{started[section]['session_id']}/start", headers=teachers[section])).status_code == 200
+            # Each section opens its own ENTRY round; rounds are per session.
+            assert (await client.post(f"/api/v1/sessions/{started[section]['session_id']}/rounds/ENTRY/open", headers=teachers[section])).status_code == 200
         # Each section's frame recognises one of its own students and one from Section A.
         results = {}
         for section in "ABCD":

@@ -196,6 +196,8 @@ async def get_session_attendance(
                 manually_corrected=bool(rec.get("manually_corrected", False)) if rec else False,
                 requires_review=bool(rec.get("requires_review", False)) if rec else False,
                 anomalies=rec.get("anomalies", []) if rec else [],
+                rounds=_public_rounds(rec) if session.get("slot_id") else None,
+                lectures=(rec.get("lectures") if rec else None) if session.get("slot_id") else None,
             )
         )
 
@@ -206,7 +208,27 @@ async def get_session_attendance(
         present_count=present_count,
         was_taken=session_was_taken(session, existing_records),
         records=summary_items,
+        round_info=await _round_info(db, session),
     )
+
+
+def _public_rounds(record: dict | None) -> dict:
+    marks = (record or {}).get("rounds") or {}
+    return {
+        r: {"status": m.get("status"), "at": m.get("at"), "source": m.get("source")}
+        for r, m in marks.items()
+    }
+
+
+async def _round_info(db, session: dict) -> dict | None:
+    if not session.get("slot_id"):
+        return None
+    from app.services import rounds_service
+
+    info = rounds_service.round_info(session)
+    info["editable_until"] = await rounds_service.editable_until(db, session)
+    info["teacher_may_edit"] = await rounds_service.teacher_may_edit(db, session)
+    return info
 
 
 @router.get(
@@ -235,9 +257,44 @@ async def export_session_attendance_csv(
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Student ID", "Student Name", "Status"])
     # A session that was never taken has no absences to export.
     taken = session_was_taken(session, records)
+
+    if session.get("slot_id"):
+        # Timetable session: both rounds and the lectures they give.
+        writer.writerow(
+            ["Roll No", "Student Name", "ENTRY", "ENTRY time", "EXIT", "EXIT time", "Lectures"]
+        )
+        for ident in roster_identities:
+            s_info = student_map.get(ident, {})
+            rec = records_by_ident.get(ident) or {}
+            marks = rec.get("rounds") or {}
+
+            def cell(name: str) -> tuple[str, str]:
+                mark = marks.get(name) or {}
+                at = mark.get("at")
+                return (
+                    "P" if mark.get("status") == "PRESENT" else "A",
+                    at.strftime("%H:%M") if hasattr(at, "strftime") else "",
+                )
+
+            entry, entry_at = cell("ENTRY")
+            exit_, exit_at = cell("EXIT")
+            lectures = rec.get("lectures") or []
+            writer.writerow(
+                [
+                    s_info.get("roll_number") or ident,
+                    s_info.get("name", ident),
+                    entry,
+                    entry_at,
+                    exit_,
+                    exit_at,
+                    f"{lectures.count('P')}/{len(lectures) or int(session.get('periods') or 1)}",
+                ]
+            )
+        roster_identities = []
+    else:
+        writer.writerow(["Student ID", "Student Name", "Status"])
 
     for ident in roster_identities:
         s_info = student_map.get(ident, {})
@@ -387,7 +444,7 @@ async def process_attendance_frame(
             face["mark_status"] = result.status
             if result.status == "rejected":
                 face["mark_reason"] = result.reason
-                if result.reason != "not_on_roster":
+                if result.reason not in ("not_on_roster", "no_round_open"):
                     # An unverifiable result is never shown as a recognized student
                     face["status"] = "unverified"
                     face["identity"] = None
