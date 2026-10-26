@@ -43,7 +43,7 @@ from app.services.student_deletion import (
     StudentNotFound,
     delete_student_completely,
 )
-from app.services.session_finalization import finalize_session_attendance
+from app.services.session_finalization import end_without_roster, finalize_session_attendance
 from app.services.student_service import ClassRequiredError, register_student_account
 from app.services.teacher_service import register_teacher_account
 
@@ -782,16 +782,18 @@ async def admin_finalize_session_endpoint(
         raise HTTPException(status_code=404, detail="Session not found")
 
     roster = await get_enrolled_roster(session_id)
-    if roster is None:
+    if roster is None and session.get("slot_id"):
+        records = await end_without_roster(session_id)
+    elif roster is None:
         raise HTTPException(status_code=404, detail="Session roster not found")
-
-    records = await finalize_session_attendance(
-        session_id=session_id,
-        session_start=session["start_time"],
-        session_end=session["end_time"],
-        required_presence_percentage=session["required_presence_percentage"],
-        roster=roster,
-    )
+    else:
+        records = await finalize_session_attendance(
+            session_id=session_id,
+            session_start=session["start_time"],
+            session_end=session["end_time"],
+            required_presence_percentage=session["required_presence_percentage"],
+            roster=roster,
+        )
 
     return {
         "session_id": session_id,

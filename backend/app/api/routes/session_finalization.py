@@ -7,7 +7,7 @@ from app.api.dependencies.auth import get_owned_session, require_teacher
 from app.schemas.session_finalization import SessionFinalizationResponse
 from app.services.audit_service import record_audit_event
 from app.services.session_enrollment import get_enrolled_roster
-from app.services.session_finalization import finalize_session_attendance
+from app.services.session_finalization import end_without_roster, finalize_session_attendance
 
 logger = logging.getLogger(__name__)
 
@@ -29,19 +29,23 @@ async def finalize_session(
 
     roster = await get_enrolled_roster(session_id)
 
-    if roster is None:
+    if roster is None and session.get("slot_id"):
+        # A timetable class with nobody approved yet: nothing to mark, but
+        # the session must still be endable.
+        records = await end_without_roster(session_id)
+    elif roster is None:
         raise HTTPException(
             status_code=404,
             detail="Session roster not found",
         )
-
-    records = await finalize_session_attendance(
-        session_id=session_id,
-        session_start=session["start_time"],
-        session_end=session["end_time"],
-        required_presence_percentage=session["required_presence_percentage"],
-        roster=roster,
-    )
+    else:
+        records = await finalize_session_attendance(
+            session_id=session_id,
+            session_start=session["start_time"],
+            session_end=session["end_time"],
+            required_presence_percentage=session["required_presence_percentage"],
+            roster=roster,
+        )
 
     # Record audit event (resilient to audit logging failure)
     try:

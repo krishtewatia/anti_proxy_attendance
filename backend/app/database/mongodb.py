@@ -135,6 +135,9 @@ async def init_indexes(db: AsyncIOMotorDatabase):
     await db["sessions"].create_index(
         [("slot_id", 1), ("date", 1)], unique=True, sparse=True, name="uq_sessions_slot_date"
     )
+    await db["sessions"].create_index(
+        [("class_id", 1), ("date", 1)], name="idx_sessions_class_date"
+    )
     await db["attendance_records"].create_index(
         [("session_id", 1), ("identity", 1)], name="idx_attendance_session_identity"
     )
