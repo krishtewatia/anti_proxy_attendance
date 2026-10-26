@@ -64,6 +64,7 @@ AuditAction = Literal[
     "ENROLMENT_WITHDRAWN",
     "SECTION_LIST_UPLOADED",
     "SECTION_LIST_DELETED",
+    "TEACHER_ASSIGNED",
 ]
 
 AuditResourceType = Literal[

@@ -125,6 +125,26 @@ async def init_indexes(db: AsyncIOMotorDatabase):
     await db["timetable_slots"].create_index(
         [("version_id", 1), ("day", 1), ("start_minute", 1)], name="idx_timetable_slots_day"
     )
+    # Sessions of all sections run at once: unique ids, at most one session per
+    # timetable slot and day (sparse: older sessions have no slot), and the
+    # lookups each frame and roster make.
+    await db["sessions"].create_index(
+        [("session_id", 1)], unique=True, name="uq_sessions_session_id"
+    )
+    await db["sessions"].create_index(
+        [("slot_id", 1), ("date", 1)], unique=True, sparse=True, name="uq_sessions_slot_date"
+    )
+    await db["attendance_records"].create_index(
+        [("session_id", 1), ("identity", 1)], name="idx_attendance_session_identity"
+    )
+    await db["session_rosters"].create_index(
+        [("session_id", 1)], name="idx_session_rosters_session"
+    )
+    await db["enrolments"].create_index([("class_ids", 1)], name="idx_enrolments_class_ids")
+    await db["org_classes"].create_index([("teacher_ids", 1)], name="idx_org_classes_teacher_ids")
+    await db["teacher_assignments"].create_index(
+        [("class_id", 1), ("teacher_id", 1), ("to", 1)], name="idx_teacher_assignments_open"
+    )
     # Enforce unique camera_id on cameras collection
     await db["cameras"].create_index(
         [("camera_id", 1)],

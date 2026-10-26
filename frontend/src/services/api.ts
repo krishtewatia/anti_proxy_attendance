@@ -34,6 +34,7 @@ import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
 import type { ReportsSummary } from "../utils/reports.ts";
 import type { ConsentStatus, RegistrationRules } from "../utils/registration.ts";
 import type { RegistryTeacher, StudentRegistry } from "../utils/registry.ts";
+import type { SlotSession, TeacherTimetable } from "../utils/teaching.ts";
 import type { ListSummary, ListUploadReport, MatchReport } from "../utils/sectionList.ts";
 import type { MySetup, PhotoCheckResult, SetupOptions, SetupRequest, SetupRequestList, requestBody } from "../utils/enrolment.ts";
 import type {
@@ -446,6 +447,25 @@ export const api = {
     return request<{ done: string[] }>("/api/v1/admin/enrolment/requests/bulk", {
       method: "POST",
       body: JSON.stringify({ action, request_ids, ...(reason ? { reason } : {}) }),
+    });
+  },
+
+  // --- Teachers on the timetable ---
+  setTeacherClasses(userId: string, classIds: string[]): Promise<{ teacher_id: string; class_ids: string[] }> {
+    return request<{ teacher_id: string; class_ids: string[] }>(`/api/v1/admin/org/teachers/${encodeURIComponent(userId)}/classes`, {
+      method: "PUT",
+      body: JSON.stringify({ class_ids: classIds }),
+    });
+  },
+
+  getTeacherTimetable(date?: string): Promise<TeacherTimetable> {
+    return request<TeacherTimetable>(`/api/v1/teachers/timetable${date ? `?date=${encodeURIComponent(date)}` : ""}`);
+  },
+
+  startFromSlot(slotId: string, date?: string): Promise<SlotSession> {
+    return request<SlotSession>("/api/v1/teachers/sessions/from-slot", {
+      method: "POST",
+      body: JSON.stringify({ slot_id: slotId, ...(date ? { date } : {}) }),
     });
   },
 
