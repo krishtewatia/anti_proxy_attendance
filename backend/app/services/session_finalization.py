@@ -176,3 +176,17 @@ async def finalize_session_attendance(
     logger.info("Session %s attendance finalized: %d total records", session_id, len(final_records))
 
     return final_records
+
+
+async def end_without_roster(session_id: str) -> list[dict]:
+    """End a timetable session whose class had nobody approved yet (no roster).
+
+    There is nothing to mark; the open round is closed and the session is
+    finalized so that it no longer counts as running.
+    """
+    from app.services.rounds_service import close_open_round
+
+    await close_open_round(get_database(), session_id)
+    await update_session_status(session_id, "FINALIZED")
+    logger.info("Session %s finalized with no roster", session_id)
+    return []

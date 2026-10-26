@@ -35,6 +35,7 @@ import type { ReportsSummary } from "../utils/reports.ts";
 import type { ConsentStatus, RegistrationRules } from "../utils/registration.ts";
 import type { RegistryTeacher, StudentRegistry } from "../utils/registry.ts";
 import type { SlotSession, TeacherTimetable } from "../utils/teaching.ts";
+import { classPath, type ClassSessionItem, type LectureItem, type SubjectReport, type TeacherClassItem } from "../utils/classReports.ts";
 import type { MyTeacherSetup, TeacherSetupOptions, WaitingTeacherRequest } from "../utils/teacherSetup.ts";
 import type { ListSummary, ListUploadReport, MatchReport } from "../utils/sectionList.ts";
 import type { MySetup, PhotoCheckResult, SetupOptions, SetupRequest, SetupRequestList, requestBody } from "../utils/enrolment.ts";
@@ -449,6 +450,45 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ action, request_ids, ...(reason ? { reason } : {}) }),
     });
+  },
+
+  // --- Reports and downloads ---
+  getMySubjects(): Promise<SubjectReport> {
+    return request<SubjectReport>("/api/v1/students/attendance/subjects");
+  },
+
+  getMySubjectLectures(subjectKey: string): Promise<{ subject_key: string; lectures: LectureItem[] }> {
+    return request<{ subject_key: string; lectures: LectureItem[] }>(`/api/v1/students/attendance/subjects/${encodeURIComponent(subjectKey)}`);
+  },
+
+  getMyTeachingClasses(): Promise<TeacherClassItem[]> {
+    return request<TeacherClassItem[]>("/api/v1/teachers/classes");
+  },
+
+  getClassSessions(classId: string): Promise<ClassSessionItem[]> {
+    return request<ClassSessionItem[]>(classPath(classId, "sessions"));
+  },
+
+  // Downloads a file with the signed-in user's token (never a reusable link).
+  async downloadFile(path: string, filename: string): Promise<void> {
+    const token = getStoredToken();
+    const response = await fetch(`${API_BASE_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!response.ok) {
+      let detail = `Download failed (${response.status})`;
+      try {
+        const body = await response.json();
+        if (typeof body?.detail === "string") detail = body.detail;
+      } catch {
+        // keep the default message
+      }
+      throw new Error(detail);
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
   },
 
   // --- Teachers choose their own classes ---

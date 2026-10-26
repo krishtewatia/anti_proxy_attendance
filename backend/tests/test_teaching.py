@@ -235,6 +235,9 @@ async def test_a_class_with_nobody_approved_yet_still_opens():
         await client.post(f"/api/v1/sessions/{started['session_id']}/start", headers=teacher)
         dashboard = await client.get("/api/v1/teachers/dashboard", headers=teacher)
         view = await client.get(f"/api/v1/attendance/{started['session_id']}", headers=teacher)
+        # And it can be ended, though nobody is on it.
+        ended = await client.post(f"/api/v1/sessions/{started['session_id']}/finalize", headers=teacher)
+    assert ended.status_code == 200 and (await db["sessions"].find_one({"session_id": started["session_id"]}))["status"] == "FINALIZED"
     assert started["roster_size"] == 0
     assert dashboard.status_code == 200 and view.status_code == 200
     assert view.json()["records"] == []

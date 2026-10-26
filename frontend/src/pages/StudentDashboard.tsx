@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import { AuthenticatedImage } from "../components/common/AuthenticatedImage";
 import { SetupWizard } from "../components/student/SetupWizard";
+import { SubjectAttendance } from "../components/student/SubjectAttendance";
 import { draftFromEnrolment, emptyDraft, setupStatusCard, type MySetup } from "../utils/enrolment.ts";
 import "./student-dashboard.css";
 
@@ -482,6 +483,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       {activeNavId === "dashboard" && renderDashboardView()}
       {activeNavId === "attendance" && (
         <>
+          <SubjectAttendance />
           {renderAttendanceView()}
           {renderHistoryView()}
         </>

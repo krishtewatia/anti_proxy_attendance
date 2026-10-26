@@ -3,7 +3,7 @@ and starting a session from a timetable slot."""
 
 from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.dependencies.auth import (
@@ -12,8 +12,10 @@ from app.api.dependencies.auth import (
     require_teacher,
     require_teacher_or_admin,
     require_teacher_signed_in,
+    require_student,
 )
 from app.database.mongodb import get_database
+from app.services import reports_service as reports
 from app.services import rounds_service as rounds
 from app.services import teacher_setup_service as setup
 from app.services import teaching_service as teaching
@@ -44,7 +46,9 @@ def _http(exc: teaching.TeachingError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=str(exc))
 
 
-@router.put("/api/v1/admin/org/classes/{class_id}/teachers", summary="Set the teachers of a class")
+@router.put(
+    "/api/v1/admin/org/classes/{class_id:path}/teachers", summary="Set the teachers of a class"
+)
 async def set_class_teachers(
     class_id: str, payload: TeacherList, current_user: Annotated[dict, Depends(require_admin)]
 ) -> dict:
@@ -279,3 +283,101 @@ async def reject_teacher_request(
 )
 async def teacher_request_options(current_user: Annotated[dict, Depends(require_admin)]) -> dict:
     return await setup.options(get_database())
+
+
+# ------------------------------------------------------------------ reports and downloads
+
+
+def _report_http(exc: reports.ReportError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=str(exc))
+
+
+def _csv_response(text: str, filename: str) -> Response:
+    safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in filename)
+    return Response(
+        content=text,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{safe}"'},
+    )
+
+
+@router.get(
+    "/api/v1/students/attendance/subjects",
+    summary="Your attendance per subject, counted in lectures",
+)
+async def my_subjects(current_user: Annotated[dict, Depends(require_student)]) -> dict:
+    try:
+        return await reports.student_subjects(get_database(), current_user["user_id"])
+    except reports.ReportError as exc:
+        raise _report_http(exc) from exc
+
+
+@router.get(
+    "/api/v1/students/attendance/subjects/{subject_key}", summary="Your lectures of one subject"
+)
+async def my_subject_lectures(
+    subject_key: str, current_user: Annotated[dict, Depends(require_student)]
+) -> dict:
+    try:
+        return await reports.student_lectures(get_database(), current_user["user_id"], subject_key)
+    except reports.ReportError as exc:
+        raise _report_http(exc) from exc
+
+
+@router.get("/api/v1/teachers/classes", summary="Your classes (all classes for an administrator)")
+async def my_classes(
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
+) -> list[dict]:
+    return await reports.teacher_classes(get_database(), current_user)
+
+
+@router.get("/api/v1/teachers/classes/{class_id:path}/students.csv", summary="Class list (CSV)")
+async def class_list(
+    class_id: str, current_user: Annotated[dict, Depends(require_teacher_or_admin)]
+) -> Response:
+    db = get_database()
+    try:
+        cls = await reports.class_for(db, class_id, current_user)
+    except reports.ReportError as exc:
+        raise _report_http(exc) from exc
+    return _csv_response(
+        await reports.class_list_csv(db, cls), f"class_list_{cls.get('label') or class_id}.csv"
+    )
+
+
+@router.get(
+    "/api/v1/teachers/classes/{class_id:path}/register.csv",
+    summary="Register: one column per lecture (CSV)",
+)
+async def class_register(
+    class_id: str,
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
+    from_: Annotated[Optional[str], Query(alias="from", max_length=10)] = None,
+    to: Annotated[Optional[str], Query(max_length=10)] = None,
+) -> Response:
+    db = get_database()
+    try:
+        cls = await reports.class_for(db, class_id, current_user)
+        since = teaching.parse_day(from_) if from_ else None
+        until = teaching.parse_day(to) if to else None
+    except (reports.ReportError, teaching.TeachingError) as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return _csv_response(
+        await reports.register_csv(db, cls, since, until),
+        f"register_{cls.get('label') or class_id}.csv",
+    )
+
+
+@router.get(
+    "/api/v1/teachers/classes/{class_id:path}/sessions",
+    summary="The class's sessions (for their CSVs)",
+)
+async def class_session_list(
+    class_id: str, current_user: Annotated[dict, Depends(require_teacher_or_admin)]
+) -> list[dict]:
+    db = get_database()
+    try:
+        cls = await reports.class_for(db, class_id, current_user)
+    except reports.ReportError as exc:
+        raise _report_http(exc) from exc
+    return await reports.class_sessions(db, cls)

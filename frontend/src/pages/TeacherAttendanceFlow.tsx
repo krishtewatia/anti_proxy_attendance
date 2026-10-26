@@ -17,6 +17,8 @@ import { TodayTimetable } from "../components/teacher/TodayTimetable";
 import type { TeacherSlot } from "../utils/teaching.ts";
 import { RoundControls } from "../components/teacher/RoundControls";
 import { MyClasses } from "../components/teacher/MyClasses";
+import { ClassDownloads } from "../components/teacher/ClassDownloads";
+import { fileName } from "../utils/classReports.ts";
 import { shouldSendFrames, type RoundInfo } from "../utils/rounds.ts";
 
 const SESSIONS_PAGE_SIZE = 15;
@@ -638,21 +640,10 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   // CSV Export
   const handleDownloadCsv = () => {
     if (!sessionId) return;
-    const host = typeof window !== "undefined" ? window.location.hostname || "localhost" : "localhost";
-    const token = api.getToken() || localStorage.getItem("anti_proxy_access_token") || "";
-    const url = `http://${host}:8000/api/v1/attendance/${sessionId}/export`;
-
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => res.blob())
-      .then((blob) => {
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `${selectedSubject}_${selectedClass}_attendance.csv`;
-        link.click();
-      })
-      .catch(() => {
-        alert("Failed to download CSV export.");
-      });
+    // Same address as every other request (works behind the site's proxy).
+    api
+      .downloadFile(`/api/v1/attendance/${encodeURIComponent(sessionId)}/export`, fileName(`${selectedSubject}_${selectedClass}`, "attendance"))
+      .catch((err: unknown) => setErrorMessage(err instanceof Error ? err.message : "Failed to download the CSV."));
   };
 
   const handleNewAttendance = () => {
@@ -1352,7 +1343,12 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
           )}
           {activeNavId === "attendance" && renderAttendanceWorkflow()}
           {activeNavId === "myclasses" && <MyClasses />}
-          {activeNavId === "sessions" && renderSessionsView()}
+          {activeNavId === "sessions" && (
+            <>
+              <ClassDownloads />
+              {renderSessionsView()}
+            </>
+          )}
           {activeNavId === "profile" && renderProfileView()}
         </>
       )}
