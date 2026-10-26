@@ -148,10 +148,25 @@ async def get_owned_session(
     if current_user.get("role") == "ADMIN":
         return session
 
-    if session.get("created_by") != current_user.get("user_id"):
+    if session.get("created_by") != current_user.get("user_id") and not await _teaches_class(
+        session, current_user
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: You do not own this session",
         )
 
     return session
+
+
+async def _teaches_class(session: dict, current_user: dict) -> bool:
+    """A session started from the timetable belongs to every teacher of its class (co-teachers)."""
+    class_id = session.get("class_id")
+    if not class_id or current_user.get("role") != "TEACHER":
+        return False
+    from app.database.mongodb import get_database
+
+    cls = await get_database()["org_classes"].find_one(
+        {"class_id": class_id, "teacher_ids": current_user.get("user_id")}, {"_id": 1}
+    )
+    return cls is not None

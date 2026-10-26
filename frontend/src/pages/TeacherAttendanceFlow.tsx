@@ -12,6 +12,8 @@ import { paginate, sessionStatusBadgeClass, sessionStatusLabel } from "../utils/
 import { formatDate, formatSessionTurnout } from "../utils/dates.ts";
 import { Pagination } from "../components/common/Pagination";
 import { TEACHER_PENDING_TEXT, isTeacherPendingError } from "../utils/registration.ts";
+import { TodayTimetable } from "../components/teacher/TodayTimetable";
+import type { TeacherSlot } from "../utils/teaching.ts";
 
 const SESSIONS_PAGE_SIZE = 15;
 
@@ -251,6 +253,21 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Open the attendance screen on a session started from the timetable.
+  const handleOpenSlotSession = async (openedId: string, slot: TeacherSlot) => {
+    setErrorMessage(null);
+    setSessionId(openedId);
+    setSelectedClass(slot.label);
+    setSelectedSubject(slot.subject);
+    const attData = await api.getSessionAttendance(openedId);
+    setRecords(attData.records);
+    setCallout({ name: "Scanning", status: "IDLE" });
+    setViewedNotTaken(false);
+    setStep(2);
+    if (onSelectNav) onSelectNav("attendance");
+    await startCameraStream();
   };
 
   // Continue an already active session
@@ -1293,6 +1310,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
         <>
           {activeNavId === "dashboard" && (
             <>
+              <TodayTimetable onOpenSession={handleOpenSlotSession} />
               {renderDashboardView()}
               {renderClassesView()}
             </>

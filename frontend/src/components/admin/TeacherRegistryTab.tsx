@@ -5,6 +5,8 @@ import { AdminModal, TemporaryPasswordNotice } from "./shared";
 import { dangerButton, errorText, fieldGap, smallButton, type Banner } from "./adminShared.ts";
 import type { NavSelection, NavYear } from "../../utils/orgNavigator.ts";
 import { classLabel, teachersFor, type RegistryTeacher } from "../../utils/registry.ts";
+import { classGroups } from "../../utils/teaching.ts";
+import type { OrgClass } from "../../utils/organisation.ts";
 
 interface TeacherRegistryTabProps {
   years: NavYear[];
@@ -24,6 +26,38 @@ export const TeacherRegistryTab: React.FC<TeacherRegistryTabProps> = ({ years, s
   const [form, setForm] = useState(EMPTY_NEW);
   const [busy, setBusy] = useState(false);
   const [temporary, setTemporary] = useState<{ label: string; password: string } | null>(null);
+  // Assigning classes: the year and branch's classes, and the ticked ones.
+  const [assigning, setAssigning] = useState<RegistryTeacher | null>(null);
+  const [classes, setClasses] = useState<OrgClass[]>([]);
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
+
+  const openAssign = async (t: RegistryTeacher) => {
+    try {
+      setClasses(await api.getOrgClasses(selection.cohortId));
+      setTicked(new Set(t.classes.filter((c) => c.cohort_id === selection.cohortId).map((c) => c.class_id)));
+      setAssigning(t);
+    } catch (err: unknown) {
+      notify({ type: "error", text: `Failed to load the classes: ${errorText(err)}` });
+    }
+  };
+
+  const saveAssign = async () => {
+    if (!assigning) return;
+    setBusy(true);
+    try {
+      // Classes in other years and branches stay as they are.
+      const elsewhere = assigning.classes.filter((c) => c.cohort_id !== selection.cohortId).map((c) => c.class_id);
+      await api.setTeacherClasses(assigning.user_id, [...elsewhere, ...ticked]);
+      notify({ type: "success", text: `Classes of ${label(assigning)} saved (${ticked.size} here).` });
+      setAssigning(null);
+      await load();
+    } catch (err: unknown) {
+      notify({ type: "error", text: `Failed to save the classes: ${errorText(err)}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const teacherNames = new Map((teachers ?? []).map((t) => [t.user_id, t.name || t.email || t.user_id]));
 
   const load = useCallback(async () => {
     try {
@@ -113,6 +147,7 @@ export const TeacherRegistryTab: React.FC<TeacherRegistryTabProps> = ({ years, s
               </td>
               <td>
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <button type="button" className="erp-btn erp-btn-primary" style={smallButton} onClick={() => void openAssign(t)}>Assign classes</button>
                   <button type="button" className="erp-btn erp-btn-secondary" style={smallButton} onClick={() => void resetPassword(t)}>Reset password</button>
                   <button type="button" className="erp-btn erp-btn-secondary" style={dangerButton} onClick={() => void remove(t)}>Delete</button>
                 </div>
@@ -156,6 +191,42 @@ export const TeacherRegistryTab: React.FC<TeacherRegistryTabProps> = ({ years, s
             <label className="form-label" htmlFor="teacher-password">Temporary password</label>
             <input id="teacher-password" type="password" required minLength={6} autoComplete="new-password" className="auth-input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             <small style={{ color: "var(--erp-text-muted)", fontSize: "0.75rem" }}>They choose their own password at first sign-in.</small>
+          </div>
+        </AdminModal>
+      )}
+
+      {assigning && (
+        <AdminModal title={`Classes of ${label(assigning)}`} onClose={() => setAssigning(null)} onSubmit={() => void saveAssign()} submitLabel="SAVE" busy={busy}>
+          <p style={{ marginTop: 0, fontSize: "0.85rem", color: "var(--erp-text-muted)" }}>
+            Tick the classes this teacher takes. A class can have several teachers; any of them can run its sessions.
+          </p>
+          <div style={{ display: "grid", gap: "0.85rem", maxHeight: "55vh", overflowY: "auto" }}>
+            {classGroups(classes).map((group) => (
+              <div key={group.title}>
+                <div style={{ fontWeight: 700, fontSize: "0.8rem", marginBottom: "0.3rem" }}>{group.title}</div>
+                {group.classes.map((cls) => {
+                  const others = cls.teacher_ids.filter((id) => id !== assigning.user_id).map((id) => teacherNames.get(id) ?? id);
+                  return (
+                    <label key={cls.class_id} style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", fontSize: "0.85rem", padding: "0.15rem 0" }}>
+                      <input
+                        type="checkbox"
+                        checked={ticked.has(cls.class_id)}
+                        onChange={(e) => {
+                          const next = new Set(ticked);
+                          if (e.target.checked) next.add(cls.class_id);
+                          else next.delete(cls.class_id);
+                          setTicked(next);
+                        }}
+                      />
+                      <span>
+                        {cls.label}
+                        {others.length > 0 && <span style={{ color: "var(--erp-text-muted)" }}> · also {others.join(", ")}</span>}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </AdminModal>
       )}
