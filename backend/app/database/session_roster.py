@@ -25,7 +25,9 @@ async def get_session_roster(session_id: str) -> SessionRoster | None:
 
     document = await collection.find_one({"session_id": session_id})
 
-    if document is None:
+    # A session whose class had nobody approved yet may have stored an empty
+    # roster: that is the same as no roster.
+    if document is None or not document.get("identities"):
         return None
 
     return SessionRoster(
