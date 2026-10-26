@@ -297,7 +297,8 @@ python infra/scripts/tf.py stop      # afterwards
   the images are published, and the next `start` picks them up.
 
 `run_mode` in `terraform.tfvars` stays `"on_demand"`. The other value,
-`"always_on"`, removes the nightly automatic stop; it is not used.
+`"always_on"`, removes the nightly automatic stop; the pilot uses it (see
+[docs/operations/pilot_runbook.md](../operations/pilot_runbook.md)).
 
 ## All commands
 

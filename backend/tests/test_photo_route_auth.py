@@ -294,6 +294,8 @@ PUBLIC_ROUTES = {
     ("GET", "/health"),
     ("GET", "/ready"),
     ("GET", "/api/v1/health"),
+    # The uptime check: says only whether the database and vision service answer.
+    ("GET", "/api/v1/health/ready"),
     ("POST", "/auth/login"),
     ("POST", "/auth/register"),
     # The sign-up form shows the college email domain and the photo notice.

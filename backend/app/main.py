@@ -195,3 +195,37 @@ def readiness_check():
         "service": "anti-proxy-backend",
         "version": "0.1.0",
     }
+
+
+async def _vision_answers() -> bool:
+    import httpx
+
+    url = f"{settings.VISION_SERVICE_URL.rstrip('/')}/health"
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            return (await client.get(url)).status_code == 200
+    except httpx.HTTPError:
+        return False
+
+
+async def _database_answers() -> bool:
+    try:
+        await asyncio.wait_for(get_database().command("ping"), timeout=3.0)
+        return True
+    except Exception:  # any failure means "not ready"; the reason is never shown
+        return False
+
+
+@app.get("/api/v1/health/ready")
+async def deep_readiness_check():
+    """For the uptime check: the database and the vision service both answer."""
+    database, vision = await asyncio.gather(_database_answers(), _vision_answers())
+    ok = database and vision
+    return JSONResponse(
+        status_code=status.HTTP_200_OK if ok else status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "status": "ready" if ok else "degraded",
+            "database": "up" if database else "down",
+            "vision": "up" if vision else "down",
+        },
+    )

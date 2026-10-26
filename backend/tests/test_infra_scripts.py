@@ -407,3 +407,57 @@ def test_a_deploy_with_missing_variables_fails_instead_of_being_skipped():
     assert check < credentials and "exit 1" in step
     for name in ("AWS_DEPLOY_ROLE_ARN", "AWS_REGION", "AWS_INSTANCE_ID", "AWS_DEPLOY_DOCUMENT", "SITE_URL"):
         assert name in step
+
+
+# ------------------------------------------------------------------------------
+# Backups: age, the restore drill's target, and the go-live reset
+# ------------------------------------------------------------------------------
+
+
+def test_the_newest_backup_and_its_age():
+    from datetime import datetime, timezone
+
+    import tf
+
+    rows = [
+        ("20261024T180000Z/database.archive.gz", 10, "2026-10-24T18:00:05+00:00"),
+        ("20261025T180000Z/uploads.tar.gz", 99, "2026-10-25T18:00:09+00:00"),
+        ("20261025T180000Z/database.archive.gz", 12, "2026-10-25T18:00:05Z"),
+    ]
+    newest = tf.newest_backup(sorted(rows, key=lambda r: r[2]))
+    assert newest[0] == "20261025T180000Z/database.archive.gz"
+    assert tf.newest_backup(rows, "uploads.tar.gz")[1] == 99
+    now = datetime(2026, 10, 26, 18, 0, 5, tzinfo=timezone.utc)
+    assert tf.backup_age_hours(newest[2], now) == 24.0
+    assert tf.newest_backup([]) is None
+
+
+def test_the_restore_drill_only_restores_into_this_machine():
+    import tf
+
+    assert tf.restore_target_is_local("mongodb://127.0.0.1:27098")
+    assert tf.restore_target_is_local("mongodb://localhost:27098")
+    assert not tf.restore_target_is_local("mongodb+srv://cluster0.example.mongodb.net")
+    assert not tf.restore_target_is_local("mongodb://10.0.0.5:27017")
+
+
+def test_the_golive_reset_deletes_nothing_when_the_backup_fails(monkeypatch, capsys):
+    import tf
+
+    sent: list[list[str]] = []
+    monkeypatch.setattr(tf, "run_on_instance", lambda out, document, parameters, wait_seconds: sent.append(parameters["commands"]) or 1)
+    code = tf.golive_reset(OUT, ask=lambda prompt: "999")
+    assert code == 1 and sent == [["/opt/antiproxy/backup.sh"]]
+    assert "nothing was deleted" in capsys.readouterr().out
+
+
+def test_the_golive_reset_lists_then_deletes_exactly_the_number_typed(monkeypatch):
+    import tf
+
+    sent: list[str] = []
+    monkeypatch.setattr(tf, "run_on_instance", lambda out, document, parameters, wait_seconds: sent.append(parameters["commands"][0]) or 0)
+    assert tf.golive_reset(OUT, ask=lambda prompt: "") == 0
+    assert len(sent) == 2 and "--apply" not in sent[1]
+    sent.clear()
+    assert tf.golive_reset(OUT, ask=lambda prompt: "42") == 0
+    assert sent[-1].endswith("--apply --expect 42") and "golive_reset --database" in sent[-1]
