@@ -348,11 +348,14 @@ async def start_from_slot(db: AsyncIOMotorDatabase, teacher: dict, slot_id: str,
 
     students = await _roster(db, cls["class_id"])
     identities = [s.get("identity") or s.get("student_id") for s in students]
-    await db["session_rosters"].update_one(
-        {"session_id": session_id},
-        {"$set": {"session_id": session_id, "identities": identities}},
-        upsert=True,
-    )
+    # No roster document while nobody in the class is approved yet (a roster
+    # always names at least one student).
+    if identities:
+        await db["session_rosters"].update_one(
+            {"session_id": session_id},
+            {"$set": {"session_id": session_id, "identities": identities}},
+            upsert=True,
+        )
     if students:
         now = _now()
         await db["attendance_records"].insert_many(

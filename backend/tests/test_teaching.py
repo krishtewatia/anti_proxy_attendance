@@ -217,3 +217,28 @@ async def test_a_finished_class_does_not_block_the_next_one():
     async with _client() as client:
         later = (await client.get("/api/v1/teachers/timetable", headers=teacher, params={"date": day2.isoformat()})).json()
     assert {s["class_id"]: s["state"] for s in later["today"]}.get(second_cls) in ("UPCOMING", "NOT_TAKEN")
+
+
+@pytest.mark.anyio
+async def test_a_class_with_nobody_approved_yet_still_opens():
+    """Reported on the live site: an empty roster made the dashboard and session view fail."""
+    admin = await _user("admin_t", "ADMIN")
+    teacher = await _user("t_empty", "TEACHER")
+    db = mongodb.get_database()
+    slot = await db[org.SLOTS].find_one({"audience.section": "C"})
+    # An empty roster stored by the earlier version must read as no roster.
+    await db["session_rosters"].insert_one({"session_id": "old_empty", "identities": []})
+    async with _client() as client:
+        await client.put(f"/api/v1/admin/org/classes/{slot['class_id']}/teachers", headers=admin, json={"teacher_ids": ["t_empty"]})
+        day = MONDAY + timedelta(days=DAYS.index(slot["day"]))
+        started = (await client.post("/api/v1/teachers/sessions/from-slot", headers=teacher, json={"slot_id": slot["slot_id"], "date": day.isoformat()})).json()
+        await client.post(f"/api/v1/sessions/{started['session_id']}/start", headers=teacher)
+        dashboard = await client.get("/api/v1/teachers/dashboard", headers=teacher)
+        view = await client.get(f"/api/v1/attendance/{started['session_id']}", headers=teacher)
+    assert started["roster_size"] == 0
+    assert dashboard.status_code == 200 and view.status_code == 200
+    assert view.json()["records"] == []
+    assert await db["session_rosters"].count_documents({"session_id": started["session_id"]}) == 0
+    from app.database.session_roster import get_session_roster
+
+    assert await get_session_roster("old_empty") is None
