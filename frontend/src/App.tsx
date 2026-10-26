@@ -1,16 +1,23 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { AuthPage } from "./pages/AuthPage";
 import { AuthLayout } from "./components/auth/AuthLayout";
 import { ChangePasswordForm } from "./components/auth/ChangePasswordForm";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AppLayout } from "./components/layout/AppLayout";
-import { TeacherAttendanceFlow } from "./pages/TeacherAttendanceFlow";
-import { SessionDetails } from "./pages/SessionDetails";
-import { StudentDashboard } from "./pages/StudentDashboard";
-import { AdminDashboard } from "./pages/AdminDashboard";
 import { auth } from "./services";
 import type { TokenResponse, UserResponse } from "./types";
 import { getDashboardPath } from "./utils/auth";
+
+// Each role's pages load only when that role opens them, so a student never
+// downloads the admin panel (and the first page loads faster on a phone).
+const TeacherAttendanceFlow = lazy(() => import("./pages/TeacherAttendanceFlow").then((m) => ({ default: m.TeacherAttendanceFlow })));
+const SessionDetails = lazy(() => import("./pages/SessionDetails").then((m) => ({ default: m.SessionDetails })));
+const StudentDashboard = lazy(() => import("./pages/StudentDashboard").then((m) => ({ default: m.StudentDashboard })));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard").then((m) => ({ default: m.AdminDashboard })));
+
+function Page({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<div className="erp-loading-state">Loading...</div>}>{children}</Suspense>;
+}
 
 export function App() {
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(() =>
@@ -157,13 +164,15 @@ export function App() {
             onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}
           >
-            <TeacherAttendanceFlow
+            <Page>
+<TeacherAttendanceFlow
               user={currentUser}
               onLogout={handleLogout}
               onNavigate={navigate}
               activeNavId={activeNavId}
               onSelectNav={handleNavSelect}
             />
+</Page>
           </AppLayout>
         )}
       </ProtectedRoute>
@@ -191,11 +200,13 @@ export function App() {
             onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}
           >
-            <SessionDetails
+            <Page>
+<SessionDetails
               sessionId={sessionId}
               user={currentUser}
               onNavigate={navigate}
             />
+</Page>
           </AppLayout>
         )}
       </ProtectedRoute>
@@ -219,13 +230,15 @@ export function App() {
             onChangePassword={openChangePassword}
             onSelectNav={handleNavSelect}
           >
-            <StudentDashboard
+            <Page>
+<StudentDashboard
               user={currentUser}
               onLogout={handleLogout}
               onNavigate={navigate}
               activeNavId={activeNavId}
               onSelectNav={handleNavSelect}
             />
+</Page>
           </AppLayout>
         )}
       </ProtectedRoute>
@@ -250,7 +263,8 @@ export function App() {
             onSelectNav={handleNavSelect}
             navBadges={{ approvals: pendingApprovals }}
           >
-            <AdminDashboard
+            <Page>
+<AdminDashboard
               user={currentUser}
               onLogout={handleLogout}
               onNavigate={navigate}
@@ -258,6 +272,7 @@ export function App() {
               onSelectNav={handleNavSelect}
               onPendingCountChange={setPendingApprovals}
             />
+</Page>
           </AppLayout>
         )}
       </ProtectedRoute>

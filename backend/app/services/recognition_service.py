@@ -225,6 +225,18 @@ async def verify_and_mark(
         )
         return MarkResult(status="rejected", identity=identity, reason="not_on_roster")
 
+    # A timetable session marks the round that is open (ENTRY or EXIT).
+    if session.get("slot_id"):
+        from app.services.rounds_service import mark_from_recognition
+
+        profile = await db["student_profiles"].find_one({"identity": identity}) or {}
+        outcome = await mark_from_recognition(db, session, identity, profile)
+        if outcome == "no_round_open":
+            return MarkResult(status="rejected", identity=identity, reason="no_round_open")
+        if outcome == "locked":
+            return MarkResult(status="locked", identity=identity, reason="manually_corrected")
+        return MarkResult(status=outcome, identity=identity)
+
     existing = await db["attendance_records"].find_one(
         {"session_id": session_id, "identity": identity}
     )

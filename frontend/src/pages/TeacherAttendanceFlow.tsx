@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api, getApiBaseUrl } from "../services";
 import type {
+  AttendanceSessionResponse,
   AttendanceSummaryItem,
   TeacherDashboardResponse,
   TeacherSessionSummaryItem,
@@ -14,6 +15,8 @@ import { Pagination } from "../components/common/Pagination";
 import { TEACHER_PENDING_TEXT, isTeacherPendingError } from "../utils/registration.ts";
 import { TodayTimetable } from "../components/teacher/TodayTimetable";
 import type { TeacherSlot } from "../utils/teaching.ts";
+import { RoundControls } from "../components/teacher/RoundControls";
+import { shouldSendFrames, type RoundInfo } from "../utils/rounds.ts";
 
 const SESSIONS_PAGE_SIZE = 15;
 
@@ -181,6 +184,16 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
   // Fetch teacher dashboard data
   const [waitingForApproval, setWaitingForApproval] = useState(false);
+  // Timetable sessions: ENTRY / EXIT rounds, and manual mode (no camera).
+  const [roundInfo, setRoundInfo] = useState<RoundInfo | null>(null);
+  const [manualMode, setManualMode] = useState(false);
+  const roundInfoRef = useRef<RoundInfo | null>(null);
+  const applyAttendance = (attData: AttendanceSessionResponse) => {
+    setRecords(attData.records);
+    const info = attData.round_info ?? null;
+    setRoundInfo(info);
+    roundInfoRef.current = info;
+  };
 
   const fetchTeacherData = async () => {
     try {
@@ -238,7 +251,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
       // 4. Fetch roster
       const attData = await api.getSessionAttendance(session.session_id);
-      setRecords(attData.records);
+      applyAttendance(attData);
 
       setCallout({ name: "Scanning", status: "IDLE" });
       setViewedNotTaken(false);
@@ -262,7 +275,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     setSelectedClass(slot.label);
     setSelectedSubject(slot.subject);
     const attData = await api.getSessionAttendance(openedId);
-    setRecords(attData.records);
+    applyAttendance(attData);
     setCallout({ name: "Scanning", status: "IDLE" });
     setViewedNotTaken(false);
     setStep(2);
@@ -280,7 +293,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       if (activeSess.subject) setSelectedSubject(activeSess.subject);
 
       const attData = await api.getSessionAttendance(activeSess.session_id);
-      setRecords(attData.records);
+      applyAttendance(attData);
       setCallout({ name: "Session Resumed", status: "IDLE" });
       setViewedNotTaken(false);
       setStep(2);
@@ -304,7 +317,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       if (pastSess.subject) setSelectedSubject(pastSess.subject);
 
       const attData = await api.getSessionAttendance(pastSess.session_id);
-      setRecords(attData.records);
+      applyAttendance(attData);
       setViewedNotTaken(attData.was_taken === false);
       setStep(3);
       if (onSelectNav) onSelectNav("attendance");
@@ -415,6 +428,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     // Periodic frame sampling from browser video element to Vision Service
     const frameInterval = setInterval(() => {
       if (isProcessingRef.current) return;
+      // A timetable session marks only the open round: no round, no frames.
+      if (!shouldSendFrames(roundInfoRef.current)) return;
       const video = videoRef.current;
       if (!video || video.readyState < 2 || video.paused || video.ended) return;
 
@@ -532,7 +547,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     const rosterInterval = setInterval(async () => {
       try {
         const attData = await api.getSessionAttendance(sessionId);
-        setRecords(attData.records);
+        applyAttendance(attData);
 
         const currentMarked = (attData.records as AttendanceSummaryItem[]).filter(
           (r: AttendanceSummaryItem) => r.status === "PRESENT"
@@ -566,7 +581,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       await api.endSession(sessionId);
 
       const attData = await api.getSessionAttendance(sessionId);
-      setRecords(attData.records);
+      applyAttendance(attData);
       setStep(3);
       fetchTeacherData();
     } catch (err: unknown) {
@@ -986,6 +1001,21 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
             {/* Right: Students Present */}
             <div className="erp-students-present-pane">
+              {roundInfo && sessionId && (
+                <RoundControls
+                  sessionId={sessionId}
+                  info={roundInfo}
+                  records={records}
+                  manualMode={manualMode}
+                  onManualMode={(on) => {
+                    setManualMode(on);
+                    if (on) stopCameraStream();
+                    else void startCameraStream();
+                  }}
+                  onChanged={async () => applyAttendance(await api.getSessionAttendance(sessionId))}
+                />
+              )}
+              {!roundInfo && (<>
               <div className="erp-roster-header">
                 <div>
                   <h3 className="erp-roster-title">Students Present</h3>
@@ -1012,6 +1042,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                   );
                 })}
               </div>
+              </>)}
             </div>
           </div>
 

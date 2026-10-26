@@ -450,6 +450,18 @@ export const api = {
     });
   },
 
+  // --- ENTRY / EXIT rounds ---
+  changeRound(sessionId: string, round: "ENTRY" | "EXIT", action: "open" | "close"): Promise<unknown> {
+    return request<unknown>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/rounds/${round}/${action}`, { method: "POST" });
+  },
+
+  markRound(sessionId: string, round: "ENTRY" | "EXIT", identity: string, status: "PRESENT" | "ABSENT", reason = ""): Promise<unknown> {
+    return request<unknown>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/rounds/${round}/marks`, {
+      method: "POST",
+      body: JSON.stringify({ identity, status, reason }),
+    });
+  },
+
   // --- Teachers on the timetable ---
   setTeacherClasses(userId: string, classIds: string[]): Promise<{ teacher_id: string; class_ids: string[] }> {
     return request<{ teacher_id: string; class_ids: string[] }>(`/api/v1/admin/org/teachers/${encodeURIComponent(userId)}/classes`, {

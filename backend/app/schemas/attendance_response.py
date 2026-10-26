@@ -21,6 +21,9 @@ class AttendanceSummaryItem(BaseModel):
     manually_corrected: bool = False
     requires_review: bool = False
     anomalies: list[str] = []
+    # Timetable sessions: the ENTRY / EXIT marks and the lectures they give.
+    rounds: Optional[dict] = None
+    lectures: Optional[list[str]] = None
 
 
 class AttendanceSessionResponse(BaseModel):
@@ -35,3 +38,5 @@ class AttendanceSessionResponse(BaseModel):
     # False when the session was never taken: its records are not absences.
     was_taken: bool = True
     records: list[AttendanceSummaryItem]
+    # Timetable sessions: periods, the open round, rounds held, edit window.
+    round_info: Optional[dict] = None

@@ -89,6 +89,18 @@ async def finalize_session_attendance(
 
     final_records = []
 
+    # A timetable session's marks come from its ENTRY and EXIT rounds and are
+    # already worked out: finalizing closes the open round and keeps them.
+    session_doc = await get_session(session_id)
+    if session_doc and session_doc.get("slot_id"):
+        from app.services.rounds_service import close_open_round
+
+        await close_open_round(db, session_id)
+        final_records = [records_by_ident[i] for i in roster.identities if i in records_by_ident]
+        await update_session_status(session_id, "FINALIZED")
+        logger.info("Session %s (rounds) finalized: %d records", session_id, len(final_records))
+        return final_records
+
     for identity in roster.identities:
         s_info = student_map.get(identity, {})
         stu_id = s_info.get("student_id", identity)

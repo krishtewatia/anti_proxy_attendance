@@ -65,6 +65,8 @@ AuditAction = Literal[
     "SECTION_LIST_UPLOADED",
     "SECTION_LIST_DELETED",
     "TEACHER_ASSIGNED",
+    "SESSION_ROUND_CHANGED",
+    "SESSION_UNLOCKED",
 ]
 
 AuditResourceType = Literal[

@@ -1,3 +1,4 @@
+import type { RoundInfo } from "../utils/rounds.ts";
 export type AttendanceStatus = 'PRESENT' | 'ABSENT';
 
 export interface AttendanceInterval {
@@ -29,6 +30,9 @@ export interface AttendanceSummaryItem {
   required_presence_percentage: number;
   status: string;
   manually_corrected?: boolean;
+  // Timetable sessions: the ENTRY / EXIT marks and the lectures they give.
+  rounds?: Partial<Record<"ENTRY" | "EXIT", { status: "PRESENT" | "ABSENT" | null; at?: string | null; source?: string | null }>> | null;
+  lectures?: string[] | null;
 }
 
 export interface AttendanceSessionResponse {
@@ -39,6 +43,7 @@ export interface AttendanceSessionResponse {
   // false when the session was never taken: its records are not absences.
   was_taken?: boolean;
   records: AttendanceSummaryItem[];
+  round_info?: RoundInfo | null;
 }
 
 export interface SessionFinalizationResponse {

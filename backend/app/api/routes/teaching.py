@@ -1,13 +1,19 @@
 """Teachers on the timetable: class assignment (admin), the teacher's timetable,
 and starting a session from a timetable slot."""
 
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.api.dependencies.auth import require_admin, require_teacher
+from app.api.dependencies.auth import (
+    get_owned_session,
+    require_admin,
+    require_teacher,
+    require_teacher_or_admin,
+)
 from app.database.mongodb import get_database
+from app.services import rounds_service as rounds
 from app.services import teaching_service as teaching
 
 router = APIRouter(tags=["teaching"])
@@ -89,3 +95,80 @@ async def start_from_slot(
     except teaching.TeachingError as exc:
         raise _http(exc) from exc
     return teaching.public_session(session)
+
+
+# ------------------------------------------------------------------ rounds
+
+
+class RoundMark(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    identity: str = Field(min_length=1, max_length=128)
+    status: Literal["PRESENT", "ABSENT"]
+    reason: str = Field(default="", max_length=500)
+
+
+def _round_http(exc: rounds.RoundError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=str(exc))
+
+
+async def _change_round(session_id: str, round_name: str, open_: bool, current_user: dict) -> dict:
+    session = await get_owned_session(session_id, current_user)
+    try:
+        return await rounds.set_round(
+            get_database(), session, round_name.upper(), open_=open_, actor=current_user
+        )
+    except rounds.RoundError as exc:
+        raise _round_http(exc) from exc
+
+
+@router.post(
+    "/api/v1/sessions/{session_id}/rounds/{round_name}/open", summary="Open the ENTRY or EXIT round"
+)
+async def open_round(
+    session_id: str, round_name: str, current_user: Annotated[dict, Depends(require_teacher)]
+) -> dict:
+    return await _change_round(session_id, round_name, True, current_user)
+
+
+@router.post("/api/v1/sessions/{session_id}/rounds/{round_name}/close", summary="Close the round")
+async def close_round(
+    session_id: str, round_name: str, current_user: Annotated[dict, Depends(require_teacher)]
+) -> dict:
+    return await _change_round(session_id, round_name, False, current_user)
+
+
+@router.post(
+    "/api/v1/sessions/{session_id}/rounds/{round_name}/marks",
+    summary="Mark a student in a round by hand",
+)
+async def mark_round(
+    session_id: str,
+    round_name: str,
+    payload: RoundMark,
+    current_user: Annotated[dict, Depends(require_teacher_or_admin)],
+) -> dict:
+    session = await get_owned_session(session_id, current_user)
+    try:
+        return await rounds.mark_by_hand(
+            get_database(),
+            session,
+            round_name.upper(),
+            payload.identity,
+            payload.status,
+            payload.reason,
+            current_user,
+        )
+    except rounds.RoundError as exc:
+        raise _round_http(exc) from exc
+
+
+@router.post(
+    "/api/v1/admin/sessions/{session_id}/unlock",
+    summary="Let the teacher correct a closed session again (48 h)",
+)
+async def unlock_session(
+    session_id: str, current_user: Annotated[dict, Depends(require_admin)]
+) -> dict:
+    session = await get_owned_session(session_id, current_user)
+    return await rounds.unlock(get_database(), session, current_user)
