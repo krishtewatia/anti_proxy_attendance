@@ -42,7 +42,7 @@ async function run() {
 
   console.log("[3/4] Student and teacher menus...");
   expect(menu("STUDENT").join() === "Home,My Setup,Attendance,Profile", `student menu: ${menu("STUDENT")}`);
-  expect(menu("TEACHER").join() === "Home,Take Attendance,Sessions,Profile", `teacher menu: ${menu("TEACHER")}`);
+  expect(menu("TEACHER").join() === "Home,My Classes,Take Attendance,Sessions,Profile", `teacher menu: ${menu("TEACHER")}`);
   const student = readFileSync("src/pages/StudentDashboard.tsx", "utf-8");
   expect(student.includes("{renderAttendanceView()}") && student.includes("{renderHistoryView()}"), "attendance and history on one page");
 

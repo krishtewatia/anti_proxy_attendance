@@ -16,6 +16,7 @@ import { TEACHER_PENDING_TEXT, isTeacherPendingError } from "../utils/registrati
 import { TodayTimetable } from "../components/teacher/TodayTimetable";
 import type { TeacherSlot } from "../utils/teaching.ts";
 import { RoundControls } from "../components/teacher/RoundControls";
+import { MyClasses } from "../components/teacher/MyClasses";
 import { shouldSendFrames, type RoundInfo } from "../utils/rounds.ts";
 
 const SESSIONS_PAGE_SIZE = 15;
@@ -1334,7 +1335,10 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
         <div className="erp-card" style={{ padding: "2rem", maxWidth: "640px" }}>
           <h1 className="erp-page-title" style={{ marginTop: 0 }}>Welcome</h1>
           <div className="alert-banner warning" role="status">
-            <span>{TEACHER_PENDING_TEXT} You can sign in meanwhile; nothing else is needed from you.</span>
+            <span>{TEACHER_PENDING_TEXT} Choose your subjects and sections below; an administrator approves them.</span>
+          </div>
+          <div style={{ marginTop: "1.25rem" }}>
+            <MyClasses />
           </div>
         </div>
       ) : (
@@ -1347,6 +1351,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
             </>
           )}
           {activeNavId === "attendance" && renderAttendanceWorkflow()}
+          {activeNavId === "myclasses" && <MyClasses />}
           {activeNavId === "sessions" && renderSessionsView()}
           {activeNavId === "profile" && renderProfileView()}
         </>

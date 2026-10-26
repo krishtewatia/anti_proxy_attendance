@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../../services";
 import { AuthenticatedImage } from "../common/AuthenticatedImage";
 import { SetupRequestsSection } from "./SetupRequestsSection";
+import { TeacherRequestsSection } from "./TeacherRequestsSection";
 import { EMPTY_SELECTION, type NavSelection, type NavYear } from "../../utils/orgNavigator.ts";
 import type { Cohort } from "../../utils/organisation.ts";
 import { SectionListsSection } from "./academic/SectionListsSection";
@@ -207,6 +208,10 @@ export const ApprovalsTab: React.FC<ApprovalsTabProps> = ({ classCodes, branches
             </div>
           )}
         </div>
+      )}
+
+      {counts && counts.teacher_requests > 0 && (
+        <TeacherRequestsSection onChanged={(text) => { setBanner({ type: "success", text }); void load(); }} />
       )}
 
       {counts && counts.setup_requests > 0 && <SetupRequestsSection years={years} selection={selection} onSelect={onSelect} onChanged={(text) => { setBanner({ type: "success", text }); void load(); }} />}

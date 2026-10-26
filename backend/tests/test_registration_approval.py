@@ -238,7 +238,7 @@ async def test_pending_list_shows_each_kind_with_counts(stub_vision_embedding):
 
     body = listing.json()
     assert body["counts"] == {
-        "students": 1, "teachers": 1, "accounts": 0, "photo_changes": 0, "setup_requests": 0, "total": 2,
+        "students": 1, "teachers": 1, "accounts": 0, "photo_changes": 0, "setup_requests": 0, "teacher_requests": 0, "total": 2,
     }
     assert count.json() == body["counts"]
     assert body["students"][0]["student_id"] == "APR001"
