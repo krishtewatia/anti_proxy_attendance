@@ -1,0 +1,40 @@
+# Uptime check during college hours: the site, its database and the vision
+# service must answer. A failed run makes GitHub email the repository owner.
+# It reads only the public SITE_URL variable: no secrets, no AWS.
+# Set the repository variable UPTIME_ENABLED to "false" to pause it (for
+# example while the instance is stopped on purpose).
+name: Uptime
+
+on:
+  schedule:
+    # Every 15 minutes, 08:30 to 18:15 IST (03:00-12:45 UTC), Monday to Saturday.
+    - cron: "*/15 3-12 * * 1-6"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  ready:
+    if: vars.UPTIME_ENABLED != 'false' && vars.SITE_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - name: The site, its database and the vision service answer
+        run: |
+          url="${SITE_URL%/}/api/v1/health/ready"
+          for attempt in 1 2 3; do
+            body="$(curl --silent --show-error --max-time 20 --write-out ' HTTP %{http_code}' "$url" || true)"
+            echo "attempt $attempt: $body"
+            case "$body" in
+              *"HTTP 200") exit 0 ;;
+            esac
+            sleep 30
+          done
+          echo "::error::$url did not answer as ready three times in a row."
+          exit 1

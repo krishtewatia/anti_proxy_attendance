@@ -12,6 +12,8 @@
     python infra/scripts/tf.py certificate   make the instance use the certificate authority set in terraform.tfvars
     python infra/scripts/tf.py deploy    switch the running instance to the current origin/main
     python infra/scripts/tf.py backup    take a backup now and list the stored backups
+    python infra/scripts/tf.py restore-drill   restore the newest backup into a throwaway local database and count it
+    python infra/scripts/tf.py golive-reset    take a backup, then clear the test data (asks before deleting)
     python infra/scripts/tf.py github-vars   the repository variables the deploy pipeline needs
     python infra/scripts/tf.py destroy   remove everything, including the secrets
 
@@ -26,12 +28,16 @@ apply twice: once to start the instance, once to allow its new address.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import http.client
 import json
+import shutil
 import ssl
 import sys
+import tempfile
 import time
 import urllib.parse
+from pathlib import Path
 
 from common import (
     REPO_ROOT,
@@ -282,9 +288,123 @@ def catch_up() -> int:
     return run_on_instance(out, out["deploy_document"], {"ReleaseSha": [newest]}, wait_seconds=900)
 
 
+# ------------------------------------------------------------------ backups
+
+BACKUP_MAX_AGE_HOURS = 26
+DRILL_CONTAINER = "antiproxy-restore-drill"
+DRILL_PORT = 27098
+COMPOSE_ON_INSTANCE = (
+    "cd /opt/antiproxy/app && docker compose --env-file /opt/antiproxy/config.env "
+    "--env-file /run/antiproxy/env -f docker-compose.prod.yml"
+)
+
+
+def backup_listing(out: dict[str, str]) -> list[tuple[str, int, str]]:
+    """(key, size, last modified) of every stored backup file, oldest first."""
+    listing = aws(
+        "s3api", "list-objects-v2", "--bucket", out["backup_bucket"],
+        "--query", "Contents[].[Key, Size, LastModified]",
+        region=out.get("aws_region"), check=False,
+    )
+    rows = json.loads(listing.stdout or "null") or []
+    return sorted(((k, int(n), m) for k, n, m in rows), key=lambda row: row[2])
+
+
+def newest_backup(rows: list[tuple[str, int, str]], name: str = "database.archive.gz") -> tuple[str, int, str] | None:
+    found = [row for row in rows if row[0].endswith("/" + name)]
+    return found[-1] if found else None
+
+
+def backup_age_hours(last_modified: str, now: datetime | None = None) -> float:
+    """Hours since an S3 LastModified time such as 2026-10-26T18:00:05+00:00 or ...Z."""
+    stamp = datetime.fromisoformat(last_modified.replace("Z", "+00:00"))
+    now = now or datetime.now(timezone.utc)
+    return (now - stamp).total_seconds() / 3600
+
+
+def restore_target_is_local(uri: str) -> bool:
+    """The drill only ever restores into a database on this machine."""
+    host = urllib.parse.urlsplit(uri).hostname or ""
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
+# Counts per collection and the newest session day, printed as one JSON line.
+DRILL_COUNT_SCRIPT = (
+    "const d = db.getSiblingDB(process.env.DB || 'anti_proxy_attendance');"
+    "const out = {};"
+    "d.getCollectionNames().sort().forEach(c => { out[c] = d.getCollection(c).estimatedDocumentCount(); });"
+    "const s = d.sessions.find({}, {date: 1}).sort({date: -1}).limit(1).toArray();"
+    "print(JSON.stringify({counts: out, newest_session_day: s.length ? s[0].date : null}));"
+)
+
+
+def restore_drill(out: dict[str, str]) -> int:
+    rows = backup_listing(out)
+    newest = newest_backup(rows)
+    if newest is None:
+        fail("no database backup is stored yet. Run `python infra/scripts/tf.py backup` first.")
+    key, size, modified = newest
+    photos = newest_backup(rows, "uploads.tar.gz")
+    uri = f"mongodb://127.0.0.1:{DRILL_PORT}"
+    if not restore_target_is_local(uri):
+        fail("the drill restores only into a database on this machine.")
+    work = Path(tempfile.mkdtemp(prefix="antiproxy-drill-"))
+    try:
+        print(f"Newest backup: {key} ({size / 1e6:.1f} MB, {backup_age_hours(modified):.1f} h old)")
+        archive = work / "database.archive.gz"
+        aws("s3", "cp", "--only-show-errors", f"s3://{out['backup_bucket']}/{key}", str(archive),
+            region=out.get("aws_region"))
+        run(["docker", "rm", "-f", DRILL_CONTAINER], capture=True, check=False)
+        run(["docker", "run", "-d", "--name", DRILL_CONTAINER, "-p", f"127.0.0.1:{DRILL_PORT}:27017", "mongo:8.0"], capture=True)
+        for _ in range(30):
+            if run(["docker", "exec", DRILL_CONTAINER, "mongosh", "--quiet", "--eval", "db.runCommand({ping: 1}).ok"],
+                   capture=True, check=False).returncode == 0:
+                break
+            time.sleep(1)
+        run(["docker", "cp", str(archive), f"{DRILL_CONTAINER}:/tmp/database.archive.gz"], capture=True)
+        run(["docker", "exec", DRILL_CONTAINER, "mongorestore", "--quiet", "--gzip",
+             "--archive=/tmp/database.archive.gz"], capture=True)
+        counted = run(["docker", "exec", DRILL_CONTAINER, "mongosh", "--quiet", "--eval", DRILL_COUNT_SCRIPT],
+                      capture=True)
+        report = json.loads(counted.stdout.strip().splitlines()[-1])
+        print("Restored into a throwaway local database. Documents per collection:")
+        for name, count in report["counts"].items():
+            print(f"  {count:>8}  {name}")
+        print(f"Newest session day in the backup: {report['newest_session_day'] or '(none)'}")
+        if photos:
+            print(f"Photo archive stored: {photos[0]} ({photos[1] / 1e6:.1f} MB); not downloaded.")
+        print("Compare these numbers with the live site. The drill passed if they match.")
+        return 0
+    finally:
+        run(["docker", "rm", "-f", DRILL_CONTAINER], capture=True, check=False)
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def golive_reset(out: dict[str, str], ask=input) -> int:
+    print("1/3 Taking a backup first ...")
+    if run_on_instance(out, "AWS-RunShellScript", {"commands": ["/opt/antiproxy/backup.sh"]}, wait_seconds=600) != 0:
+        print("The backup failed, so nothing was deleted.")
+        return 1
+    tool = (
+        COMPOSE_ON_INSTANCE + " exec -T backend sh -c "
+        "'python -m app.tools.golive_reset --database \"${DATABASE_NAME:-anti_proxy_attendance}\" \"$@\"' _"
+    )
+    print("2/3 What would be removed:")
+    if run_on_instance(out, "AWS-RunShellScript", {"commands": [tool]}, wait_seconds=300) != 0:
+        return 1
+    answer = ask("Type the 'Total to remove' number to delete exactly that, or press Enter to stop: ").strip()
+    if not answer.isdigit():
+        print("Stopped. Nothing was deleted.")
+        return 0
+    print("3/3 Deleting ...")
+    return run_on_instance(
+        out, "AWS-RunShellScript", {"commands": [f"{tool} --apply --expect {int(answer)}"]}, wait_seconds=900
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["preflight", "secrets", "up", "stop", "start", "status", "plan", "logs", "certificate", "deploy", "backup", "github-vars", "destroy"])
+    parser.add_argument("command", choices=["preflight", "secrets", "up", "stop", "start", "status", "plan", "logs", "certificate", "deploy", "backup", "restore-drill", "golive-reset", "github-vars", "destroy"])
     command = parser.parse_args().command
     if command == "preflight":
         import preflight
@@ -332,6 +452,13 @@ def main() -> int:
         print(f"instance : {out['instance_id']} ({json.loads(state.stdout) if state.stdout.strip() else 'unknown'})")
         print(f"address  : {public_ip() or '(none while stopped)'}")
         print(f"site     : {out.get('site_url')}")
+        newest = newest_backup(backup_listing(out)) if out.get("backup_bucket") else None
+        if newest is None:
+            print("backup   : none stored yet")
+        else:
+            age = backup_age_hours(newest[2])
+            warning = "  <- older than expected, check the nightly backup" if age > BACKUP_MAX_AGE_HOURS else ""
+            print(f"backup   : {newest[0]} ({age:.1f} h old){warning}")
         return 0
 
     if command == "logs":
@@ -370,6 +497,12 @@ def main() -> int:
         for key, size, modified in json.loads(listing.stdout or "null") or []:
             print(f"  {modified[:19]}  {size:>10}  {key}")
         return code
+
+    if command in ("restore-drill", "golive-reset"):
+        out = outputs()
+        if not out.get("backup_bucket"):
+            fail("nothing has been created yet.")
+        return restore_drill(out) if command == "restore-drill" else golive_reset(out)
 
     if command == "github-vars":
         out = outputs()

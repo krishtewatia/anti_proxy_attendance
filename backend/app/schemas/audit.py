@@ -70,6 +70,7 @@ AuditAction = Literal[
     "TEACHER_CLASSES_REQUESTED",
     "TEACHER_CLASSES_APPROVED",
     "TEACHER_CLASSES_REJECTED",
+    "GOLIVE_RESET",
 ]
 
 AuditResourceType = Literal[

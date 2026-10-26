@@ -1,0 +1,41 @@
+# Optional override for scripts/load_test.py: a separate, throwaway copy of the
+# stack (own containers, own database and uploads volumes) limited to roughly
+# the t3.small instance's size (2 vCPU, 2 GB), so the numbers resemble it.
+#
+#   docker compose -p antiproxy-loadtest -f docker-compose.yml -f docker-compose.loadtest.yml up -d --build
+#   docker compose -p antiproxy-loadtest -f docker-compose.yml -f docker-compose.loadtest.yml down
+#   docker volume rm antiproxy_lt_mongo_data antiproxy_lt_vision_outbox antiproxy_lt_uploads
+#
+# Production does not use this file. Only the model cache is shared with the
+# normal local stack (it holds the downloaded models, nothing personal), so
+# never use `down -v` here: it would delete that cache too.
+services:
+  backend:
+    container_name: antiproxy-lt-backend
+    cpus: 0.8
+    mem_limit: 640m
+  vision-service:
+    container_name: antiproxy-lt-vision-service
+    cpus: 1.0
+    mem_limit: 1024m
+  frontend:
+    container_name: antiproxy-lt-frontend
+    cpus: 0.1
+    mem_limit: 128m
+  mongodb:
+    container_name: antiproxy-lt-mongodb
+    # Production uses Atlas (outside the instance), so this is on top of the 2 vCPU.
+    cpus: 0.5
+    mem_limit: 512m
+
+volumes:
+  mongo_data:
+    name: antiproxy_lt_mongo_data
+  vision_outbox:
+    name: antiproxy_lt_vision_outbox
+  uploads_data:
+    name: antiproxy_lt_uploads
+
+networks:
+  anti-proxy-net:
+    name: antiproxy-lt-network
