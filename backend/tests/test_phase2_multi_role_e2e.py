@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.database import mongodb
 from app.main import app
+from app.services.registration_rules import CONSENT_NOTICE_VERSION
 from tests.conftest import FRAME_BYTES
 
 # Needs the seeded demo accounts and a running vision service (see README).
@@ -63,6 +64,7 @@ async def test_phase2_student_registration_and_biometric(stub_vision_embedding):
             "branch": "Data Science",
             "section": "B",
             "photo_base64": dummy_b64,
+            "consent_version": CONSENT_NOTICE_VERSION,
         }
 
         try:
