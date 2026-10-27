@@ -7,7 +7,8 @@ import type {
   TeacherSessionSummaryItem,
   UserResponse,
 } from "../types";
-import { countNotInClass, getFaceOverlayStyle, hasSpoof, isMarked } from "../utils/faceOverlay";
+import { countNotInClass, getFaceOverlayStyle, hasSpoof, isMarked, type OverlayFace } from "../utils/faceOverlay";
+import { faceNeedsAnotherLook, greyThumbnail, shouldSend, thumbnailDifference, THUMB_HEIGHT, THUMB_WIDTH } from "../utils/frameGate.ts";
 import "./teacher-attendance-flow.css";
 import { paginate, sessionStatusBadgeClass, sessionStatusLabel } from "../utils/sessions.ts";
 import { formatDate, formatSessionTurnout } from "../utils/dates.ts";
@@ -81,6 +82,13 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const isProcessingRef = useRef<boolean>(false);
+  // The frame gate: what was last sent and answered, and how many frames were skipped.
+  const thumbCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastSentThumbRef = useRef<Uint8Array | null>(null);
+  const lastSentAtRef = useRef<number>(0);
+  const lastFacesRef = useRef<OverlayFace[] | null>(null);
+  const frameCountsRef = useRef({ sent: 0, skipped: 0 });
+  const [frameCounts, setFrameCounts] = useState({ sent: 0, skipped: 0 });
   const prevMarkedCountRef = useRef<number>(0);
 
   // Enumerate available video inputs (Laptop built-in, USB webcams)
@@ -453,6 +461,32 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       if (!ctx) return;
       ctx.drawImage(video, 0, 0, targetW, targetH);
 
+      // Skip frames with nothing new to recognise (see utils/frameGate.ts).
+      if (!thumbCanvasRef.current) {
+        thumbCanvasRef.current = document.createElement("canvas");
+        thumbCanvasRef.current.width = THUMB_WIDTH;
+        thumbCanvasRef.current.height = THUMB_HEIGHT;
+      }
+      const thumbCtx = thumbCanvasRef.current.getContext("2d", { willReadFrequently: true });
+      let thumb: Uint8Array | null = null;
+      if (thumbCtx) {
+        thumbCtx.drawImage(canvas, 0, 0, THUMB_WIDTH, THUMB_HEIGHT);
+        thumb = greyThumbnail(thumbCtx.getImageData(0, 0, THUMB_WIDTH, THUMB_HEIGHT).data);
+      }
+      const now = Date.now();
+      const send = shouldSend({
+        difference: thumbnailDifference(lastSentThumbRef.current, thumb),
+        needsAnotherLook: faceNeedsAnotherLook(lastFacesRef.current),
+        msSinceSent: now - lastSentAtRef.current,
+      });
+      if (!send) {
+        frameCountsRef.current.skipped += 1;
+        return;
+      }
+      lastSentThumbRef.current = thumb;
+      lastSentAtRef.current = now;
+      frameCountsRef.current.sent += 1;
+
       isProcessingRef.current = true;
       canvas.toBlob(
         async (blob) => {
@@ -484,6 +518,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
             if (res && res.ok) {
               const data = await res.json();
+              lastFacesRef.current = Array.isArray(data.faces) ? data.faces : null;
               setSpoofDetected(hasSpoof(data.faces));
               setNotInClass(countNotInClass(data.faces));
               if (data.faces && Array.isArray(data.faces) && data.faces.length > 0) {
@@ -551,6 +586,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
     // Periodic roster sync from backend
     const rosterInterval = setInterval(async () => {
+      setFrameCounts({ ...frameCountsRef.current });
       try {
         const attData = await api.getSessionAttendance(sessionId);
         applyAttendance(attData);
@@ -1000,6 +1036,11 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
               </div>
               <div className="erp-camera-footer">
                 Live Camera Feed
+                {frameCounts.sent + frameCounts.skipped > 0 && (
+                  <span title="Frames with nothing new to recognise are not sent, so the other classes' cameras get answers sooner.">
+                    {" "}· sent {frameCounts.sent} · skipped {frameCounts.skipped}
+                  </span>
+                )}
               </div>
             </div>
 

@@ -1,0 +1,8 @@
+[
+  { "case": "nothing changed, nobody to look at", "difference": 1.2, "needsAnotherLook": false, "msSinceSent": 800, "send": false },
+  { "case": "someone walked in", "difference": 14.0, "needsAnotherLook": false, "msSinceSent": 300, "send": true },
+  { "case": "just over the threshold", "difference": 6.0, "needsAnotherLook": false, "msSinceSent": 0, "send": true },
+  { "case": "just under the threshold", "difference": 5.9, "needsAnotherLook": false, "msSinceSent": 2999, "send": false },
+  { "case": "an unrecognised face is in view", "difference": 0.5, "needsAnotherLook": true, "msSinceSent": 250, "send": true },
+  { "case": "heartbeat", "difference": 0.0, "needsAnotherLook": false, "msSinceSent": 3000, "send": true }
+]

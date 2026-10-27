@@ -12,11 +12,13 @@
 services:
   backend:
     container_name: antiproxy-lt-backend
-    cpus: 0.8
+    # Production-like by default: backend and vision together get the t3.small's
+    # 2 vCPU. LT_VISION_CPUS=1.0 LT_BACKEND_CPUS=0.8 is the earlier worst case.
+    cpus: ${LT_BACKEND_CPUS:-0.5}
     mem_limit: 640m
   vision-service:
     container_name: antiproxy-lt-vision-service
-    cpus: 1.0
+    cpus: ${LT_VISION_CPUS:-1.5}
     mem_limit: 1024m
   frontend:
     container_name: antiproxy-lt-frontend
