@@ -7,7 +7,7 @@ import type {
   TeacherSessionSummaryItem,
   UserResponse,
 } from "../types";
-import { getFaceOverlayStyle, hasSpoof } from "../utils/faceOverlay";
+import { countNotInClass, getFaceOverlayStyle, hasSpoof, isMarked } from "../utils/faceOverlay";
 import "./teacher-attendance-flow.css";
 import { paginate, sessionStatusBadgeClass, sessionStatusLabel } from "../utils/sessions.ts";
 import { formatDate, formatSessionTurnout } from "../utils/dates.ts";
@@ -66,6 +66,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     status: "IDLE",
   });
   const [spoofDetected, setSpoofDetected] = useState(false);
+  const [notInClass, setNotInClass] = useState(0);
   const [cameraOnline, setCameraOnline] = useState<boolean>(false);
   const [cameraStatus, setCameraStatus] = useState<
     "FREE" | "REQUESTING_CAMERA" | "CAMERA_READY" | "ATTENDANCE_ACTIVE" | "STOPPING_CAMERA" | "PERMISSION_DENIED" | "UNAVAILABLE"
@@ -353,6 +354,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       similarity?: number;
       confidence_percent?: number;
       status?: string;
+      mark_status?: string;
+      mark_reason?: string;
     }>,
     sourceW = 640,
     sourceH = 480
@@ -482,11 +485,11 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
             if (res && res.ok) {
               const data = await res.json();
               setSpoofDetected(hasSpoof(data.faces));
+              setNotInClass(countNotInClass(data.faces));
               if (data.faces && Array.isArray(data.faces) && data.faces.length > 0) {
                 drawRecognitionOverlay(data.faces, data.frame_width || targetW, data.frame_height || targetH);
-                const recognizedStudents = data.faces.filter(
-                  (f: any) => f.status === "recognized" && f.name && f.name !== "UNKNOWN"
-                );
+                // Only faces the server actually marked count as present.
+                const recognizedStudents = data.faces.filter((f: any) => isMarked(f));
                 if (recognizedStudents.length > 0) {
                   const top = recognizedStudents[0];
                   setCallout({
@@ -976,6 +979,15 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                 {spoofDetected && (
                   <div className="erp-spoof-callout" role="alert">
                     Spoof detected: a photo or screen was shown to the camera. No attendance was marked for it.
+                  </div>
+                )}
+
+                {/* Recognised, but not on this class's list: say why nobody was marked */}
+                {!spoofDetected && notInClass > 0 && (
+                  <div className="erp-spoof-callout erp-not-in-class-callout" role="status">
+                    {notInClass === 1 ? "This face is" : `${notInClass} faces are`} not on this class's list, so not
+                    marked. The student must finish setup for this section and be approved; they are then marked
+                    on the next frame.
                   </div>
                 )}
 

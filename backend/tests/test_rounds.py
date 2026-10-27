@@ -188,3 +188,58 @@ async def test_the_edit_window_and_the_admin_unlock():
     assert teacher_unlock.status_code == 403
     assert late.status_code == 403
     assert await db["audit_events"].count_documents({"action": "SESSION_UNLOCKED"}) == 1
+
+
+async def _late_student(section: str, n: int) -> str:
+    """A student approved for every class of ``section`` after the class started."""
+    from app.database.users import create_user
+
+    db = mongodb.get_database()
+    class_ids = [c["class_id"] async for c in db[org.CLASSES].find({"audience.section": section})]
+    user_id, identity = f"late_{section}{n}", f"stu_late_{section.lower()}{n}"
+    await create_user(user_id=user_id, email=f"{user_id}@niet.co.in", password_hash="x", role="STUDENT", status="APPROVED")
+    await db["student_profiles"].insert_one(
+        {"user_id": user_id, "identity": identity, "student_id": identity, "name": f"Late {section}{n}", "roll_number": f"77{ord(section)}{n:03d}"}
+    )
+    await db["enrolments"].insert_one({"user_id": user_id, "identity": identity, "section": section, "choices": {}, "class_ids": class_ids})
+    return identity
+
+
+@pytest.mark.anyio
+async def test_a_student_approved_after_the_class_started_is_added_and_marked(vision_frames, monkeypatch):
+    from app.services import recognition_service, teaching_service
+
+    db = mongodb.get_database()
+    recognition_service._NOT_IN_CLASS.clear()
+    async with _client() as client:
+        session_id, teacher, _, _ = await _session(client, periods=1)
+        late_b = await _late_student("B", 1)
+        other_c = await _late_student("C", 1)
+        await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/open", headers=teacher)
+        frame_url = f"/api/v1/attendance/{session_id}/process-frame"
+        vision_frames.faces = [vision_frames.recognized(session_id, late_b)]
+        late = (await client.post(frame_url, headers=teacher, content=b"f")).json()["faces"][0]
+
+        lookups = []
+        original = teaching_service.add_late_student
+
+        async def counted(db_, session, identity):
+            lookups.append(identity)
+            return await original(db_, session, identity)
+
+        monkeypatch.setattr(teaching_service, "add_late_student", counted)
+        outsider = []
+        for _ in range(3):
+            vision_frames.faces = [vision_frames.recognized(session_id, other_c)]
+            outsider.append((await client.post(frame_url, headers=teacher, content=b"f")).json()["faces"][0])
+        view = (await client.get(f"/api/v1/attendance/{session_id}", headers=teacher)).json()
+
+    roster = await db["session_rosters"].find_one({"session_id": session_id})
+    assert late["mark_status"] == "marked"
+    assert late_b in roster["identities"] and other_c not in roster["identities"]
+    assert (await _record(session_id, late_b))["rounds"]["ENTRY"]["status"] == "PRESENT"
+    assert late_b in {r["identity"] for r in view["records"]}
+    assert all(f["mark_status"] == "rejected" and f["mark_reason"] == "not_on_roster" for f in outsider)
+    assert outsider[0]["name"] != "UNKNOWN"  # still shown, with the reason
+    assert lookups == [other_c]  # asked once, then remembered for a minute
+    assert await db["audit_events"].count_documents({"action": "ROSTER_UPDATED", "metadata.added": late_b}) == 1

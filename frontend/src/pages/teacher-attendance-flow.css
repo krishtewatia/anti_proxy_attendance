@@ -446,3 +446,8 @@
   line-height: 1.35;
   z-index: 5;
 }
+
+/* A recognised face that is not on the class's list (amber, not an alarm) */
+.erp-not-in-class-callout {
+  background: rgba(217, 119, 6, 0.94);
+}

@@ -293,6 +293,73 @@ async def _roster(db: AsyncIOMotorDatabase, class_id: str) -> list[dict]:
     return [p async for p in profiles if p.get("identity") or p.get("student_id")]
 
 
+def _absent_record(session_id: str, student: dict, ident: str, now: datetime) -> dict:
+    """A roster student's record before any mark: absent."""
+    return {
+        "attendance_id": f"att_{session_id}_{ident}",
+        "session_id": session_id,
+        "identity": ident,
+        "student_id": student.get("student_id", ident),
+        "student_name": student.get("name", ident),
+        "roll_number": student.get("roll_number"),
+        "status": "ABSENT",
+        "marked_at": None,
+        "presence_intervals": [],
+        "presence_duration_seconds": 0.0,
+        "presence_percentage": 0.0,
+        "required_presence_percentage": 0.0,
+        "requires_review": False,
+        "anomalies": [],
+        "updated_at": now,
+    }
+
+
+async def add_late_student(db: AsyncIOMotorDatabase, session: dict, identity: str) -> bool:
+    """Put a student on a running timetable class's list if they belong to it now.
+
+    The list is fixed when the class starts. A student whose setup was approved
+    after that (or whose account was approved after that) belongs to the class
+    but is not on the list; recognising them adds them. Anyone else is refused.
+    """
+    class_id = session.get("class_id")
+    if not session.get("slot_id") or not class_id:
+        return False
+    profile = await db["student_profiles"].find_one(
+        {"$or": [{"identity": identity}, {"student_id": identity}]}, {"_id": 0}
+    )
+    if profile is None:
+        return False
+    belongs = await db[enrolment.ENROLMENTS].find_one(
+        {"user_id": profile["user_id"], "class_ids": class_id}, {"_id": 1}
+    )
+    approved = await db["users"].find_one(
+        {"user_id": profile["user_id"], "status": ACCOUNT_APPROVED}, {"_id": 1}
+    )
+    if belongs is None or approved is None:
+        return False
+    session_id = session["session_id"]
+    await db["session_rosters"].update_one(
+        {"session_id": session_id},
+        {"$set": {"session_id": session_id}, "$addToSet": {"identities": identity}},
+        upsert=True,
+    )
+    await db["attendance_records"].update_one(
+        {"session_id": session_id, "identity": identity},
+        {"$setOnInsert": _absent_record(session_id, profile, identity, _now())},
+        upsert=True,
+    )
+    await record_audit_event(
+        actor_user_id="system",
+        actor_role="SYSTEM",
+        action="ROSTER_UPDATED",
+        resource_type="SESSION_ROSTER",
+        resource_id=session_id,
+        metadata={"added": identity, "reason": "approved for this class after it started"},
+    )
+    logger.info("Added %s to the running class %s", identity, session_id)
+    return True
+
+
 async def start_from_slot(db: AsyncIOMotorDatabase, teacher: dict, slot_id: str, day: date) -> dict:
     slot = await db[org.SLOTS].find_one({"slot_id": slot_id}, {"_id": 0})
     if slot is None:
@@ -359,26 +426,7 @@ async def start_from_slot(db: AsyncIOMotorDatabase, teacher: dict, slot_id: str,
     if students:
         now = _now()
         await db["attendance_records"].insert_many(
-            [
-                {
-                    "attendance_id": f"att_{session_id}_{ident}",
-                    "session_id": session_id,
-                    "identity": ident,
-                    "student_id": s.get("student_id", ident),
-                    "student_name": s.get("name", ident),
-                    "roll_number": s.get("roll_number"),
-                    "status": "ABSENT",
-                    "marked_at": None,
-                    "presence_intervals": [],
-                    "presence_duration_seconds": 0.0,
-                    "presence_percentage": 0.0,
-                    "required_presence_percentage": 0.0,
-                    "requires_review": False,
-                    "anomalies": [],
-                    "updated_at": now,
-                }
-                for s, ident in zip(students, identities)
-            ]
+            [_absent_record(session_id, s, ident, now) for s, ident in zip(students, identities)]
         )
     await record_audit_event(
         actor_user_id=teacher["user_id"],

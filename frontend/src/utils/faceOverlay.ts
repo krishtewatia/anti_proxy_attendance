@@ -5,6 +5,32 @@ export interface OverlayFace {
   status?: string;
   similarity?: number;
   confidence_percent?: number;
+  // What the server did with a recognised face (absent on older responses).
+  mark_status?: string;
+  mark_reason?: string;
+}
+
+// Why a recognised face was not marked, in the teacher's words; null when it was.
+export function notMarkedReason(face: OverlayFace): string | null {
+  if (face.status !== "recognized" || face.mark_status !== "rejected") return null;
+  if (face.mark_reason === "not_on_roster") return "not in this class";
+  if (face.mark_reason === "no_round_open") return "open ENTRY or EXIT first";
+  return "not marked";
+}
+
+// True when the server marked (or had already marked) this face present.
+export function isMarked(face: OverlayFace): boolean {
+  return (
+    face.status === "recognized" &&
+    !!face.name &&
+    face.name !== "UNKNOWN" &&
+    (face.mark_status === undefined || face.mark_status === "marked" || face.mark_status === "already_present")
+  );
+}
+
+// Recognised faces that are not on this class's list.
+export function countNotInClass(faces: OverlayFace[] | undefined | null): number {
+  return Array.isArray(faces) ? faces.filter((f) => notMarkedReason(f) === "not in this class").length : 0;
 }
 
 export interface FaceOverlayStyle {
@@ -45,6 +71,16 @@ export function getFaceOverlayStyle(face: OverlayFace): FaceOverlayStyle {
       ? `${(face.similarity * 100).toFixed(1)}%`
       : "";
   const name = isRecognized ? face.name! : "UNKNOWN";
+  const reason = notMarkedReason(face);
+  if (isRecognized && reason) {
+    // Recognised, but nobody was marked: amber, with the reason.
+    return {
+      kind: "unknown",
+      label: `${name} · ${reason}`,
+      strokeColor: "#f59e0b",
+      bgColor: "rgba(245, 158, 11, 0.92)",
+    };
+  }
 
   return {
     kind: isRecognized ? "recognized" : "unknown",
