@@ -364,3 +364,57 @@
   line-height: 1.3;
   text-align: center;
 }
+
+/* Phones: the menu is a tab bar, icon over a short label, so a student's or a
+   teacher's tabs all fit on one row (an admin's longer menu still scrolls). */
+@media (max-width: 600px) {
+  .erp-nav-list li {
+    flex: 1 1 0;
+    min-width: 3.6rem;
+  }
+  .erp-nav-btn {
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.2rem;
+    padding: 0.45rem 0.2rem;
+    font-size: 0.7rem;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
+    height: 100%;
+    position: relative;
+  }
+  .erp-nav-btn .erp-nav-badge {
+    position: absolute;
+    top: 0.1rem;
+    right: 0.2rem;
+    margin: 0;
+  }
+  .erp-header-right .erp-btn,
+  .erp-header-right button {
+    min-height: 40px;
+  }
+}
+
+/* 16px stops phones from zooming in when a field inside the app is tapped. */
+@media (max-width: 480px) {
+  .erp-content-pane input:not([type="checkbox"]):not([type="radio"]),
+  .erp-content-pane select,
+  .erp-content-pane textarea {
+    font-size: 16px;
+  }
+}
+
+/* Small phones: room for the title and the header buttons on one row. */
+@media (max-width: 480px) {
+  .erp-header .erp-user-avatar {
+    display: none;
+  }
+  .erp-header-right .erp-btn-logout {
+    padding: 0.4rem 0.6rem;
+  }
+  .erp-brand-title {
+    font-size: 0.85rem;
+    line-height: 1.2;
+  }
+}

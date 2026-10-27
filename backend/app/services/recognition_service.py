@@ -73,6 +73,8 @@ class MarkResult:
     status: str
     identity: Optional[str] = None
     reason: Optional[str] = None
+    # For not_on_roster in a timetable class: why the student is not in it.
+    detail: Optional[str] = None
 
 
 def canonical_message(
@@ -198,27 +200,30 @@ async def consume_nonce(db: AsyncIOMotorDatabase, verified: VerifiedRecognition)
 # (session, identity) -> when a "does not belong to this class" answer expires.
 # A face that is not in the class is seen many times a minute; the database is
 # asked again at most once a minute per face.
-_NOT_IN_CLASS: dict[tuple[str, str], float] = {}
+_NOT_IN_CLASS: dict[tuple[str, str], tuple[float, str]] = {}
 _NOT_IN_CLASS_SECONDS = 60.0
 
 
-async def _joined_late(db: AsyncIOMotorDatabase, session: dict, identity: str) -> bool:
-    """True when a timetable class's student was approved after it started (now added)."""
+async def _joined_late(db: AsyncIOMotorDatabase, session: dict, identity: str) -> Optional[str]:
+    """None when a timetable class's student was approved after it started (now
+    added); otherwise why they are not in the class (see teaching_service)."""
     if not session.get("slot_id"):
-        return False
+        return "not_on_list"
     key = (session["session_id"], identity)
     now = time.monotonic()
-    if _NOT_IN_CLASS.get(key, 0.0) > now:
-        return False
-    from app.services.teaching_service import add_late_student
+    cached = _NOT_IN_CLASS.get(key)
+    if cached and cached[0] > now:
+        return cached[1]
+    from app.services import teaching_service
 
-    if await add_late_student(db, session, identity):
+    if await teaching_service.add_late_student(db, session, identity):
         _NOT_IN_CLASS.pop(key, None)
-        return True
+        return None
+    why = await teaching_service.why_not_in_class(db, session, identity)
     if len(_NOT_IN_CLASS) > 10_000:
         _NOT_IN_CLASS.clear()
-    _NOT_IN_CLASS[key] = now + _NOT_IN_CLASS_SECONDS
-    return False
+    _NOT_IN_CLASS[key] = (now + _NOT_IN_CLASS_SECONDS, why)
+    return why
 
 
 async def verify_and_mark(
@@ -245,13 +250,18 @@ async def verify_and_mark(
     identity = verified.identity
 
     roster = await get_session_roster(session_id)
-    if (roster is None or identity not in roster.identities) and not await _joined_late(
-        db, session, identity
-    ):
-        logger.warning(
-            "Recognition for %s rejected in session %s: not on the roster", identity, session_id
-        )
-        return MarkResult(status="rejected", identity=identity, reason="not_on_roster")
+    if roster is None or identity not in roster.identities:
+        why = await _joined_late(db, session, identity)
+        if why is not None:
+            logger.warning(
+                "Recognition for %s rejected in session %s: not on the roster (%s)",
+                identity,
+                session_id,
+                why,
+            )
+            return MarkResult(
+                status="rejected", identity=identity, reason="not_on_roster", detail=why
+            )
 
     # A timetable session marks the round that is open (ENTRY or EXIT).
     if session.get("slot_id"):

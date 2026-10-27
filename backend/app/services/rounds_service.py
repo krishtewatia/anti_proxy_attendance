@@ -239,16 +239,19 @@ def round_info(session: dict) -> dict:
         "periods": int(session.get("periods") or 1),
         "open_round": session.get("open_round"),
         "held": held_rounds(session),
+        # Times carry their zone: the database returns them without one.
         "rounds": {
             r: {
-                k: rounds.get(r, {}).get(k)
-                for k in ("opened_at", "closed_at", "times_opened", "finalized_at")
+                "opened_at": _aware(rounds.get(r, {}).get("opened_at")),
+                "closed_at": _aware(rounds.get(r, {}).get("closed_at")),
+                "times_opened": rounds.get(r, {}).get("times_opened"),
+                "finalized_at": _aware(rounds.get(r, {}).get("finalized_at")),
             }
             for r in ROUNDS
         },
         "complete": is_complete(session),
         "next_step": next_step(session),
-        "unlocked_until": session.get("unlocked_until"),
+        "unlocked_until": _aware(session.get("unlocked_until")),
     }
 
 

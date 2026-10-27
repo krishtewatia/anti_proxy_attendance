@@ -68,6 +68,22 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   });
   const [spoofDetected, setSpoofDetected] = useState(false);
   const [notInClass, setNotInClass] = useState(0);
+  // A teacher with timetable classes starts classes only from the timetable.
+  const [hasTimetable, setHasTimetable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getMyTeachingClasses()
+      .then((list) => {
+        if (!cancelled) setHasTimetable(list.length > 0);
+      })
+      .catch(() => {
+        // Not available (no timetable yet): the older form stays.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [cameraOnline, setCameraOnline] = useState<boolean>(false);
   const [cameraStatus, setCameraStatus] = useState<
     "FREE" | "REQUESTING_CAMERA" | "CAMERA_READY" | "ATTENDANCE_ACTIVE" | "STOPPING_CAMERA" | "PERMISSION_DENIED" | "UNAVAILABLE"
@@ -853,8 +869,11 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   // Tab 2: Attendance Workflow (Screens 1, 2, 3)
   const renderAttendanceWorkflow = () => (
     <div className="erp-attendance-flow">
-      {/* SCREEN 1: START ATTENDANCE */}
-      {step === 1 && (
+      {/* SCREEN 1 (pilot): a teacher with timetable classes starts them from today's timetable */}
+      {step === 1 && hasTimetable && <TodayTimetable onOpenSession={handleOpenSlotSession} />}
+
+      {/* SCREEN 1 (no timetable classes): the older class and subject form */}
+      {step === 1 && !hasTimetable && (
         <div className="erp-start-attendance-card">
           <div className="erp-card-header">
             <h1 className="erp-page-title">Start Attendance</h1>
@@ -1028,7 +1047,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                 {!spoofDetected && notInClass > 0 && (
                   <div className="erp-spoof-callout erp-not-in-class-callout" role="status">
                     {notInClass === 1 ? "This face is" : `${notInClass} faces are`} not on this class's list, so not
-                    marked. The student must finish setup for this section and be approved; they are then marked
+                    marked. The reason is on the face; once the student is approved for this class they are marked
                     on the next frame.
                   </div>
                 )}

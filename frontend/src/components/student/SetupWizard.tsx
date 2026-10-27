@@ -310,21 +310,32 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ initial, isChange, onD
               </div>
             ))}
           </div>
-          {photos.length < photoLimits.max && (
-            <label className="erp-btn erp-btn-secondary" style={{ justifySelf: "start", cursor: draft.consentAccepted ? "pointer" : "not-allowed", opacity: draft.consentAccepted ? 1 : 0.6 }}>
-              {draft.consentAccepted ? "Take or choose a photo" : "Accept the notice to add photos"}
-              <input
-                type="file"
-                accept="image/*"
-                capture="user"
-                disabled={!draft.consentAccepted}
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  void addPhoto(e.target.files?.[0]);
-                  e.target.value = "";
-                }}
-              />
-            </label>
+          {photos.length < photoLimits.max && !draft.consentAccepted && (
+            <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--erp-text-muted)" }}>Accept the notice above to add photos.</p>
+          )}
+          {photos.length < photoLimits.max && draft.consentAccepted && (
+            // Two ways in on a phone: the front camera now, or a photo already on the phone.
+            <div className="erp-photo-buttons">
+              {[
+                { label: "Take a photo", capture: true },
+                { label: "Choose from gallery", capture: false },
+              ].map((way) => (
+                <label key={way.label} className={`erp-btn ${way.capture ? "erp-btn-primary" : "erp-btn-secondary"}`} style={{ cursor: "pointer" }}>
+                  {way.label}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    {...(way.capture ? { capture: "user" as const } : {})}
+                    disabled={!draft.consentAccepted}
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      void addPhoto(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
           )}
           <p style={{ margin: 0, color: "var(--erp-text-muted)", fontSize: "0.8rem" }}>
             {photoLimits.min} or {photoLimits.max} photos: only your face, looking at the camera, in good light, filling most of the photo.

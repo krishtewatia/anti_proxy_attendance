@@ -2,6 +2,7 @@ import csv
 import io
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -212,10 +213,17 @@ async def get_session_attendance(
     )
 
 
+def _with_zone(value):
+    # The database returns times without a zone; they are UTC.
+    if isinstance(value, datetime) and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
 def _public_rounds(record: dict | None) -> dict:
     marks = (record or {}).get("rounds") or {}
     return {
-        r: {"status": m.get("status"), "at": m.get("at"), "source": m.get("source")}
+        r: {"status": m.get("status"), "at": _with_zone(m.get("at")), "source": m.get("source")}
         for r, m in marks.items()
     }
 
@@ -441,6 +449,8 @@ async def process_attendance_frame(
             face["mark_status"] = result.status
             if result.status == "rejected":
                 face["mark_reason"] = result.reason
+                if result.detail:
+                    face["mark_detail"] = result.detail
                 if result.reason not in ("not_on_roster", "no_round_open"):
                     # An unverifiable result is never shown as a recognized student
                     face["status"] = "unverified"

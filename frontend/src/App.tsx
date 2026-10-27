@@ -227,7 +227,7 @@ export function App() {
             onLogout={handleLogout}
             onGoHome={goHome}
             activeNavId={activeNavId}
-            onChangePassword={openChangePassword}
+            // Students do not change their own password: an administrator resets it.
             onSelectNav={handleNavSelect}
           >
             <Page>

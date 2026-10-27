@@ -129,3 +129,22 @@
   justify-content: center;
   padding: 5rem 1rem;
 }
+
+/* Student setup: the two ways to add a photo, side by side, full width on a phone. */
+.erp-photo-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (max-width: 600px) {
+  .erp-photo-buttons .erp-btn {
+    flex: 1 1 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+  /* Back / Next and the other wizard buttons are easy to tap. */
+  .erp-card .erp-btn {
+    min-height: 40px;
+  }
+}

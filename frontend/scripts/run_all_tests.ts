@@ -33,6 +33,7 @@ const testSuites: TestSuite[] = [
   { name: "Reports And Downloads", file: "test_class_reports.ts", category: "Unit" },
   { name: "People CSV Backup And Restore", file: "test_people_csv.ts", category: "Unit" },
   { name: "Frame Gate", file: "test_frame_gate.ts", category: "Unit" },
+  { name: "Onboarding On Phones", file: "test_onboarding_mobile.ts", category: "Unit" },
   { name: "Teachers Choose Their Classes", file: "test_teacher_setup.ts", category: "Unit" },
   { name: "Create Session Form Validation & Lifecycle", file: "test_create_session.ts", category: "Unit" },
   { name: "Attendance Correction Validation & Audit History", file: "test_attendance_correction.ts", category: "Unit" },
