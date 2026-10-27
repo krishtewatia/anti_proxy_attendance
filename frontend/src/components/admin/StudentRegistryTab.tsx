@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../../services";
 import { AuthenticatedImage } from "../common/AuthenticatedImage";
 import { OrgNavigator } from "./OrgNavigator";
+import { PeopleCsvPanel } from "./PeopleCsvPanel";
 import { AdminModal, TemporaryPasswordNotice } from "./shared";
 import { dangerButton, errorText, fieldGap, smallButton, type Banner } from "./adminShared.ts";
 import { selectionQuery, type NavSelection, type NavYear } from "../../utils/orgNavigator.ts";
@@ -114,6 +115,12 @@ export const StudentRegistryTab: React.FC<StudentRegistryTabProps> = ({ years, s
           No setup yet ({data?.counts.no_setup ?? 0})
         </button>
         <input type="search" className="erp-search-input" placeholder="Search roll no or name" aria-label="Search students" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <PeopleCsvPanel
+          kind="students"
+          query={noSetupView ? { status: "NO_SETUP" } : { ...selectionQuery(selection), ...(status ? { status } : {}), ...(search.trim() ? { q: search.trim() } : {}) }}
+          notify={notify}
+          onImported={() => void load()}
+        />
       </div>
       {noSetupView && (
         <p style={{ fontSize: "0.85rem", color: "var(--erp-text-muted)" }}>

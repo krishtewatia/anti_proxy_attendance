@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../../services";
 import { OrgNavigator } from "./OrgNavigator";
+import { PeopleCsvPanel } from "./PeopleCsvPanel";
 import { AdminModal, TemporaryPasswordNotice } from "./shared";
 import { dangerButton, errorText, fieldGap, smallButton, type Banner } from "./adminShared.ts";
 import type { NavSelection, NavYear } from "../../utils/orgNavigator.ts";
@@ -166,7 +167,10 @@ export const TeacherRegistryTab: React.FC<TeacherRegistryTabProps> = ({ years, s
           <h1 className="erp-page-title">Teachers</h1>
           <p className="erp-page-subtitle">By year and branch, with the classes each one takes.</p>
         </div>
-        <button type="button" className="erp-btn erp-btn-primary" onClick={() => setAdding(true)}>+ Add teacher</button>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+          <PeopleCsvPanel kind="teachers" notify={notify} onImported={() => void load()} />
+          <button type="button" className="erp-btn erp-btn-primary" onClick={() => setAdding(true)}>+ Add teacher</button>
+        </div>
       </div>
 
       <OrgNavigator years={years} value={selection} onChange={onSelect} />

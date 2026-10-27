@@ -71,6 +71,8 @@ AuditAction = Literal[
     "TEACHER_CLASSES_APPROVED",
     "TEACHER_CLASSES_REJECTED",
     "GOLIVE_RESET",
+    "PEOPLE_CSV_EXPORTED",
+    "PEOPLE_CSV_IMPORTED",
 ]
 
 AuditResourceType = Literal[
