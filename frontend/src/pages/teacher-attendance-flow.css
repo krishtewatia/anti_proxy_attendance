@@ -451,3 +451,28 @@
 .erp-not-in-class-callout {
   background: rgba(217, 119, 6, 0.94);
 }
+
+/* Phones: the class screen is one column; the step buttons fill the width and
+   every student row is a comfortable tap target. */
+@media (max-width: 600px) {
+  .erp-students-present-pane {
+    padding: 0.85rem;
+  }
+  .erp-students-present-pane .erp-card .erp-btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+    justify-content: center;
+  }
+  .erp-student-row {
+    min-height: 48px;
+  }
+  .erp-live-action-bar {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .erp-live-action-bar .erp-btn {
+    width: 100%;
+    min-width: 0 !important;
+  }
+}

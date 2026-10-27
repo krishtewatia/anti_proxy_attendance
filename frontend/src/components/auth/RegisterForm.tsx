@@ -359,7 +359,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
       )}
 
       {/* Password & Confirm */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1.25rem" }}>
+      <div className="auth-password-pair">
         <div className="form-group">
           <label className="form-label" htmlFor="register-password">Password</label>
           <input

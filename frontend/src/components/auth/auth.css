@@ -270,3 +270,24 @@
   font-size: 0.75rem;
   color: var(--erp-text-muted);
 }
+
+/* Password and its confirmation: side by side, stacked on a phone. */
+.auth-password-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 480px) {
+  .auth-password-pair {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  /* 16px stops phones from zooming in when a field is tapped. */
+  .auth-input,
+  .erp-select-input,
+  .erp-search-input {
+    font-size: 16px;
+  }
+}

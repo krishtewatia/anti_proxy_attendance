@@ -285,3 +285,50 @@ async def test_a_student_approved_after_the_class_started_is_added_and_marked(vi
     assert outsider[0]["name"] != "UNKNOWN"  # still shown, with the reason
     assert lookups == [other_c]  # asked once, then remembered for a minute
     assert await db["audit_events"].count_documents({"action": "ROSTER_UPDATED", "metadata.added": late_b}) == 1
+
+
+@pytest.mark.anyio
+async def test_the_teacher_is_told_why_a_recognised_face_is_not_in_the_class(vision_frames):
+    from app.database.users import create_user
+    from app.services import recognition_service
+
+    db = mongodb.get_database()
+    recognition_service._NOT_IN_CLASS.clear()
+
+    async def student(user_id: str, *, status: str = "APPROVED", setup: str | None = None) -> str:
+        identity = f"stu_{user_id}"
+        await create_user(user_id=user_id, email=f"{user_id}@niet.co.in", password_hash="x", role="STUDENT", status=status)
+        await db["student_profiles"].insert_one({"user_id": user_id, "identity": identity, "student_id": identity, "name": user_id})
+        if setup == "waiting":
+            await db["enrolment_requests"].insert_one({"request_id": f"req_{user_id}", "user_id": user_id, "status": "PENDING"})
+        return identity
+
+    async with _client() as client:
+        session_id, teacher, _, _ = await _session(client, periods=1)
+        waiting = await student("why_waiting", setup="waiting")
+        nothing = await student("why_nothing")
+        pending = await student("why_pending", status="PENDING")
+        elsewhere = await _late_student("C", 7)
+        await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/open", headers=teacher)
+        details = {}
+        for identity in (waiting, nothing, pending, elsewhere):
+            vision_frames.faces = [vision_frames.recognized(session_id, identity)]
+            face = (await client.post(f"/api/v1/attendance/{session_id}/process-frame", headers=teacher, content=b"f")).json()["faces"][0]
+            details[identity] = (face["mark_reason"], face.get("mark_detail"))
+    assert details == {
+        waiting: ("not_on_roster", "setup_pending"),
+        nothing: ("not_on_roster", "no_setup"),
+        pending: ("not_on_roster", "account_pending"),
+        elsewhere: ("not_on_roster", "other_class"),
+    }
+
+
+@pytest.mark.anyio
+async def test_a_timetable_teacher_cannot_start_an_old_style_class():
+    async with _client() as client:
+        _, teacher, _, _ = await _session(client, periods=1)
+        old_style = await client.post(
+            "/api/v1/sessions", headers=teacher,
+            json={"course_name": "CN — DS-B", "class_code": "DS-B", "start_time": "2026-11-02T09:00:00Z", "end_time": "2026-11-02T10:00:00Z"},
+        )
+    assert old_style.status_code == 409 and "today's timetable" in old_style.json()["detail"]

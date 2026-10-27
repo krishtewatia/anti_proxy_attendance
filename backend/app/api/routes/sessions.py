@@ -69,6 +69,17 @@ async def create_session_endpoint(
     session: SessionCreate,
     current_user: Annotated[dict, Depends(require_teacher)],
 ) -> SessionResponse:
+    # A teacher with timetable classes starts them from today's timetable: an
+    # old-style session builds its student list from a field the pilot's
+    # student setup does not fill, so nobody could ever be marked in it.
+    if current_user.get("role") != "ADMIN" and await get_database()["org_classes"].find_one(
+        {"teacher_ids": current_user["user_id"]}, {"_id": 1}
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Start this class from today's timetable (Home or Attendance).",
+        )
+
     # 1. Enforce: Only ONE active session per teacher (Requirement 8)
     active_sess = await get_active_session_by_teacher(current_user["user_id"])
     if active_sess:

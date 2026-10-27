@@ -360,6 +360,25 @@ async def add_late_student(db: AsyncIOMotorDatabase, session: dict, identity: st
     return True
 
 
+async def why_not_in_class(db: AsyncIOMotorDatabase, session: dict, identity: str) -> str:
+    """Why a recognised student is not on a timetable class's list, for the teacher:
+    account_pending, setup_pending, no_setup, other_class or not_on_list."""
+    profile = await db["student_profiles"].find_one(
+        {"$or": [{"identity": identity}, {"student_id": identity}]}, {"user_id": 1}
+    )
+    if profile is None:
+        return "not_on_list"
+    user = await db["users"].find_one({"user_id": profile["user_id"]}, {"status": 1}) or {}
+    if user.get("status") != ACCOUNT_APPROVED:
+        return "account_pending"
+    if await db[enrolment.ENROLMENTS].find_one({"user_id": profile["user_id"]}, {"_id": 1}) is None:
+        waiting = await db[enrolment.REQUESTS].find_one(
+            {"user_id": profile["user_id"], "status": enrolment.PENDING}, {"_id": 1}
+        )
+        return "setup_pending" if waiting else "no_setup"
+    return "other_class"
+
+
 async def start_from_slot(db: AsyncIOMotorDatabase, teacher: dict, slot_id: str, day: date) -> dict:
     slot = await db[org.SLOTS].find_one({"slot_id": slot_id}, {"_id": 0})
     if slot is None:
