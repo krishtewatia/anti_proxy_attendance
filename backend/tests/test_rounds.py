@@ -108,31 +108,34 @@ async def test_frames_mark_only_the_open_round_and_lectures_follow(vision_frames
 
 
 @pytest.mark.anyio
-async def test_a_single_period_needs_both_rounds_and_manual_marks_lock_the_round(vision_frames):
+async def test_a_single_period_needs_both_rounds_and_hand_changes_wait_for_the_final_attendance(vision_frames):
     db = mongodb.get_database()
     async with _client() as client:
-        session_id, teacher, _, roster = await _session(client, periods=1)
-        await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/open", headers=teacher)
+        session_id, teacher, admin, roster = await _session(client, periods=1)
+        base = f"/api/v1/sessions/{session_id}"
+        await client.post(f"{base}/rounds/ENTRY/open", headers=teacher)
         vision_frames.faces = [vision_frames.recognized(session_id, roster[0])]
         await client.post(f"/api/v1/attendance/{session_id}/process-frame", headers=teacher, content=b"f")
-        await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/finalize", headers=teacher)
-        await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/open", headers=teacher)
+        # While a round runs only the camera marks: a teacher's hand change is refused.
+        during_round = await client.post(f"{base}/rounds/ENTRY/marks", headers=teacher, json={"identity": roster[1], "status": "PRESENT"})
+        await client.post(f"{base}/rounds/ENTRY/finalize", headers=teacher)
+        await client.post(f"{base}/rounds/EXIT/open", headers=teacher)
         only_entry = await _record(session_id, roster[0])
-        # Marked absent by hand in EXIT: recognition may not override it.
-        manual = await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/marks", headers=teacher,
-                                   json={"identity": roster[0], "status": "ABSENT", "reason": "left early"})
+        between_rounds = await client.post(f"{base}/rounds/ENTRY/marks", headers=teacher, json={"identity": roster[1], "status": "PRESENT"})
+        # An administrator may correct at any time, with a reason; recognition never overrides it.
+        admin_mark = await client.post(f"{base}/rounds/EXIT/marks", headers=admin, json={"identity": roster[0], "status": "ABSENT", "reason": "left early"})
         vision_frames.faces = [vision_frames.recognized(session_id, roster[0])]
         locked = (await client.post(f"/api/v1/attendance/{session_id}/process-frame", headers=teacher, content=b"f")).json()["faces"][0]
-        by_hand = await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/marks", headers=teacher,
-                                    json={"identity": roster[1], "status": "PRESENT"})
-        await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/marks", headers=teacher,
-                          json={"identity": roster[1], "status": "PRESENT"})
-        not_rostered = await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/marks", headers=teacher,
-                                         json={"identity": "someone_else", "status": "PRESENT"})
-        old_route = await client.patch(f"/api/v1/sessions/{session_id}/attendance/att_{session_id}_{roster[0]}", headers=teacher,
-                                       json={"status": "PRESENT"})
+        await client.post(f"{base}/rounds/EXIT/finalize", headers=teacher)
+        # Final attendance: now the teacher may change it by hand.
+        by_hand = await client.post(f"{base}/rounds/ENTRY/marks", headers=teacher, json={"identity": roster[1], "status": "PRESENT"})
+        await client.post(f"{base}/rounds/EXIT/marks", headers=teacher, json={"identity": roster[1], "status": "PRESENT"})
+        not_rostered = await client.post(f"{base}/rounds/EXIT/marks", headers=teacher, json={"identity": "someone_else", "status": "PRESENT"})
+        old_route = await client.patch(f"{base}/attendance/att_{session_id}_{roster[0]}", headers=teacher, json={"status": "PRESENT"})
+    assert during_round.status_code == 409 and "both finalized" in during_round.json()["detail"]
+    assert between_rounds.status_code == 409
     assert only_entry["lectures"] == ["A"]  # single period: ENTRY alone is not enough once EXIT is held
-    assert manual.status_code == 200 and manual.json()["lectures"] == ["A"]
+    assert admin_mark.status_code == 200 and admin_mark.json()["lectures"] == ["A"]
     assert locked["mark_status"] == "locked"
     assert by_hand.status_code == 200
     assert (await _record(session_id, roster[1]))["lectures"] == ["P"]
@@ -214,7 +217,7 @@ async def test_hand_changes_for_24_hours_after_a_round_is_finalized_then_locked(
 async def test_an_ended_class_can_be_finished_by_hand_within_24_hours_only():
     db = mongodb.get_database()
     async with _client() as client:
-        session_id, teacher, _, roster = await _session(client, periods=1)
+        session_id, teacher, _, _ = await _session(client, periods=1)
         base = f"/api/v1/sessions/{session_id}"
         await client.post(f"{base}/rounds/ENTRY/open", headers=teacher)
         # Ended automatically (the teacher started the next class): EXIT never taken.
@@ -223,12 +226,11 @@ async def test_an_ended_class_can_be_finished_by_hand_within_24_hours_only():
             {"$set": {"status": "FINALIZED", "ended_automatically": True, "end_time": datetime.now(timezone.utc) - timedelta(hours=1)}},
         )
         entry_done = await client.post(f"{base}/rounds/ENTRY/finalize", headers=teacher)
-        exit_mark = await client.post(f"{base}/rounds/EXIT/marks", headers=teacher, json={"identity": roster[0], "status": "PRESENT"})
         await db["sessions"].update_one(
             {"session_id": session_id}, {"$set": {"end_time": datetime.now(timezone.utc) - timedelta(hours=25)}}
         )
         exit_late = await client.post(f"{base}/rounds/EXIT/finalize", headers=teacher)
-    assert entry_done.status_code == 200 and exit_mark.status_code == 200
+    assert entry_done.status_code == 200
     assert exit_late.status_code == 403
 
 

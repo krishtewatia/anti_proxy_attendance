@@ -45,10 +45,11 @@ async def _take(client, teacher, slot, marks: dict[str, tuple[str, str]]):
     await client.post(f"/api/v1/sessions/{sid}/start", headers=teacher)
     for rnd in ("ENTRY", "EXIT"):
         await client.post(f"/api/v1/sessions/{sid}/rounds/{rnd}/open", headers=teacher)
-        for identity, (entry, exit_) in marks.items():
-            status = entry if rnd == "ENTRY" else exit_
-            await client.post(f"/api/v1/sessions/{sid}/rounds/{rnd}/marks", headers=teacher, json={"identity": identity, "status": status})
         await client.post(f"/api/v1/sessions/{sid}/rounds/{rnd}/finalize", headers=teacher)
+    # The final attendance, set by hand once both rounds are finalized.
+    for identity, (entry, exit_) in marks.items():
+        for rnd, status in (("ENTRY", entry), ("EXIT", exit_)):
+            await client.post(f"/api/v1/sessions/{sid}/rounds/{rnd}/marks", headers=teacher, json={"identity": identity, "status": status})
     await client.post(f"/api/v1/sessions/{sid}/finalize", headers=teacher)
     return sid, day
 
@@ -213,7 +214,6 @@ async def test_only_complete_classes_count_and_an_unfinished_one_becomes_not_ent
         sid = (await client.post("/api/v1/teachers/sessions/from-slot", headers=teacher, json={"slot_id": second["slot_id"], "date": day.isoformat()})).json()["session_id"]
         await client.post(f"/api/v1/sessions/{sid}/start", headers=teacher)
         await client.post(f"/api/v1/sessions/{sid}/rounds/ENTRY/open", headers=teacher)
-        await client.post(f"/api/v1/sessions/{sid}/rounds/ENTRY/marks", headers=teacher, json={"identity": students[0], "status": "PRESENT"})
         await db["sessions"].update_one(
             {"session_id": sid}, {"$set": {"status": "FINALIZED", "end_time": datetime.now(timezone.utc) - timedelta(hours=1)}}
         )

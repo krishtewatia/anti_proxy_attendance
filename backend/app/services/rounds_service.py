@@ -13,8 +13,9 @@ time plus the same window; after that it counts as not taken.
 
 Only sessions started from the timetable (they carry ``slot_id``) have rounds;
 older ad-hoc sessions keep their single PRESENT/ABSENT mark. Recognition marks
-only the round that is open; a manual mark locks that round against later
-recognition.
+only the round that is open. A teacher changes marks by hand only once both
+rounds are finalized (an administrator at any time, with a reason); a hand
+mark locks that student's round against later recognition.
 """
 
 from __future__ import annotations
@@ -373,6 +374,10 @@ async def mark_by_hand(
         )
     if round_name not in ROUNDS or status not in ("PRESENT", "ABSENT"):
         raise RoundError("Give a round (ENTRY or EXIT) and a status (PRESENT or ABSENT).")
+    # While a round runs only the camera marks; a teacher corrects the final
+    # attendance by hand once ENTRY and EXIT are both finalized.
+    if actor.get("role") != "ADMIN" and not is_complete(session):
+        raise RoundError("Hand changes are possible once ENTRY and EXIT are both finalized.", 409)
     if actor.get("role") != "ADMIN" and not await round_may_edit(db, session, round_name):
         raise RoundError(
             f"{round_name} can no longer be changed by a teacher (more than "
