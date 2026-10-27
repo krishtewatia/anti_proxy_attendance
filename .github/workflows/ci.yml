@@ -20,7 +20,11 @@ jobs:
 
     services:
       mongodb:
-        image: mongo:8.0
+        # 7.0, not 8.0: MongoDB 8.x refuses to start on Linux kernels 6.19 to
+        # 7.0.13 (https://jira.mongodb.org/browse/SERVER-121912), which GitHub's
+        # ubuntu-24.04 runners use since 25 Oct 2026. Back to 8.0 once the
+        # runners have kernel 7.0.14 or later. Production (Atlas) is unaffected.
+        image: mongo:7.0
         ports:
           - 27017:27017
         options: >-
