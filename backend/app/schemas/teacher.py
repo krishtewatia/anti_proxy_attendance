@@ -72,6 +72,8 @@ class TeacherSessionSummaryItem(BaseModel):
     status: str  # "SCHEDULED", "ACTIVE" or "FINALIZED"
     # False when the session was created but attendance was never taken.
     was_taken: bool = True
+    # Timetable classes only: False until ENTRY and EXIT are both finalized.
+    rounds_complete: Optional[bool] = None
     start_time: Optional[datetime] = None
     created_at: Optional[datetime] = None
 

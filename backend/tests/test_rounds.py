@@ -86,6 +86,7 @@ async def test_frames_mark_only_the_open_round_and_lectures_follow(vision_frames
         vision_frames.faces = [vision_frames.recognized(session_id, roster[0])]
         entry = (await client.post(frame_url, headers=teacher, content=b"f")).json()["faces"][0]
         after_entry = await _record(session_id, roster[0])
+        await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/finalize", headers=teacher)
         await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/open", headers=teacher)
         vision_frames.faces = [vision_frames.recognized(session_id, roster[1])]
         await client.post(frame_url, headers=teacher, content=b"f")
@@ -114,6 +115,7 @@ async def test_a_single_period_needs_both_rounds_and_manual_marks_lock_the_round
         await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/open", headers=teacher)
         vision_frames.faces = [vision_frames.recognized(session_id, roster[0])]
         await client.post(f"/api/v1/attendance/{session_id}/process-frame", headers=teacher, content=b"f")
+        await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/finalize", headers=teacher)
         await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/open", headers=teacher)
         only_entry = await _record(session_id, roster[0])
         # Marked absent by hand in EXIT: recognition may not override it.
@@ -141,53 +143,93 @@ async def test_a_single_period_needs_both_rounds_and_manual_marks_lock_the_round
 
 
 @pytest.mark.anyio
-async def test_one_round_open_at_a_time_reopen_and_finalize_closes_it():
+async def test_entry_then_exit_each_finalized_then_the_session():
     db = mongodb.get_database()
     async with _client() as client:
         session_id, teacher, _, _ = await _session(client, periods=2)
-        entry = (await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/open", headers=teacher)).json()
-        exit_ = (await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/open", headers=teacher)).json()
-        reopen = (await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/open", headers=teacher)).json()
-        close_wrong = await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/close", headers=teacher)
-        bad_round = await client.post(f"/api/v1/sessions/{session_id}/rounds/MIDDLE/open", headers=teacher)
-        await client.post(f"/api/v1/sessions/{session_id}/finalize", headers=teacher)
+        base = f"/api/v1/sessions/{session_id}"
+        entry = (await client.post(f"{base}/rounds/ENTRY/open", headers=teacher)).json()
+        exit_too_soon = await client.post(f"{base}/rounds/EXIT/open", headers=teacher)
+        await client.post(f"{base}/rounds/ENTRY/close", headers=teacher)
+        reopen = (await client.post(f"{base}/rounds/ENTRY/open", headers=teacher)).json()
+        session_too_soon = await client.post(f"{base}/finalize", headers=teacher)
+        entry_done = (await client.post(f"{base}/rounds/ENTRY/finalize", headers=teacher)).json()
+        reopen_finalized = await client.post(f"{base}/rounds/ENTRY/open", headers=teacher)
+        exit_too_soon_again = await client.post(f"{base}/finalize", headers=teacher)
+        exit_ = (await client.post(f"{base}/rounds/EXIT/open", headers=teacher)).json()
+        exit_done = (await client.post(f"{base}/rounds/EXIT/finalize", headers=teacher)).json()
+        view = (await client.get(f"/api/v1/attendance/{session_id}", headers=teacher)).json()
+        finalized = await client.post(f"{base}/finalize", headers=teacher)
+        bad_round = await client.post(f"{base}/rounds/MIDDLE/open", headers=teacher)
         after = await db["sessions"].find_one({"session_id": session_id})
-        closed_session = await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/open", headers=teacher)
-    assert entry["open_round"] == "ENTRY" and exit_["open_round"] == "EXIT"
-    assert exit_["rounds"]["ENTRY"]["closed_at"] is not None
-    assert reopen["open_round"] == "ENTRY" and reopen["rounds"]["ENTRY"]["times_opened"] == 2
-    assert close_wrong.status_code == 409 and bad_round.status_code == 404
-    assert after["status"] == "FINALIZED" and after["open_round"] is None
-    assert closed_session.status_code == 409
-    assert await db["audit_events"].count_documents({"action": "SESSION_ROUND_CHANGED"}) == 3
+    assert entry["open_round"] == "ENTRY" and reopen["rounds"]["ENTRY"]["times_opened"] == 2
+    assert exit_too_soon.status_code == 409 and "Finalize ENTRY first" in exit_too_soon.json()["detail"]
+    assert session_too_soon.status_code == 409 and exit_too_soon_again.status_code == 409
+    assert entry_done["open_round"] is None and entry_done["rounds"]["ENTRY"]["finalized_at"]
+    assert entry_done["next_step"] == "EXIT" and entry_done["rounds"]["ENTRY"]["may_edit"] is True
+    assert reopen_finalized.status_code == 409 and "by hand" in reopen_finalized.json()["detail"]
+    assert exit_["open_round"] == "EXIT"
+    assert exit_done["complete"] is True and exit_done["next_step"] == "FINALIZE"
+    assert view["round_info"]["complete"] is True
+    assert finalized.status_code == 200 and after["status"] == "FINALIZED"
+    assert bad_round.status_code == 404
+    assert await db["audit_events"].count_documents({"action": "SESSION_ROUND_CHANGED", "metadata.finalized": True}) == 2
 
 
 @pytest.mark.anyio
-async def test_the_edit_window_and_the_admin_unlock():
+async def test_hand_changes_for_24_hours_after_a_round_is_finalized_then_locked():
     db = mongodb.get_database()
     async with _client() as client:
         session_id, teacher, admin, roster = await _session(client, periods=2)
-        await client.post(f"/api/v1/sessions/{session_id}/finalize", headers=teacher)
+        base = f"/api/v1/sessions/{session_id}"
+        for rnd in ("ENTRY", "EXIT"):
+            await client.post(f"{base}/rounds/{rnd}/open", headers=teacher)
+            await client.post(f"{base}/rounds/{rnd}/finalize", headers=teacher)
+        await client.post(f"{base}/finalize", headers=teacher)
         mark = {"identity": roster[0], "status": "PRESENT", "reason": "was there"}
-        after_finalize = await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/marks", headers=teacher, json=mark)
-        admin_no_reason = await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/marks", headers=admin, json={**mark, "reason": ""})
-        admin_mark = await client.post(f"/api/v1/sessions/{session_id}/rounds/ENTRY/marks", headers=admin, json=mark)
+        within = await client.post(f"{base}/rounds/ENTRY/marks", headers=teacher, json=mark)
+        # ENTRY was finalized 25 h ago, EXIT just now: only EXIT may still change.
+        stale = dict((await db["sessions"].find_one({"session_id": session_id}))["rounds"])
+        stale["ENTRY"] = {**stale["ENTRY"], "finalized_at": datetime.now(timezone.utc) - timedelta(hours=25)}
+        await db["sessions"].update_one({"session_id": session_id}, {"$set": {"rounds": stale}})
+        entry_late = await client.post(f"{base}/rounds/ENTRY/marks", headers=teacher, json=mark)
+        exit_still = await client.post(f"{base}/rounds/EXIT/marks", headers=teacher, json=mark)
+        view = (await client.get(f"/api/v1/attendance/{session_id}", headers=teacher)).json()
+        admin_no_reason = await client.post(f"{base}/rounds/ENTRY/marks", headers=admin, json={**mark, "reason": ""})
+        admin_mark = await client.post(f"{base}/rounds/ENTRY/marks", headers=admin, json=mark)
         unlock = await client.post(f"/api/v1/admin/sessions/{session_id}/unlock", headers=admin)
-        after_unlock = await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/marks", headers=teacher, json=mark)
+        after_unlock = await client.post(f"{base}/rounds/ENTRY/marks", headers=teacher, json=mark)
         teacher_unlock = await client.post(f"/api/v1/admin/sessions/{session_id}/unlock", headers=teacher)
-        # Past the window (end of class + 48 h), without an unlock.
-        await db["sessions"].update_one(
-            {"session_id": session_id},
-            {"$set": {"status": "ACTIVE", "unlocked_until": None, "end_time": datetime.now(timezone.utc) - timedelta(hours=49)}},
-        )
-        late = await client.post(f"/api/v1/sessions/{session_id}/rounds/EXIT/marks", headers=teacher, json=mark)
-    # Ended, but within 48 h of the class end: the teacher may still correct it.
-    assert after_finalize.status_code == 200
+    assert within.status_code == 200
+    assert entry_late.status_code == 403 and "24 h" in entry_late.json()["detail"]
+    assert exit_still.status_code == 200
+    assert view["round_info"]["rounds"]["ENTRY"]["may_edit"] is False and view["round_info"]["rounds"]["EXIT"]["may_edit"] is True
     assert admin_no_reason.status_code == 400 and admin_mark.status_code == 200
     assert unlock.status_code == 200 and after_unlock.status_code == 200
     assert teacher_unlock.status_code == 403
-    assert late.status_code == 403
     assert await db["audit_events"].count_documents({"action": "SESSION_UNLOCKED"}) == 1
+
+
+@pytest.mark.anyio
+async def test_an_ended_class_can_be_finished_by_hand_within_24_hours_only():
+    db = mongodb.get_database()
+    async with _client() as client:
+        session_id, teacher, _, roster = await _session(client, periods=1)
+        base = f"/api/v1/sessions/{session_id}"
+        await client.post(f"{base}/rounds/ENTRY/open", headers=teacher)
+        # Ended automatically (the teacher started the next class): EXIT never taken.
+        await db["sessions"].update_one(
+            {"session_id": session_id},
+            {"$set": {"status": "FINALIZED", "ended_automatically": True, "end_time": datetime.now(timezone.utc) - timedelta(hours=1)}},
+        )
+        entry_done = await client.post(f"{base}/rounds/ENTRY/finalize", headers=teacher)
+        exit_mark = await client.post(f"{base}/rounds/EXIT/marks", headers=teacher, json={"identity": roster[0], "status": "PRESENT"})
+        await db["sessions"].update_one(
+            {"session_id": session_id}, {"$set": {"end_time": datetime.now(timezone.utc) - timedelta(hours=25)}}
+        )
+        exit_late = await client.post(f"{base}/rounds/EXIT/finalize", headers=teacher)
+    assert entry_done.status_code == 200 and exit_mark.status_code == 200
+    assert exit_late.status_code == 403
 
 
 async def _late_student(section: str, n: int) -> str:

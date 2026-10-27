@@ -48,6 +48,7 @@ async def _take(client, teacher, slot, marks: dict[str, tuple[str, str]]):
         for identity, (entry, exit_) in marks.items():
             status = entry if rnd == "ENTRY" else exit_
             await client.post(f"/api/v1/sessions/{sid}/rounds/{rnd}/marks", headers=teacher, json={"identity": identity, "status": status})
+        await client.post(f"/api/v1/sessions/{sid}/rounds/{rnd}/finalize", headers=teacher)
     await client.post(f"/api/v1/sessions/{sid}/finalize", headers=teacher)
     return sid, day
 
@@ -194,3 +195,37 @@ async def test_the_teacher_sees_each_students_attendance_and_corrects_a_finalize
     assert fixed_row["lectures"] == ["P"] * p1 and fixed_row["by_hand"] is True
     assert other_session.status_code == 404
     assert refused.status_code == 403 and as_student.status_code == 403 and as_admin.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_only_complete_classes_count_and_an_unfinished_one_becomes_not_entered_after_24_hours():
+    from datetime import datetime, timezone
+
+    from app.security.jwt import create_access_token
+
+    admin, teacher, db, students, cn, slots = await _setup()
+    first, second = slots[0], slots[1]
+    async with _client() as client:
+        await client.put("/api/v1/admin/org/teachers/t_cn/classes", headers=admin, json={"class_ids": [cn["class_id"]]})
+        await _take(client, teacher, first, {students[0]: ("PRESENT", "PRESENT")})
+        # The second class: ENTRY only, then ended when the teacher moved on.
+        day = MONDAY + timedelta(days=DAYS.index(second["day"]))
+        sid = (await client.post("/api/v1/teachers/sessions/from-slot", headers=teacher, json={"slot_id": second["slot_id"], "date": day.isoformat()})).json()["session_id"]
+        await client.post(f"/api/v1/sessions/{sid}/start", headers=teacher)
+        await client.post(f"/api/v1/sessions/{sid}/rounds/ENTRY/open", headers=teacher)
+        await client.post(f"/api/v1/sessions/{sid}/rounds/ENTRY/marks", headers=teacher, json={"identity": students[0], "status": "PRESENT"})
+        await db["sessions"].update_one(
+            {"session_id": sid}, {"$set": {"status": "FINALIZED", "end_time": datetime.now(timezone.utc) - timedelta(hours=1)}}
+        )
+        uid0 = (await db["student_profiles"].find_one({"identity": students[0]}))["user_id"]
+        student = {"Authorization": f"Bearer {create_access_token(user_id=uid0, role='STUDENT')}"}
+        pending = next(r for r in (await client.get("/api/v1/students/attendance/subjects", headers=student)).json()["subjects"] if r["subject_key"] == "CN")
+        await db["sessions"].update_one({"session_id": sid}, {"$set": {"end_time": datetime.now(timezone.utc) - timedelta(hours=25)}})
+        lapsed = next(r for r in (await client.get("/api/v1/students/attendance/subjects", headers=student)).json()["subjects"] if r["subject_key"] == "CN")
+        overview = (await client.get(f"/api/v1/teachers/classes/{cn['class_id']}/students", headers=teacher)).json()
+
+    p1, p2 = int(first["periods"]), int(second["periods"])
+    # Only the complete class is held; the unfinished one is in neither while it can still be finished.
+    assert pending["held"] == p1 and pending["present"] == p1
+    assert lapsed["held"] == p1 and lapsed["not_entered"] == pending["not_entered"] + p2
+    assert overview["summary"]["lectures_held"] == p1

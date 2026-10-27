@@ -20,6 +20,8 @@ export interface TeacherProfileResponse {
 }
 
 export interface TeacherSessionSummaryItem {
+  // Timetable classes only: false until ENTRY and EXIT are both finalized.
+  rounds_complete?: boolean | null;
   session_id: string;
   course_name: string;
   class_code?: string;

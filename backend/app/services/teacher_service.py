@@ -26,6 +26,7 @@ from app.schemas.teacher import (
 )
 from app.security.passwords import hash_password
 from app.services.registration_rules import check_email_allowed, new_teacher_key
+from app.services.rounds_service import is_complete
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +150,7 @@ async def _summarize_session(session: dict) -> TeacherSessionSummaryItem:
         attendance_percentage=pct,
         status=session.get("status", "ACTIVE"),
         was_taken=session_was_taken(session, records),
+        rounds_complete=is_complete(session) if session.get("slot_id") else None,
         start_time=session.get("start_time"),
         created_at=session.get("created_at"),
     )

@@ -820,9 +820,15 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                       {formatSessionTurnout(ps)}
                     </td>
                     <td>
-                      <span className={`status-badge ${sessionStatusBadgeClass(ps.status)}`}>
-                        {sessionStatusLabel(ps.status)}
-                      </span>
+                      {ps.rounds_complete === false && ps.status !== "ACTIVE" ? (
+                        <span className="status-badge warning" title="ENTRY and EXIT were not both finalized. Open it to finish by hand within 24 h of the class.">
+                          Not finalized
+                        </span>
+                      ) : (
+                        <span className={`status-badge ${sessionStatusBadgeClass(ps.status)}`}>
+                          {sessionStatusLabel(ps.status)}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <button
@@ -1097,11 +1103,17 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
               type="button"
               className="erp-btn erp-btn-danger"
               onClick={handleEndAttendance}
-              disabled={loading}
+              disabled={loading || (roundInfo !== null && !roundInfo.complete)}
+              title={roundInfo !== null && !roundInfo.complete ? "Finalize ENTRY and EXIT first" : undefined}
               style={{ minWidth: "220px", padding: "0.85rem 1.5rem", fontSize: "1rem" }}
             >
-              {loading ? "Finalizing Attendance..." : "END ATTENDANCE"}
+              {loading ? "Finalizing Attendance..." : roundInfo !== null ? "FINALIZE SESSION" : "END ATTENDANCE"}
             </button>
+            {roundInfo !== null && !roundInfo.complete && (
+              <div style={{ fontSize: "0.8rem", color: "var(--erp-text-muted)", marginTop: "0.4rem" }}>
+                Finalize ENTRY and EXIT first; the final attendance is given when both are done.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1109,6 +1121,20 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       {/* SCREEN 3: ATTENDANCE COMPLETE (Matches Section 9 Layout) */}
       {step === 3 && (
         <div className="erp-complete-page">
+          {/* A timetable class left unfinished: finish it by hand (ENTRY, EXIT, finalize). */}
+          {roundInfo && sessionId && !roundInfo.complete && (
+            <div className="erp-card" style={{ padding: "1rem 1.25rem", marginBottom: "1rem", maxWidth: "48rem", width: "100%" }}>
+              <h2 className="erp-section-title" style={{ marginTop: 0 }}>Not finalized: finish this class by hand</h2>
+              <RoundControls
+                sessionId={sessionId}
+                info={roundInfo}
+                records={records}
+                manualMode
+                onManualMode={() => {}}
+                onChanged={async () => applyAttendance(await api.getSessionAttendance(sessionId))}
+              />
+            </div>
+          )}
           <div className="erp-complete-card">
             <div className="erp-complete-header">
               <div className="erp-complete-check">{viewedNotTaken ? "—" : "✓"}</div>

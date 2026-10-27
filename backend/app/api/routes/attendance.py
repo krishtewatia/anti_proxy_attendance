@@ -225,10 +225,7 @@ async def _round_info(db, session: dict) -> dict | None:
         return None
     from app.services import rounds_service
 
-    info = rounds_service.round_info(session)
-    info["editable_until"] = await rounds_service.editable_until(db, session)
-    info["teacher_may_edit"] = await rounds_service.teacher_may_edit(db, session)
-    return info
+    return await rounds_service.round_state(db, session)
 
 
 @router.get(
