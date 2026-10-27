@@ -476,3 +476,67 @@
     min-width: 0 !important;
   }
 }
+
+/* Timetable class page: ENTRY and EXIT cards, then the final attendance. */
+.erp-class-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.erp-round-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.erp-round-card {
+  padding: 1rem 1.25rem;
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+}
+
+.erp-round-card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.erp-round-card-counts {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--erp-text-muted);
+}
+
+.erp-round-card-status {
+  font-size: 0.85rem;
+  color: var(--erp-text-body);
+}
+
+/* A round's camera page: Finalize and Back beside the lists. */
+.erp-round-actions {
+  padding: 0.75rem 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.erp-round-actions-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (max-width: 600px) {
+  .erp-round-cards {
+    grid-template-columns: 1fr;
+  }
+  .erp-round-card .erp-btn,
+  .erp-round-actions-buttons .erp-btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+}

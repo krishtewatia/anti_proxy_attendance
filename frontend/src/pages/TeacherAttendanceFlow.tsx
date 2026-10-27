@@ -16,11 +16,12 @@ import { Pagination } from "../components/common/Pagination";
 import { TEACHER_PENDING_TEXT, isTeacherPendingError } from "../utils/registration.ts";
 import { TodayTimetable } from "../components/teacher/TodayTimetable";
 import type { TeacherSlot } from "../utils/teaching.ts";
-import { RoundControls } from "../components/teacher/RoundControls";
+import { ClassPage } from "../components/teacher/ClassPage";
+import { RoundPanel } from "../components/teacher/RoundPanel";
 import { MyClasses } from "../components/teacher/MyClasses";
 import { ClassDownloads } from "../components/teacher/ClassDownloads";
 import { fileName } from "../utils/classReports.ts";
-import { shouldSendFrames, type RoundInfo } from "../utils/rounds.ts";
+import { shouldSendFrames, splitByRound, type RoundInfo, type RoundName } from "../utils/rounds.ts";
 
 const SESSIONS_PAGE_SIZE = 15;
 
@@ -214,7 +215,10 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   const [waitingForApproval, setWaitingForApproval] = useState(false);
   // Timetable sessions: ENTRY / EXIT rounds, and manual mode (no camera).
   const [roundInfo, setRoundInfo] = useState<RoundInfo | null>(null);
-  const [manualMode, setManualMode] = useState(false);
+  // Timetable classes: the class page (null) or one round's camera page.
+  const [roundPage, setRoundPage] = useState<RoundName | null>(null);
+  const [roundBusy, setRoundBusy] = useState(false);
+  const [roundError, setRoundError] = useState<string | null>(null);
   const roundInfoRef = useRef<RoundInfo | null>(null);
   const applyAttendance = (attData: AttendanceSessionResponse) => {
     setRecords(attData.records);
@@ -308,7 +312,56 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
     setViewedNotTaken(false);
     setStep(2);
     if (onSelectNav) onSelectNav("attendance");
+    await enterSession(attData.round_info ?? null);
+  };
+
+  // A timetable class opens on its class page, or on the round that is live;
+  // an ad-hoc session goes straight to the camera.
+  const enterSession = async (info: RoundInfo | null) => {
+    const live = info?.open_round ?? null;
+    setRoundPage(live);
+    setRoundError(null);
+    if (!info || live) await startCameraStream();
+    else stopCameraStream();
+  };
+
+  const refreshAttendance = async () => {
+    if (sessionId) applyAttendance(await api.getSessionAttendance(sessionId));
+  };
+
+  const openRound = async (round: RoundName) => {
+    if (!sessionId) return;
+    if (roundInfo?.open_round !== round) await api.changeRound(sessionId, round, "open");
+    await refreshAttendance();
+    setRoundError(null);
+    setRoundPage(round);
     await startCameraStream();
+  };
+
+  const leaveRound = async (finalize: boolean) => {
+    if (!sessionId || !roundPage) return;
+    if (finalize) {
+      const { present, absent } = splitByRound(records, roundPage);
+      const ok = window.confirm(
+        `Finalize ${roundPage}? ${present.length} present, ${absent.length} absent.\n` +
+          `The camera stops for ${roundPage}; corrections are made on the final attendance.`,
+      );
+      if (!ok) return;
+    }
+    setRoundBusy(true);
+    setRoundError(null);
+    try {
+      if (finalize) await api.finalizeRound(sessionId, roundPage);
+      else if (roundInfo?.open_round === roundPage) await api.changeRound(sessionId, roundPage, "close");
+      stopCameraStream();
+      clearOverlay();
+      await refreshAttendance();
+      setRoundPage(null);
+    } catch (err: unknown) {
+      setRoundError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRoundBusy(false);
+    }
   };
 
   // Continue an already active session
@@ -327,7 +380,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       setStep(2);
       if (onSelectNav) onSelectNav("attendance");
 
-      await startCameraStream();
+      await enterSession(attData.round_info ?? null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(msg || "Failed to resume active session.");
@@ -967,7 +1020,28 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       )}
 
       {/* SCREEN 2: LIVE ATTENDANCE (Matches Section 7 Layout) */}
-      {step === 2 && (
+      {step === 2 && roundInfo && sessionId && roundPage === null && (
+        <div className="erp-live-attendance-page">
+          <div className="erp-live-header">
+            <div>
+              <h1 className="erp-live-course">{selectedSubject}</h1>
+              <div className="erp-live-class-code">{selectedClass}</div>
+            </div>
+          </div>
+          <ClassPage
+            sessionId={sessionId}
+            info={roundInfo}
+            records={records}
+            running
+            onOpenRound={openRound}
+            onFinalizeSession={handleEndAttendance}
+            finalizing={loading}
+            onChanged={refreshAttendance}
+          />
+        </div>
+      )}
+
+      {step === 2 && !(roundInfo && roundPage === null) && (
         <div className="erp-live-attendance-page">
           <div className="erp-live-header">
             <div>
@@ -1071,18 +1145,14 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
 
             {/* Right: Students Present */}
             <div className="erp-students-present-pane">
-              {roundInfo && sessionId && (
-                <RoundControls
-                  sessionId={sessionId}
-                  info={roundInfo}
+              {roundInfo && sessionId && roundPage && (
+                <RoundPanel
+                  round={roundPage}
                   records={records}
-                  manualMode={manualMode}
-                  onManualMode={(on) => {
-                    setManualMode(on);
-                    if (on) stopCameraStream();
-                    else void startCameraStream();
-                  }}
-                  onChanged={async () => applyAttendance(await api.getSessionAttendance(sessionId))}
+                  busy={roundBusy}
+                  error={roundError}
+                  onFinalize={() => void leaveRound(true)}
+                  onBack={() => void leaveRound(false)}
                 />
               )}
               {!roundInfo && (<>
@@ -1116,24 +1186,20 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
             </div>
           </div>
 
-          {/* Centered End Attendance Button */}
-          <div className="erp-live-action-bar">
-            <button
-              type="button"
-              className="erp-btn erp-btn-danger"
-              onClick={handleEndAttendance}
-              disabled={loading || (roundInfo !== null && !roundInfo.complete)}
-              title={roundInfo !== null && !roundInfo.complete ? "Finalize ENTRY and EXIT first" : undefined}
-              style={{ minWidth: "220px", padding: "0.85rem 1.5rem", fontSize: "1rem" }}
-            >
-              {loading ? "Finalizing Attendance..." : roundInfo !== null ? "FINALIZE SESSION" : "END ATTENDANCE"}
-            </button>
-            {roundInfo !== null && !roundInfo.complete && (
-              <div style={{ fontSize: "0.8rem", color: "var(--erp-text-muted)", marginTop: "0.4rem" }}>
-                Finalize ENTRY and EXIT first; the final attendance is given when both are done.
-              </div>
-            )}
-          </div>
+          {/* Centered End Attendance Button (ad-hoc sessions; a timetable class ends on its class page) */}
+          {!roundInfo && (
+            <div className="erp-live-action-bar">
+              <button
+                type="button"
+                className="erp-btn erp-btn-danger"
+                onClick={handleEndAttendance}
+                disabled={loading}
+                style={{ minWidth: "220px", padding: "0.85rem 1.5rem", fontSize: "1rem" }}
+              >
+                {loading ? "Finalizing Attendance..." : "END ATTENDANCE"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1143,14 +1209,16 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
           {/* A timetable class left unfinished: finish it by hand (ENTRY, EXIT, finalize). */}
           {roundInfo && sessionId && !roundInfo.complete && (
             <div className="erp-card" style={{ padding: "1rem 1.25rem", marginBottom: "1rem", maxWidth: "48rem", width: "100%" }}>
-              <h2 className="erp-section-title" style={{ marginTop: 0 }}>Not finalized: finish this class by hand</h2>
-              <RoundControls
+              <h2 className="erp-section-title" style={{ marginTop: 0 }}>Not finalized: finish this class</h2>
+              <ClassPage
                 sessionId={sessionId}
                 info={roundInfo}
                 records={records}
-                manualMode
-                onManualMode={() => {}}
-                onChanged={async () => applyAttendance(await api.getSessionAttendance(sessionId))}
+                running={false}
+                onOpenRound={async () => {}}
+                onFinalizeSession={() => {}}
+                finalizing={false}
+                onChanged={refreshAttendance}
               />
             </div>
           )}

@@ -2,7 +2,7 @@
 // round bar, no frames while no round is open, and the wiring.
 
 import { readFileSync } from "node:fs";
-import { finalLabel, lectureLabel, roundStatusText, shouldSendFrames, splitByRound, stepActions, type RoundInfo } from "../src/utils/rounds.ts";
+import { canEditFinal, cardAction, finalLabel, lectureLabel, roundCardState, roundStatusText, shouldSendFrames, splitByRound, type RoundInfo } from "../src/utils/rounds.ts";
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
@@ -25,15 +25,22 @@ async function run() {
   expect(lectureLabel(null, 2) === "0/2", "nothing marked yet");
 
   console.log("[2/3] The round bar and frames...");
-  // The steps: ENTRY (start, finalize), then EXIT, then the session.
-  const labels = (info: RoundInfo) => stepActions(info).map((a) => a.label).join(" | ");
+  // The class page: one card per round, each opened on its own camera page.
+  const label = (info: RoundInfo, round: "ENTRY" | "EXIT", running = true) => {
+    const a = cardAction(info, round, running);
+    return a ? `${a.label}${a.disabled ? " (disabled)" : ""}` : "none";
+  };
   const done = (at: string) => ({ opened_at: at, closed_at: at, times_opened: 1, finalized_at: at, may_edit: true, editable_until: "2026-11-03T10:00:00Z" });
-  expect(labels({ ...base, next_step: "ENTRY" }) === "Start ENTRY | Finalize ENTRY", "first: start ENTRY");
-  expect(labels({ ...base, next_step: "ENTRY", open_round: "ENTRY", held: ["ENTRY"] }) === "Finalize ENTRY | Pause camera", "ENTRY live");
-  expect(labels({ ...base, next_step: "ENTRY", held: ["ENTRY"] }) === "Resume ENTRY | Finalize ENTRY", "ENTRY paused");
+  expect(label(base, "ENTRY") === "Open ENTRY" && label(base, "EXIT") === "Open EXIT (disabled)", "first ENTRY; EXIT waits");
+  expect(label({ ...base, open_round: "ENTRY", held: ["ENTRY"] }, "ENTRY") === "Return to ENTRY", "a live round is returned to");
+  expect(label({ ...base, held: ["ENTRY"] }, "ENTRY") === "Resume ENTRY", "a paused round is resumed");
   const afterEntry: RoundInfo = { ...base, next_step: "EXIT", held: ["ENTRY"], rounds: { ...base.rounds, ENTRY: done("2026-11-02T10:00:00Z") } };
-  expect(labels(afterEntry) === "Start EXIT | Finalize EXIT", "then EXIT");
-  expect(labels({ ...afterEntry, next_step: "FINALIZE", complete: true }) === "", "both done: only the session is left");
+  expect(label(afterEntry, "ENTRY") === "none" && label(afterEntry, "EXIT") === "Open EXIT", "a finalized round has no button; then EXIT");
+  expect(roundCardState(afterEntry, "ENTRY") === "finalized" && roundCardState(base, "EXIT") === "waiting", "card states");
+  expect(label(base, "ENTRY", false) === "Finalize ENTRY", "a class that ended: its rounds can only be finalized");
+  expect(!canEditFinal(afterEntry, "ENTRY"), "no hand changes before both rounds are finalized");
+  const complete: RoundInfo = { ...afterEntry, complete: true, rounds: { ENTRY: done("2026-11-02T10:00:00Z"), EXIT: { ...done("2026-11-02T10:50:00Z"), may_edit: false } } };
+  expect(canEditFinal(complete, "ENTRY") && !canEditFinal(complete, "EXIT"), "after both: each round while its 24 h last");
   const time = (iso: string) => iso.slice(11, 16);
   expect(roundStatusText(afterEntry, "ENTRY", time) === "✓ finalized 10:00 · editable by hand until 10:00", "a finalized round says until when");
   expect(roundStatusText({ ...afterEntry, rounds: { ...afterEntry.rounds, ENTRY: { ...done("2026-11-02T10:00:00Z"), may_edit: false } } }, "ENTRY", time).endsWith("locked"), "then locked");
@@ -54,10 +61,13 @@ async function run() {
   console.log("[3/3] Wiring...");
   const flow = readFileSync("src/pages/TeacherAttendanceFlow.tsx", "utf-8");
   expect(flow.includes("if (!shouldSendFrames(roundInfoRef.current)) return;"), "the frame loop waits for an open round");
-  expect(flow.includes("<RoundControls") && flow.includes("if (on) stopCameraStream();"), "round controls and manual mode");
-  const controls = readFileSync("src/components/teacher/RoundControls.tsx", "utf-8");
-  expect(controls.includes("api.markRound(") && controls.includes("api.changeRound(") && controls.includes("api.finalizeRound("), "marks, rounds and finalizing go to the server");
-  expect(flow.includes("disabled={loading || (roundInfo !== null && !roundInfo.complete)}"), "the session is finalized only after both rounds");
+  expect(flow.includes("<ClassPage") && flow.includes("<RoundPanel"), "a class page and a page per round");
+  expect(!flow.includes("Manual mode"), "no manual mode: only the camera marks during a round");
+  const panel = readFileSync("src/components/teacher/RoundPanel.tsx", "utf-8");
+  expect(!panel.includes("api.markRound(") && panel.includes("Finalize {round}") && panel.includes("Back to class"), "the round page is read-only, with Finalize and Back");
+  const page = readFileSync("src/components/teacher/ClassPage.tsx", "utf-8");
+  expect(page.includes("api.markRound(") && page.includes("canEditFinal(info, round)"), "hand changes only on the final attendance");
+  expect(page.includes("disabled={finalizing || !info.complete}"), "Finalize attendance only after both rounds");
 
   console.log("\n✅ All rounds checks passed.");
 }

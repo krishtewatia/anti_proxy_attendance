@@ -43,28 +43,38 @@ export function focusRound(info: RoundInfo): RoundName {
   return nextStep(info) === "ENTRY" ? "ENTRY" : "EXIT";
 }
 
-export interface StepAction {
-  label: string;
-  action: "open" | "close" | "finalize";
-  round: RoundName;
+export type CardState = "waiting" | "not_started" | "paused" | "live" | "finalized" | "locked";
+
+// Where a round stands, for its card on the class page.
+export function roundCardState(info: RoundInfo, round: RoundName): CardState {
+  const state = info.rounds[round];
+  if (state?.finalized_at) return state.may_edit === false ? "locked" : "finalized";
+  if (round === "EXIT" && !info.rounds.ENTRY?.finalized_at) return "waiting";
+  if (info.open_round === round) return "live";
+  return info.held.includes(round) ? "paused" : "not_started";
 }
 
-// What the step bar offers: start (or resume) the camera for the current
-// round, pause it, or finalize the round. Nothing once both are finalized.
-export function stepActions(info: RoundInfo): StepAction[] {
-  if (nextStep(info) === "FINALIZE" || info.complete) return [];
-  const round = focusRound(info);
-  if (info.open_round === round) {
-    return [
-      { label: `Finalize ${round}`, action: "finalize", round },
-      { label: "Pause camera", action: "close", round },
-    ];
-  }
-  const started = info.held.includes(round);
-  return [
-    { label: started ? `Resume ${round}` : `Start ${round}`, action: "open", round },
-    { label: `Finalize ${round}`, action: "finalize", round },
-  ];
+export interface CardAction {
+  label: string;
+  kind: "open" | "finalize";
+  disabled: boolean;
+}
+
+// The button on a round's card. While the class is running a round is opened on
+// its own camera page; once the class has ended an unfinished round can only be
+// finalized (its marks are then corrected on the final attendance).
+export function cardAction(info: RoundInfo, round: RoundName, running: boolean): CardAction | null {
+  const state = roundCardState(info, round);
+  if (state === "finalized" || state === "locked") return null;
+  if (state === "waiting") return { label: `Open ${round}`, kind: "open", disabled: true };
+  if (!running) return { label: `Finalize ${round}`, kind: "finalize", disabled: false };
+  if (state === "live") return { label: `Return to ${round}`, kind: "open", disabled: false };
+  return { label: state === "paused" ? `Resume ${round}` : `Open ${round}`, kind: "open", disabled: false };
+}
+
+// Hand changes: only on the final attendance (both rounds finalized), per round while its window lasts.
+export function canEditFinal(info: RoundInfo, round: RoundName): boolean {
+  return Boolean(info.complete) && info.rounds[round]?.may_edit !== false;
 }
 
 // One line about a round: live, waiting, or finalized and until when it may change by hand.
