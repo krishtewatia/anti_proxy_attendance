@@ -14,6 +14,7 @@
     python infra/scripts/tf.py backup    take a backup now and list the stored backups
     python infra/scripts/tf.py restore-drill   restore the newest backup into a throwaway local database and count it
     python infra/scripts/tf.py golive-reset    take a backup, then clear the test data (asks before deleting)
+    python infra/scripts/tf.py restore-photos  put the newest photo backup back on the server (after a rebuild)
     python infra/scripts/tf.py github-vars   the repository variables the deploy pipeline needs
     python infra/scripts/tf.py destroy   remove everything, including the secrets
 
@@ -223,8 +224,10 @@ def run_on_instance(out: dict[str, str], document: str, parameters: dict, *, wai
 
 
 def bring_up(*, auto_approve: bool, catch_up_release: bool = False) -> int:
+    before = outputs().get("instance_id", "")
     write_instance_state("running")
     apply(public_ip(), auto_approve=auto_approve)
+    replaced_warning(before, outputs().get("instance_id", ""))
     address = public_ip()
     if not address:
         fail("the instance has no public address after the apply")
@@ -322,6 +325,96 @@ def backup_age_hours(last_modified: str, now: datetime | None = None) -> float:
     return (now - stamp).total_seconds() / 3600
 
 
+# An empty photo archive (a tar.gz of an empty folder) is about 140 bytes.
+PHOTO_ARCHIVE = "uploads.tar.gz"
+PHOTO_ARCHIVE_MIN_BYTES = 1024
+PHOTO_LINK_SECONDS = 300
+UPLOADS_VOLUME = "/var/lib/docker/volumes/anti_proxy_uploads/_data"
+
+
+def newest_good_photos(rows: list[tuple[str, int, str]]) -> tuple[str, int, str] | None:
+    """The newest photo archive that holds photos (rows oldest first)."""
+    good = [r for r in rows if r[0].endswith("/" + PHOTO_ARCHIVE) and r[1] >= PHOTO_ARCHIVE_MIN_BYTES]
+    return good[-1] if good else None
+
+
+def photo_backup_warning(
+    rows: list[tuple[str, int, str]], retention_days: int, now: datetime | None = None
+) -> str | None:
+    """A warning when the newest photo backup is empty but an older one is not."""
+    newest = newest_backup(rows, PHOTO_ARCHIVE)
+    good = newest_good_photos(rows)
+    if newest is None or good is None or newest[1] >= PHOTO_ARCHIVE_MIN_BYTES:
+        return None
+    left = retention_days - backup_age_hours(good[2], now) / 24
+    return (
+        f"the newest photo backup is empty, the last one with photos is {good[0]} "
+        f"(deleted in {max(left, 0):.1f} days). Photos may be missing on the server: "
+        "run `python infra/scripts/tf.py restore-photos`."
+    )
+
+
+def replaced_warning(before: str, after: str) -> bool:
+    """Say so when an apply replaced the server: its photo storage starts empty."""
+    if before and after and before != after:
+        print(
+            f"\nThe server was replaced ({before} -> {after}): its photo storage is empty.\n"
+            "Run `python infra/scripts/tf.py restore-photos` to put the newest photo backup back.\n"
+            "Also update the repository variable AWS_INSTANCE_ID (`python infra/scripts/tf.py github-vars`)."
+        )
+        return True
+    return False
+
+
+def retention_days() -> int:
+    try:
+        return int(parse_tfvars(TFVARS.read_text(encoding="utf-8-sig")).get("backup_retention_days", "14"))
+    except (OSError, ValueError):
+        return 14
+
+
+def restore_photos_commands(link: str) -> list[str]:
+    """Shell lines run on the server: download one archive by a short-lived link
+    into memory, check it, and add the missing photos. Prints counts only."""
+    return [
+        "set -euo pipefail",
+        f'V="{UPLOADS_VOLUME}"',
+        '[ -d "$V" ] || { echo "The photo volume does not exist (is the site running?)"; exit 1; }',
+        'T="$(mktemp -d /run/antiproxy-restore.XXXXXX)"',
+        "trap 'rm -rf \"$T\"' EXIT",
+        f"curl --fail --silent --show-error --max-time 300 -o \"$T/photos.tar.gz\" '{link}'",
+        'tar -tzf "$T/photos.tar.gz" > /dev/null',
+        'before="$(find "$V" -type f | wc -l)"',
+        'tar -xzf "$T/photos.tar.gz" -C "$V" --skip-old-files --same-owner',
+        'after="$(find "$V" -type f | wc -l)"',
+        'echo "Photo files: $before before, $((after - before)) added, $after now."',
+    ]
+
+
+def restore_photos(out: dict[str, str], ask=input) -> int:
+    good = newest_good_photos(backup_listing(out))
+    if good is None:
+        print("No photo backup with photos is stored, so there is nothing to restore.")
+        return 1
+    key, size, modified = good
+    print(f"Newest photo backup with photos: {key} ({size / 1e6:.1f} MB, {backup_age_hours(modified) / 24:.1f} days old).")
+    if ask("Add the photos from it that are missing on the server? Type yes: ").strip().lower() != "yes":
+        print("Stopped. Nothing was changed.")
+        return 0
+    signed = aws(
+        "s3", "presign", f"s3://{out['backup_bucket']}/{key}",
+        "--expires-in", str(PHOTO_LINK_SECONDS), region=out.get("aws_region"),
+    )
+    link = signed.stdout.strip()
+    if not link.startswith("https://") or "'" in link:
+        fail("could not make a download link for the backup.")
+    code = run_on_instance(out, "AWS-RunShellScript", {"commands": restore_photos_commands(link)}, wait_seconds=600)
+    if code != 0:
+        return code
+    print("Taking a fresh backup, so the newest one holds the photos again ...")
+    return run_on_instance(out, "AWS-RunShellScript", {"commands": ["/opt/antiproxy/backup.sh"]}, wait_seconds=600)
+
+
 def restore_target_is_local(uri: str) -> bool:
     """The drill only ever restores into a database on this machine."""
     host = urllib.parse.urlsplit(uri).hostname or ""
@@ -404,7 +497,7 @@ def golive_reset(out: dict[str, str], ask=input) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["preflight", "secrets", "up", "stop", "start", "status", "plan", "logs", "certificate", "deploy", "backup", "restore-drill", "golive-reset", "github-vars", "destroy"])
+    parser.add_argument("command", choices=["preflight", "secrets", "up", "stop", "start", "status", "plan", "logs", "certificate", "deploy", "backup", "restore-drill", "golive-reset", "restore-photos", "github-vars", "destroy"])
     command = parser.parse_args().command
     if command == "preflight":
         import preflight
@@ -459,6 +552,9 @@ def main() -> int:
             age = backup_age_hours(newest[2])
             warning = "  <- older than expected, check the nightly backup" if age > BACKUP_MAX_AGE_HOURS else ""
             print(f"backup   : {newest[0]} ({age:.1f} h old){warning}")
+            photos = photo_backup_warning(backup_listing(out), retention_days())
+            if photos:
+                print(f"photos   : WARNING: {photos}")
         return 0
 
     if command == "logs":
@@ -498,10 +594,12 @@ def main() -> int:
             print(f"  {modified[:19]}  {size:>10}  {key}")
         return code
 
-    if command in ("restore-drill", "golive-reset"):
+    if command in ("restore-drill", "golive-reset", "restore-photos"):
         out = outputs()
         if not out.get("backup_bucket"):
             fail("nothing has been created yet.")
+        if command == "restore-photos":
+            return restore_photos(out)
         return restore_drill(out) if command == "restore-drill" else golive_reset(out)
 
     if command == "github-vars":

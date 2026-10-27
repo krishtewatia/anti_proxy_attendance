@@ -45,6 +45,24 @@ the instance itself, which is paid from the credits.
   logs`. If the host failed, AWS has already moved the instance to healthy
   hardware (auto-recover).
 
+## After a server rebuild
+
+Student photos are kept on the server's own disk (the database, with the face
+data, is in Atlas). A rebuilt server (a new instance id; `tf.py up` and
+`start` say so) starts with no photos. Run:
+
+    python infra/scripts/tf.py restore-photos
+
+It finds the newest photo backup that holds photos, asks before changing
+anything, and has the server download it by a link that works for 5 minutes,
+straight from the backup bucket into memory. Only missing photos are added;
+nothing is overwritten. The photos never pass through this machine, and the
+server still cannot read the bucket by itself. A fresh backup is taken at the
+end. `tf.py status` warns when the newest photo backup is empty while an older
+one is not, and how many days remain before that one is deleted (14-day
+retention), so do this soon after a rebuild. Also update the repository
+variable `AWS_INSTANCE_ID` (`python infra/scripts/tf.py github-vars`).
+
 ## Restoring for real
 
 If data is lost, follow "Backups" in

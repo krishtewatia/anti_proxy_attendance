@@ -461,3 +461,93 @@ def test_the_golive_reset_lists_then_deletes_exactly_the_number_typed(monkeypatc
     sent.clear()
     assert tf.golive_reset(OUT, ask=lambda prompt: "42") == 0
     assert sent[-1].endswith("--apply --expect 42") and "golive_reset --database" in sent[-1]
+
+
+# ------------------------------------------------------------------------------
+# Photos after a server rebuild
+# ------------------------------------------------------------------------------
+
+PHOTO_ROWS = [
+    ("20261024T153546Z/uploads.tar.gz", 2_559_929, "2026-10-24T15:36:00+00:00"),
+    ("20261025T153519Z/uploads.tar.gz", 106_115, "2026-10-25T15:35:30+00:00"),
+    ("20261026T153554Z/database.archive.gz", 2_900_000, "2026-10-26T15:36:00+00:00"),
+    ("20261026T153554Z/uploads.tar.gz", 139, "2026-10-26T15:36:05+00:00"),
+]
+
+
+def test_the_newest_photo_backup_with_photos_skips_empty_ones():
+    import tf
+
+    assert tf.newest_good_photos(PHOTO_ROWS)[0] == "20261025T153519Z/uploads.tar.gz"
+    assert tf.newest_good_photos([("x/uploads.tar.gz", 139, "2026-10-26T00:00:00Z")]) is None
+
+
+def test_status_warns_when_the_newest_photo_backup_is_empty():
+    from datetime import datetime, timezone
+
+    import tf
+
+    now = datetime(2026, 10, 27, 15, 35, 30, tzinfo=timezone.utc)
+    warning = tf.photo_backup_warning(PHOTO_ROWS, 14, now)
+    assert "20261025T153519Z/uploads.tar.gz" in warning and "in 12.0 days" in warning and "restore-photos" in warning
+    assert tf.photo_backup_warning(PHOTO_ROWS[:2], 14, now) is None  # newest has photos
+    assert tf.photo_backup_warning([PHOTO_ROWS[3]], 14, now) is None  # nothing better to restore
+
+
+def test_restore_photos_stops_unless_confirmed(monkeypatch, capsys):
+    import tf
+
+    sent: list = []
+    monkeypatch.setattr(tf, "backup_listing", lambda out: PHOTO_ROWS)
+    monkeypatch.setattr(tf, "run_on_instance", lambda *a, **k: sent.append(a) or 0)
+    monkeypatch.setattr(tf, "aws", lambda *a, **k: pytest.fail("no link may be made"))
+    assert tf.restore_photos({**OUT, "backup_bucket": "b"}, ask=lambda prompt: "") == 0
+    assert sent == [] and "Nothing was changed" in capsys.readouterr().out
+
+
+def test_restore_photos_sends_a_short_lived_link_and_takes_a_backup(monkeypatch):
+    import tf
+
+    link = "https://b.s3.ap-south-1.amazonaws.com/20261025T153519Z/uploads.tar.gz?X-Amz-Expires=300&X-Amz-Signature=abc"
+    calls: list[list[str]] = []
+    asked: list[tuple] = []
+    monkeypatch.setattr(tf, "backup_listing", lambda out: PHOTO_ROWS)
+    monkeypatch.setattr(tf, "aws", lambda *a, **k: asked.append(a) or types.SimpleNamespace(stdout=link + "\n"))
+    monkeypatch.setattr(tf, "run_on_instance", lambda out, document, parameters, wait_seconds: calls.append(parameters["commands"]) or 0)
+    assert tf.restore_photos({**OUT, "backup_bucket": "b"}, ask=lambda prompt: "yes") == 0
+    assert asked[0][:2] == ("s3", "presign") and asked[0][2] == "s3://b/20261025T153519Z/uploads.tar.gz"
+    assert asked[0][asked[0].index("--expires-in") + 1] == "300"
+    restore, backup = calls
+    script = "\n".join(restore)
+    assert f"'{link}'" in script and "--skip-old-files" in script and "/run/antiproxy-restore" in script
+    assert "tar -tzf" in script and "echo \"Photo files:" in script
+    assert backup == ["/opt/antiproxy/backup.sh"]
+
+
+def test_a_replaced_server_is_reported(capsys):
+    import tf
+
+    assert tf.replaced_warning("i-old", "i-new") is True
+    assert "restore-photos" in capsys.readouterr().out
+    assert tf.replaced_warning("i-same", "i-same") is False and tf.replaced_warning("", "i-new") is False
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="runs the backup's shell lines with bash")
+def test_the_backup_stores_no_empty_photo_archive(tmp_path):
+    import re
+    import subprocess
+
+    text = (SCRIPTS.parent / "terraform" / "files" / "backup.sh").read_text(encoding="utf-8")
+    block = re.search(r"^if \[ -d \"\$UPLOADS\" \].*?^fi$", text, re.S | re.M).group(0)
+    uploads, work = tmp_path / "uploads", tmp_path / "work"
+    uploads.mkdir(), work.mkdir()
+
+    def run_block() -> str:
+        script = f'UPLOADS="{uploads}"; WORK="{work}"\n{block}\n'
+        return subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True).stdout
+
+    assert "previous one is kept" in run_block() and not (work / "uploads.tar.gz").exists()
+    (uploads / "student_profiles").mkdir()
+    (uploads / "student_profiles" / "x.jpg").write_bytes(b"not a photo")
+    run_block()
+    assert (work / "uploads.tar.gz").stat().st_size > 0

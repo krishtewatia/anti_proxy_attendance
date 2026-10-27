@@ -34,8 +34,13 @@ PY
 mongodump --config="$CONFIG" --archive="$WORK/database.archive.gz" --gzip --quiet
 
 UPLOADS=/var/lib/docker/volumes/anti_proxy_uploads/_data
-if [ -d "$UPLOADS" ]; then
+# An empty photo folder (for example on a rebuilt server) is not stored: an
+# empty archive would become the newest one while the last archive with photos
+# ages out. Restore with `python infra/scripts/tf.py restore-photos`.
+if [ -d "$UPLOADS" ] && [ -n "$(find "$UPLOADS" -type f -print -quit)" ]; then
   tar --create --gzip --file "$WORK/uploads.tar.gz" --directory "$UPLOADS" .
+else
+  echo "Photo folder empty: no photo archive stored, the previous one is kept"
 fi
 
 for file in "$WORK"/*; do
