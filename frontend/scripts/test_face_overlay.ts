@@ -1,6 +1,9 @@
 import {
+  countNotInClass,
   getFaceOverlayStyle,
   hasSpoof,
+  isMarked,
+  notMarkedReason,
   LIVENESS_UNAVAILABLE_LABEL,
   SPOOF_LABEL,
 } from "../src/utils/faceOverlay.ts";

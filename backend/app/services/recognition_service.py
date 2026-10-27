@@ -195,6 +195,32 @@ async def consume_nonce(db: AsyncIOMotorDatabase, verified: VerifiedRecognition)
         raise RecognitionRejected("replayed")
 
 
+# (session, identity) -> when a "does not belong to this class" answer expires.
+# A face that is not in the class is seen many times a minute; the database is
+# asked again at most once a minute per face.
+_NOT_IN_CLASS: dict[tuple[str, str], float] = {}
+_NOT_IN_CLASS_SECONDS = 60.0
+
+
+async def _joined_late(db: AsyncIOMotorDatabase, session: dict, identity: str) -> bool:
+    """True when a timetable class's student was approved after it started (now added)."""
+    if not session.get("slot_id"):
+        return False
+    key = (session["session_id"], identity)
+    now = time.monotonic()
+    if _NOT_IN_CLASS.get(key, 0.0) > now:
+        return False
+    from app.services.teaching_service import add_late_student
+
+    if await add_late_student(db, session, identity):
+        _NOT_IN_CLASS.pop(key, None)
+        return True
+    if len(_NOT_IN_CLASS) > 10_000:
+        _NOT_IN_CLASS.clear()
+    _NOT_IN_CLASS[key] = now + _NOT_IN_CLASS_SECONDS
+    return False
+
+
 async def verify_and_mark(
     db: AsyncIOMotorDatabase,
     session: dict,
@@ -219,7 +245,9 @@ async def verify_and_mark(
     identity = verified.identity
 
     roster = await get_session_roster(session_id)
-    if roster is None or identity not in roster.identities:
+    if (roster is None or identity not in roster.identities) and not await _joined_late(
+        db, session, identity
+    ):
         logger.warning(
             "Recognition for %s rejected in session %s: not on the roster", identity, session_id
         )
