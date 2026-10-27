@@ -82,3 +82,29 @@ export function teachersFor(teachers: RegistryTeacher[], cohortId: string): { as
     unassigned: teachers.filter((t) => t.classes.length === 0),
   };
 }
+
+// Checking (and then loading) a students or teachers CSV kept on file.
+export type PeopleKind = "students" | "teachers";
+
+export interface PeopleCsvCheck {
+  to_create: number;
+  existing: number;
+  errors: { line: number; errors: string[] }[];
+  rows: { user_id: string; roll_number?: string; name: string; email: string; section?: string }[];
+  created?: number;
+}
+
+// What the check means, in one line.
+export function csvCheckSummary(check: PeopleCsvCheck, kind: PeopleKind): string {
+  const noun = kind === "students" ? "student" : "teacher";
+  const plural = (n: number) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+  const parts = [`${plural(check.to_create)} to add`, `${check.existing} already here (kept as they are)`];
+  if (check.errors.length) parts.push(`${check.errors.length} row${check.errors.length === 1 ? "" : "s"} with errors`);
+  return parts.join(" · ");
+}
+
+// The download's file name: dated, and marked confidential (it holds password hashes).
+export function peopleCsvName(kind: PeopleKind, today: Date = new Date()): string {
+  const stamp = today.toISOString().slice(0, 10).replace(/-/g, "");
+  return `${kind}_${stamp}_CONFIDENTIAL.csv`;
+}

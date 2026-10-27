@@ -31,6 +31,7 @@ const testSuites: TestSuite[] = [
   { name: "Teachers On The Timetable", file: "test_teaching.ts", category: "Unit" },
   { name: "Rounds: ENTRY And EXIT", file: "test_rounds.ts", category: "Unit" },
   { name: "Reports And Downloads", file: "test_class_reports.ts", category: "Unit" },
+  { name: "People CSV Backup And Restore", file: "test_people_csv.ts", category: "Unit" },
   { name: "Teachers Choose Their Classes", file: "test_teacher_setup.ts", category: "Unit" },
   { name: "Create Session Form Validation & Lifecycle", file: "test_create_session.ts", category: "Unit" },
   { name: "Attendance Correction Validation & Audit History", file: "test_attendance_correction.ts", category: "Unit" },

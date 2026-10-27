@@ -33,7 +33,7 @@ import { clearStoredAuth, getStoredToken, setMustChangePassword } from "./auth.t
 import type { PendingApprovals, PendingCounts } from "../utils/approvals.ts";
 import type { ReportsSummary } from "../utils/reports.ts";
 import type { ConsentStatus, RegistrationRules } from "../utils/registration.ts";
-import type { RegistryTeacher, StudentRegistry } from "../utils/registry.ts";
+import type { PeopleCsvCheck, PeopleKind, RegistryTeacher, StudentRegistry } from "../utils/registry.ts";
 import type { SlotSession, TeacherTimetable } from "../utils/teaching.ts";
 import { classPath, type ClassOverview, type ClassSessionItem, type SessionSheet, type LectureItem, type SubjectReport, type TeacherClassItem } from "../utils/classReports.ts";
 import type { MyTeacherSetup, TeacherSetupOptions, WaitingTeacherRequest } from "../utils/teacherSetup.ts";
@@ -497,6 +497,15 @@ export const api = {
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
+  },
+
+  // --- Students and teachers kept on file as CSV (admin) ---
+  checkPeopleCsv(kind: PeopleKind, file: Blob, apply = false): Promise<PeopleCsvCheck> {
+    return request<PeopleCsvCheck>(`/api/v1/admin/registry/${kind}/import${apply ? "?apply=true" : ""}`, {
+      method: "POST",
+      headers: { "Content-Type": "text/csv" },
+      body: file,
+    });
   },
 
   // --- Teachers choose their own classes ---

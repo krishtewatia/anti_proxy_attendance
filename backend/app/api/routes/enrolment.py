@@ -1,14 +1,16 @@
 """Student self-setup (section, groups, photos) and its approval by an administrator."""
 
+from datetime import datetime, timezone
 from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.dependencies.auth import require_admin, require_student
 from app.api.dependencies.rate_limiter import photo_check_rate_limiter
 from app.database.mongodb import get_database
 from app.services import enrolment_service as enrolment
+from app.services import people_csv_service as people_csv
 from app.services import section_list_service as section_lists
 from app.services import registry_service as registry
 from app.services.photo_quality import MAX_PHOTOS
@@ -328,3 +330,81 @@ async def student_registry(
 @router.get("/api/v1/admin/registry/teachers", summary="Every teacher with the classes they take")
 async def teacher_registry(current_user: Annotated[dict, Depends(require_admin)]) -> dict:
     return await registry.teachers(get_database())
+
+
+# ------------------------------------------------------------------ CSV backup of people
+
+
+def _people_csv(text: str, kind: str) -> Response:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+    return Response(
+        content=text,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{kind}_{stamp}_CONFIDENTIAL.csv"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get(
+    "/api/v1/admin/registry/students.csv",
+    summary="The students shown, as a CSV to keep on file (confidential: holds password hashes)",
+)
+async def export_students_csv(
+    current_user: Annotated[dict, Depends(require_admin)],
+    cohort_id: Annotated[Optional[str], Query(max_length=64)] = None,
+    section: Annotated[Optional[str], Query(max_length=8)] = None,
+    student_status: Annotated[Optional[str], Query(alias="status", max_length=16)] = None,
+    q: Annotated[Optional[str], Query(max_length=64)] = None,
+) -> Response:
+    filters = {
+        "cohort_id": cohort_id,
+        "section": section,
+        "status": student_status.upper() if student_status else None,
+        "q": q,
+    }
+    text = await people_csv.export_students(get_database(), filters, current_user)
+    return _people_csv(text, "students")
+
+
+@router.get(
+    "/api/v1/admin/registry/teachers.csv",
+    summary="Every teacher, as a CSV to keep on file (confidential: holds password hashes)",
+)
+async def export_teachers_csv(current_user: Annotated[dict, Depends(require_admin)]) -> Response:
+    return _people_csv(await people_csv.export_teachers(get_database(), current_user), "teachers")
+
+
+@router.post(
+    "/api/v1/admin/registry/{kind}/import",
+    summary="Check (apply=false) or load (apply=true) a students or teachers CSV",
+)
+async def import_people_csv(
+    kind: Literal["students", "teachers"],
+    request: Request,
+    current_user: Annotated[dict, Depends(require_admin)],
+    apply: bool = False,
+) -> dict:
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > people_csv.MAX_BYTES:
+        raise HTTPException(status_code=413, detail="The file is larger than 2 MB.")
+    data = await request.body()
+    db = get_database()
+    try:
+        if kind == "students":
+            plan = await people_csv.check_students(db, data)
+        else:
+            plan = await people_csv.check_teachers(db, data)
+    except people_csv.CsvError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    result = people_csv.summary(plan)
+    if apply:
+        if plan["errors"]:
+            raise HTTPException(
+                status_code=409,
+                detail="The file has rows with errors. Fix them (or remove those rows) and try again.",
+            )
+        apply_rows = people_csv.apply_students if kind == "students" else people_csv.apply_teachers
+        result["created"] = await apply_rows(db, plan, current_user)
+    return result
