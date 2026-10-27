@@ -43,6 +43,7 @@ from app.services.student_deletion import (
     StudentNotFound,
     delete_student_completely,
 )
+from app.services.rounds_service import is_complete as rounds_complete
 from app.services.session_finalization import end_without_roster, finalize_session_attendance
 from app.services.student_service import ClassRequiredError, register_student_account
 from app.services.teacher_service import register_teacher_account
@@ -782,6 +783,11 @@ async def admin_finalize_session_endpoint(
         raise HTTPException(status_code=404, detail="Session not found")
 
     roster = await get_enrolled_roster(session_id)
+    if session.get("slot_id") and not rounds_complete(session):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Finalize ENTRY and EXIT first, then finalize the session.",
+        )
     if roster is None and session.get("slot_id"):
         records = await end_without_roster(session_id)
     elif roster is None:

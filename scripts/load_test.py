@@ -370,6 +370,15 @@ async def teacher_period(
         await timed(
             rec, client, "teacher: dashboard", "GET", "/api/v1/teachers/dashboard", headers=auth
         )
+        # ENTRY is finalized before EXIT can start; both before the session.
+        await timed(
+            rec,
+            client,
+            "teacher: finalize round",
+            "POST",
+            f"/api/v1/sessions/{sid}/rounds/{round_name}/finalize",
+            headers=auth,
+        )
     await timed(
         rec,
         client,

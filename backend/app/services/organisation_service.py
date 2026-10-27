@@ -564,7 +564,7 @@ DEFAULT_SETTINGS = {
     "college_email_domain": "niet.co.in",
     # Teachers may correct a session until they finalize it or this many hours
     # after it, whichever is first; then only an administrator can unlock it.
-    "edit_window_hours": 48,
+    "edit_window_hours": 24,
     "shortage_threshold_percent": 75,
 }
 CODE_STATUSES = ("CONFIRMED", "INCOMPLETE", "MISMATCH")

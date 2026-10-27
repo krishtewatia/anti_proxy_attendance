@@ -548,6 +548,11 @@ export const api = {
   },
 
   // --- ENTRY / EXIT rounds ---
+  // Finalize ENTRY or EXIT: the camera stops for it; it may be changed by hand for 24 h.
+  finalizeRound(sessionId: string, round: "ENTRY" | "EXIT"): Promise<unknown> {
+    return request<unknown>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/rounds/${round}/finalize`, { method: "POST" });
+  },
+
   changeRound(sessionId: string, round: "ENTRY" | "EXIT", action: "open" | "close"): Promise<unknown> {
     return request<unknown>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/rounds/${round}/${action}`, { method: "POST" });
   },

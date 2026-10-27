@@ -3,11 +3,23 @@
 export type RoundName = "ENTRY" | "EXIT";
 export const ROUND_NAMES: RoundName[] = ["ENTRY", "EXIT"];
 
+export interface RoundState {
+  opened_at: string | null;
+  closed_at: string | null;
+  times_opened: number | null;
+  finalized_at?: string | null;
+  editable_until?: string | null;
+  may_edit?: boolean;
+}
+
 export interface RoundInfo {
   periods: number;
   open_round: RoundName | null;
   held: RoundName[];
-  rounds: Record<RoundName, { opened_at: string | null; closed_at: string | null; times_opened: number | null }>;
+  rounds: Record<RoundName, RoundState>;
+  // Both rounds finalized: the class's attendance is final.
+  complete?: boolean;
+  next_step?: RoundName | "FINALIZE";
   editable_until?: string | null;
   teacher_may_edit?: boolean;
 }
@@ -19,13 +31,79 @@ export function lectureLabel(lectures: string[] | null | undefined, periods: num
   return `${list.filter((l) => l === "P").length}/${total}`;
 }
 
-// What the round bar offers for each round.
-export function roundActions(info: RoundInfo): { round: RoundName; label: string; action: "open" | "close" }[] {
-  return ROUND_NAMES.map((round) => {
-    if (info.open_round === round) return { round, label: `Close ${round}`, action: "close" as const };
-    const held = info.held.includes(round);
-    return { round, label: held ? `Reopen ${round}` : `Open ${round} round`, action: "open" as const };
-  });
+// What the teacher does next (from the server, or worked out from the rounds).
+export function nextStep(info: RoundInfo): RoundName | "FINALIZE" {
+  if (info.next_step) return info.next_step;
+  if (!info.rounds.ENTRY?.finalized_at) return "ENTRY";
+  return info.rounds.EXIT?.finalized_at ? "FINALIZE" : "EXIT";
+}
+
+// The round the teacher is working on: the next one to finalize, or EXIT once both are done.
+export function focusRound(info: RoundInfo): RoundName {
+  return nextStep(info) === "ENTRY" ? "ENTRY" : "EXIT";
+}
+
+export interface StepAction {
+  label: string;
+  action: "open" | "close" | "finalize";
+  round: RoundName;
+}
+
+// What the step bar offers: start (or resume) the camera for the current
+// round, pause it, or finalize the round. Nothing once both are finalized.
+export function stepActions(info: RoundInfo): StepAction[] {
+  if (nextStep(info) === "FINALIZE" || info.complete) return [];
+  const round = focusRound(info);
+  if (info.open_round === round) {
+    return [
+      { label: `Finalize ${round}`, action: "finalize", round },
+      { label: "Pause camera", action: "close", round },
+    ];
+  }
+  const started = info.held.includes(round);
+  return [
+    { label: started ? `Resume ${round}` : `Start ${round}`, action: "open", round },
+    { label: `Finalize ${round}`, action: "finalize", round },
+  ];
+}
+
+// One line about a round: live, waiting, or finalized and until when it may change by hand.
+export function roundStatusText(info: RoundInfo, round: RoundName, formatTime: (iso: string) => string): string {
+  const state = info.rounds[round];
+  if (state?.finalized_at) {
+    if (state.may_edit === false) return `✓ finalized ${formatTime(state.finalized_at)} · locked`;
+    return state.editable_until
+      ? `✓ finalized ${formatTime(state.finalized_at)} · editable by hand until ${formatTime(state.editable_until)}`
+      : `✓ finalized ${formatTime(state.finalized_at)}`;
+  }
+  if (info.open_round === round) return "live: the camera is marking";
+  if (round === "EXIT" && !info.rounds.ENTRY?.finalized_at) return "after ENTRY is finalized";
+  return info.held.includes(round) ? "paused" : "not started";
+}
+
+interface MarkedStudent {
+  identity: string;
+  student_name?: string | null;
+  roll_number?: string | null;
+  rounds?: Partial<Record<RoundName, { status: string | null; at?: string | null } | undefined>> | null;
+}
+
+// Present in a round (newest mark first) and still absent (by roll number).
+export function splitByRound<T extends MarkedStudent>(records: T[], round: RoundName, query = ""): { present: T[]; absent: T[] } {
+  const q = query.trim().toLowerCase();
+  const shown = records.filter(
+    (r) => !q || (r.student_name ?? "").toLowerCase().includes(q) || (r.roll_number ?? "").toLowerCase().includes(q),
+  );
+  const byRoll = (a: T, b: T) => (a.roll_number ?? "").localeCompare(b.roll_number ?? "");
+  const present = shown.filter((r) => r.rounds?.[round]?.status === "PRESENT");
+  const absent = shown.filter((r) => r.rounds?.[round]?.status !== "PRESENT").sort(byRoll);
+  present.sort((a, b) => (b.rounds?.[round]?.at ?? "").localeCompare(a.rounds?.[round]?.at ?? "") || byRoll(a, b));
+  return { present, absent };
+}
+
+// A student's final result, only once both rounds are finalized.
+export function finalLabel(lectures: string[] | null | undefined, info: RoundInfo): string {
+  return info.complete ? lectureLabel(lectures, info.periods) : "final after EXIT";
 }
 
 // Recognition only marks while a round is open: no frames are sent otherwise.

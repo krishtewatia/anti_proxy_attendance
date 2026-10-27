@@ -145,6 +145,22 @@ async def close_round(
 
 
 @router.post(
+    "/api/v1/sessions/{session_id}/rounds/{round_name}/finalize",
+    summary="Finalize ENTRY or EXIT: the camera stops for it; hand changes for 24 h",
+)
+async def finalize_round(
+    session_id: str, round_name: str, current_user: Annotated[dict, Depends(require_teacher)]
+) -> dict:
+    session = await get_owned_session(session_id, current_user)
+    try:
+        return await rounds.finalize_round(
+            get_database(), session, round_name.upper(), actor=current_user
+        )
+    except rounds.RoundError as exc:
+        raise _round_http(exc) from exc
+
+
+@router.post(
     "/api/v1/sessions/{session_id}/rounds/{round_name}/marks",
     summary="Mark a student in a round by hand",
 )

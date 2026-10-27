@@ -25,7 +25,13 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.services import enrolment_service as enrolment
 from app.services import organisation_service as org
-from app.services.rounds_service import editable_until, held_rounds, teacher_may_edit
+from app.services.rounds_service import (
+    editable_until,
+    held_rounds,
+    is_complete,
+    is_pending,
+    teacher_may_edit,
+)
 from app.services.teaching_service import COLLEGE_TZ, DAY_CODES
 
 RECORD_FIELDS = {"identity": 1, "session_id": 1, "lectures": 1, "rounds": 1}
@@ -63,7 +69,8 @@ async def _held_sessions(
     if since:
         query["date"]["$gte"] = since.isoformat()
     sessions = [s async for s in db["sessions"].find(query, {"_id": 0})]
-    held = [s for s in sessions if held_rounds(s)]
+    # Only a complete class (ENTRY and EXIT both finalized) counts.
+    held = [s for s in sessions if is_complete(s)]
     # Sorted by day and class time (the stored time may or may not carry a zone).
     return sorted(held, key=lambda s: (s["date"], _local_time(s.get("start_time"))))
 
@@ -106,7 +113,16 @@ async def _not_entered(
                 off_classes.add((e["date"], e["class_id"]))
             else:
                 off_days.add(e["date"])
-        taken = {(s["slot_id"], s["date"]) for s in await _held_sessions(db, cohort_classes, until)}
+        hours = int((await org.get_settings(db))["edit_window_hours"])
+        # Complete classes are counted; one still being finished is in neither.
+        taken = {
+            (s["slot_id"], s["date"])
+            async for s in db["sessions"].find(
+                {"class_id": {"$in": cohort_classes}, "date": {"$lte": until.isoformat()}},
+                {"_id": 0},
+            )
+            if is_complete(s) or is_pending(s, hours)
+        }
         day = start
         while day <= until:
             iso = day.isoformat()

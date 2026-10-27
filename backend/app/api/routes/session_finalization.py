@@ -1,12 +1,13 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies.auth import get_owned_session, require_teacher
 from app.schemas.session_finalization import SessionFinalizationResponse
 from app.services.audit_service import record_audit_event
 from app.services.session_enrollment import get_enrolled_roster
+from app.services.rounds_service import is_complete as rounds_complete
 from app.services.session_finalization import end_without_roster, finalize_session_attendance
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,11 @@ async def finalize_session(
 
     roster = await get_enrolled_roster(session_id)
 
+    if session.get("slot_id") and not rounds_complete(session):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Finalize ENTRY and EXIT first, then finalize the session.",
+        )
     if roster is None and session.get("slot_id"):
         # A timetable class with nobody approved yet: nothing to mark, but
         # the session must still be endable.
