@@ -76,18 +76,20 @@ for this machine's address. Take a fresh backup of the current state first.
 throwaway local copy of the stack limited to about the t3.small's size, and
 writes [load_test_results.md](load_test_results.md). It only measures.
 
-What it showed (26 Oct 2026):
+What it showed (26-27 Oct 2026; details in the results file):
 
 * Pages are fast. 280 students opening their dashboard and subject-wise
-  attendance in the same minute: p95 at most 0.11 s, no errors. Teachers'
-  class overview, register, session sheet and hand marks: p95 at most 0.14 s.
-* Recognition is the limit. With four cameras sending at once, the vision
-  service uses all the CPU it gets (one vCPU in the test) and each camera gets
-  an answer about every 2.9 s (p95 4.5 s). 2 of 172 frames timed out; the
-  camera simply sends the next one. In practice a student has to stay in view
-  for about 3-5 s instead of about 1 s. The target (p95 under 1.5 s) is not
-  met with four cameras at once.
-* Opening a round took up to 1.35 s while the cameras were busy (target 1 s).
+  attendance in the same minute, and the teachers' overview, register and hand
+  marks: p95 well under 1 s, no errors.
+* Recognition is the limit. With all four cameras sending all the time, each
+  camera gets an answer about every 2 s (p95 3.3 s) on the t3.small's 2 vCPU.
+* The teacher's page now skips frames with nothing new to recognise (an empty
+  doorway, a student already marked): about 70% of frames are skipped. With
+  students arriving at the four doors at different moments, an answer takes
+  about 1.4 s (p95 2.4 s), with no failures. When all four doors are busy at
+  the very same moment it is still about 2 s or more: four cameras then share
+  about two answers a second. The camera footer shows "sent N · skipped M".
+* Opening a round took up to about 2 s while the cameras were busy.
 * The t3.small runs on CPU credits (`cpu_credits = "standard"`: it never costs
   extra, it slows down instead). It earns 24 credits an hour and stores up to
   576; four cameras at once use about 90-120 an hour (1.5-2 vCPU). From a full
@@ -95,10 +97,9 @@ What it showed (26 Oct 2026):
   the instance was on overnight (hence always on). If recognition gets slow
   late in the day, the credits ran out.
 
-Options if the pilot needs faster recognition (not done; each needs a
-decision):
+Options if the pilot needs faster recognition still (not done; each needs a
+decision; the vision service itself stays unchanged):
 
-* stagger the rounds (ENTRY for A/B, then C/D a minute later);
-* a larger instance (t3.medium, 4 GB, about $30 a month from the credits);
-* fewer frames per camera (the vision service would see each student less
-  often but answer sooner).
+* stagger the rounds (ENTRY for A/B, then C/D a minute later), so the doors
+  are not all busy at once;
+* a larger instance (t3.medium, 4 GB, about $30 a month from the credits).

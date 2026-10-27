@@ -61,6 +61,17 @@ SECTIONS = ("A", "B", "C", "D")
 VISION_CONTAINER = "antiproxy-lt-vision-service"
 TARGETS = {"frame_p95_s": 1.5, "page_p95_s": 1.0}
 
+# The teacher page's frame gate (frontend/src/utils/frameGate.ts), for the
+# "doorway" scenario. Both are checked against frontend/scripts/frame_gate_vectors.json.
+CHANGE_THRESHOLD = 6
+HEARTBEAT_MS = 3000
+# Doorway: in every 10 s, a new student every second for 4 s, then 6 s of nobody new.
+DOORWAY_CYCLE_S, DOORWAY_BUSY_S, DOORWAY_NEW_EVERY_S = 10.0, 4.0, 1.0
+
+
+def should_send(difference: float, needs_another_look: bool, ms_since_sent: float) -> bool:
+    return difference >= CHANGE_THRESHOLD or needs_another_look or ms_since_sent >= HEARTBEAT_MS
+
 
 def is_local(url: str) -> bool:
     return (urllib.parse.urlsplit(url).hostname or "") in LOCAL_HOSTS
@@ -87,6 +98,7 @@ def percentile(values: list[float], share: float) -> float:
 class Recorder:
     def __init__(self) -> None:
         self.calls: dict[str, list[tuple[float, int]]] = {}
+        self.skipped = 0
 
     def add(self, name: str, seconds: float, status: int) -> None:
         self.calls.setdefault(name, []).append((seconds, status))
@@ -120,13 +132,13 @@ async def timed(rec: Recorder, client, name: str, method: str, url: str, **kwarg
     return response
 
 
-def make_frame() -> bytes:
+def make_frame(seed: int = 7) -> bytes:
     code = (
         "import cv2, numpy as np, sys;"
-        "img = cv2.GaussianBlur(np.random.default_rng(7).integers(0, 255, (480, 640, 3), dtype=np.uint8), (0, 0), 3);"
+        "img = cv2.GaussianBlur(np.random.default_rng(%d).integers(0, 255, (480, 640, 3), dtype=np.uint8), (0, 0), 3);"
         "ok, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 80]);"
         "sys.stdout.buffer.write(buf.tobytes())"
-    )
+    ) % seed
     result = subprocess.run(  # nosec B603 B607 - fixed command
         ["docker", "exec", VISION_CONTAINER, "python", "-c", code], capture_output=True, check=True
     )
@@ -291,7 +303,15 @@ async def cleanup(db) -> None:
 
 
 async def teacher_period(
-    client, rec: Recorder, auth: dict, slot: dict, day: date, frame: bytes, seconds: int
+    client,
+    rec: Recorder,
+    auth: dict,
+    slot: dict,
+    day: date,
+    frames: list[bytes],
+    seconds: int,
+    scenario: str = "steady",
+    offset_s: float = 0.0,
 ) -> str | None:
     started = await timed(
         rec,
@@ -317,9 +337,26 @@ async def teacher_period(
             f"/api/v1/sessions/{sid}/rounds/{round_name}/open",
             headers=auth,
         )
-        until = time.perf_counter() + seconds / 2
+        start = time.perf_counter()
+        until = start + seconds / 2
+        last_sent_index, last_sent_at = -1, 0.0
         while time.perf_counter() < until:
             began = time.perf_counter()
+            index = 0
+            if scenario == "doorway":
+                # Which student is at the door now (the frame changes only when a new one comes).
+                elapsed = began - start + offset_s
+                in_cycle = elapsed % DOORWAY_CYCLE_S
+                cycle = int(elapsed // DOORWAY_CYCLE_S)
+                step = int(min(in_cycle, DOORWAY_BUSY_S - 0.001) // DOORWAY_NEW_EVERY_S)
+                index = (cycle * 4 + step) % len(frames)
+                changed = index != last_sent_index
+                if not should_send(255.0 if changed else 0.0, False, (began - last_sent_at) * 1000):
+                    rec.skipped += 1
+                    await asyncio.sleep(0.25)
+                    continue
+                last_sent_index, last_sent_at = index, began
+            frame = frames[index]
             await timed(
                 rec,
                 client,
@@ -392,7 +429,14 @@ def write_report(path: Path, args, plan: dict, rec: Recorder, peaks, wall: float
         "# Load test results",
         "",
         f"Run {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} against the local stack "
-        f"({'limited to 2 vCPU / 2 GB like the t3.small' if args.limited else 'without size limits'}).",
+        f"({args.profile or ('limited to 2 vCPU / 2 GB like the t3.small' if args.limited else 'without size limits')}).",
+        "",
+        f"Scenario: {('doorway (a new student every second for 4 s in every 10 s, ' + ('all four doors at the same moments' if args.aligned else 'the four doors a quarter cycle apart') + '; the page skips unchanged frames)') if args.scenario == 'doorway' else 'steady (every camera sends continuously, as before the frame gate)'}"
+        + (
+            f"; frames sent {frame['count'] if frame else 0}, skipped {rec.skipped}."
+            if args.scenario == "doorway"
+            else "."
+        ),
         "",
         f"One period, four sections at once: {len(SECTIONS)} teachers, {args.students * len(SECTIONS)} students, "
         f"{args.frame_seconds} s of frames per session (640x480, one in flight per camera, no faces). Wall time {wall:.0f} s.",
@@ -454,7 +498,11 @@ async def main_async(args) -> int:
 
     db = get_database()
     await cleanup(db)  # leftovers of an interrupted run
-    frame = make_frame()
+    frames = (
+        [make_frame(seed) for seed in range(7, 15)]
+        if args.scenario == "doorway"
+        else [make_frame()]
+    )
     print(f"Seeding {args.students} students x {len(SECTIONS)} sections ...")
     plan = await seed(db, args.students)
     auth = {
@@ -476,8 +524,13 @@ async def main_async(args) -> int:
                     auth[plan["teachers"][s]],
                     plan["slots"][s],
                     plan["day"],
-                    frame,
+                    frames,
                     args.frame_seconds,
+                    args.scenario,
+                    # Four classrooms' doors are not busy at the same moment.
+                    SECTIONS.index(s) * DOORWAY_CYCLE_S / len(SECTIONS)
+                    if not args.aligned
+                    else 0.0,
                 )
                 for s in SECTIONS
             ]
@@ -537,6 +590,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="say in the report that the stack ran with the t3.small limits",
     )
+    parser.add_argument(
+        "--scenario",
+        choices=["steady", "doorway"],
+        default="steady",
+        help="steady: every camera sends all the time; doorway: students arrive, the page skips unchanged frames",
+    )
+    parser.add_argument(
+        "--aligned",
+        action="store_true",
+        help="doorway: all four doors busy at the same moments (worst case)",
+    )
+    parser.add_argument("--profile", default="", help="how the stack was limited, for the report")
     parser.add_argument(
         "--keep-data", action="store_true", help="leave the made-up data for a look afterwards"
     )

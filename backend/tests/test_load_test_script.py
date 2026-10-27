@@ -31,3 +31,12 @@ def test_percentiles():
     lt = _load()
     assert lt.percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.95) == 10
     assert lt.percentile([], 0.95) == 0.0
+
+
+def test_the_load_test_skips_frames_by_the_same_rule_as_the_teacher_page():
+    import json
+
+    lt = _load()
+    vectors = json.loads((SCRIPT.parents[1] / "frontend" / "scripts" / "frame_gate_vectors.json").read_text(encoding="utf-8"))
+    for v in vectors:
+        assert lt.should_send(v["difference"], v["needsAnotherLook"], v["msSinceSent"]) == v["send"], v["case"]
