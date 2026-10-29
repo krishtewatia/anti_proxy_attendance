@@ -238,7 +238,7 @@ async def test_the_csv_export_says_not_taken_instead_of_absent():
         taken = await client.get("/api/v1/attendance/taken/export", headers=teacher)
     assert untaken.status_code == 200 and taken.status_code == 200
 
-    untaken_rows = untaken.text.strip().splitlines()
+    untaken_rows = untaken.text.lstrip("\ufeff").strip().splitlines()
     assert untaken_rows[0] == "Student ID,Student Name,Status"
     assert untaken_rows[1:] == ["S1,Student S1,Not taken", "S2,S2,Not taken"]
     assert "ABSENT" not in untaken.text

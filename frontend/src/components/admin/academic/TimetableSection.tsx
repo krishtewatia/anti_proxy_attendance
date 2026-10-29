@@ -3,6 +3,8 @@ import { api } from "../../../services";
 import {
   timetableSteps,
   DAY_NAMES,
+  TIMETABLE_COLUMNS,
+  TIMETABLE_SAMPLE_PATH,
   FLAG_LABELS,
   audienceFilterLabel,
   audienceFilters,
@@ -158,6 +160,17 @@ export const TimetableSection: React.FC<AcademicSectionProps> = ({ cohort, group
               {inForce ? `In force today: ${inForce.source_name}, since ${formatDate(inForce.effective_from)}.` : "No timetable is in force yet."}
             </p>
           </div>
+          <div style={{ display: "grid", gap: "0.35rem", justifyItems: "end" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            className="erp-btn erp-btn-secondary"
+            onClick={() =>
+              api.downloadFile(TIMETABLE_SAMPLE_PATH, "timetable_sample.csv").catch((err: unknown) => notify({ type: "error", text: `Could not download the sample: ${errorText(err)}` }))
+            }
+          >
+            Download sample CSV
+          </button>
           <label className="erp-btn erp-btn-primary" style={{ cursor: busy ? "wait" : "pointer" }}>
             {busy && !pending ? "Checking..." : "1. Choose the timetable CSV"}
             <input
@@ -171,6 +184,11 @@ export const TimetableSection: React.FC<AcademicSectionProps> = ({ cohort, group
               }}
             />
           </label>
+          </div>
+          <span style={{ fontSize: "0.75rem", color: "var(--erp-text-muted)", maxWidth: "32rem", textAlign: "right" }}>
+            Columns: {TIMETABLE_COLUMNS.join(", ")}. One row per class slot; scope is a section (A, B...) or ALL for a year-wide group.
+          </span>
+          </div>
         </div>
 
         {versions.length > 0 && (

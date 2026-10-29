@@ -5,7 +5,7 @@ present in both rounds; a double period gives one lecture per round.
 
 A class is taken in two steps: ENTRY (opened, the camera marks, then
 finalized), then EXIT the same way. A finalized round never takes the camera
-again; its marks can be changed by hand for ``edit_window_hours`` (24 h) after
+again; its marks can be changed by hand for ``edit_window_hours`` (48 h) after
 it was finalized, then it locks (an administrator can unlock it). The class is
 *complete* once both rounds are finalized, and only complete classes count in
 any figure. A class left incomplete can still be finished by hand until its end
@@ -30,12 +30,18 @@ from app.services.audit_service import record_audit_event
 
 ROUNDS = ("ENTRY", "EXIT")
 UNLOCK_HOURS = 48
+# What a teacher is told once a round can no longer be changed by them.
+EDIT_WINDOW_CLOSED = (
+    "Your time window for marking present in this session has passed. Please contact the admin."
+)
 
 
 class RoundError(Exception):
-    def __init__(self, message: str, status_code: int = 400):
+    def __init__(self, message: str, status_code: int = 400, code: Optional[str] = None):
         super().__init__(message)
         self.status_code = status_code
+        # A stable name for the browser to recognise, e.g. "edit_window_closed".
+        self.code = code
 
 
 def _now() -> datetime:
@@ -379,11 +385,7 @@ async def mark_by_hand(
     if actor.get("role") != "ADMIN" and not is_complete(session):
         raise RoundError("Hand changes are possible once ENTRY and EXIT are both finalized.", 409)
     if actor.get("role") != "ADMIN" and not await round_may_edit(db, session, round_name):
-        raise RoundError(
-            f"{round_name} can no longer be changed by a teacher (more than "
-            f"{await _window_hours(db)} h since it was finalized). Ask an administrator.",
-            403,
-        )
+        raise RoundError(EDIT_WINDOW_CLOSED, 403, code="edit_window_closed")
     if actor.get("role") == "ADMIN" and not reason.strip():
         raise RoundError("An administrator must give a reason.")
     roster = await db["session_rosters"].find_one({"session_id": session["session_id"]}) or {}

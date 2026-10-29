@@ -264,6 +264,11 @@ export function versionStatusLabel(version: TimetableVersion, today: string): st
   return "Active";
 }
 
+// The columns the timetable import reads (the same list as the server's
+// TIMETABLE_COLUMNS; the sample CSV is made from that list).
+export const TIMETABLE_COLUMNS = ["scope", "group", "day", "start", "end", "periods", "subject_short", "subject_name", "room", "note"];
+export const TIMETABLE_SAMPLE_PATH = "/api/v1/admin/org/timetable/sample.csv";
+
 // The timetable's four steps, as the admin sees them: choose the CSV, review
 // the check, save it as a draft, activate it from a date.
 export type StepState = "done" | "current" | "todo";

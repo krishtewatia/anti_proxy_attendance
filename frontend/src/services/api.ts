@@ -792,11 +792,11 @@ export const api = {
     );
   },
 
-  // The temporary password comes back once, in this response only.
-  resetUserPassword(userId: string): Promise<{ user_id: string; temporary_password: string }> {
-    return request<{ user_id: string; temporary_password: string }>(
+  // Set the password the administrator typed; it is not sent back.
+  resetUserPassword(userId: string, password: string): Promise<{ user_id: string; must_change_password: boolean }> {
+    return request<{ user_id: string; must_change_password: boolean }>(
       `/api/v1/admin/users/${encodeURIComponent(userId)}/reset-password`,
-      { method: "POST" },
+      { method: "POST", body: JSON.stringify({ password }) },
     );
   },
 

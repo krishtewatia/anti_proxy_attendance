@@ -25,7 +25,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import logging
 import re
-import secrets
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -186,9 +185,10 @@ async def list_admins(db: AsyncIOMotorDatabase) -> list[dict[str, Any]]:
 
 
 async def reset_password(
-    db: AsyncIOMotorDatabase, user_id: str, *, reset_by: dict[str, Any]
+    db: AsyncIOMotorDatabase, user_id: str, password: str, *, reset_by: dict[str, Any]
 ) -> dict[str, Any]:
-    """Give the account a temporary password. It is returned once and must be changed at login."""
+    """Set the password the administrator typed. The person signs in with it as it is
+    (no forced change); every earlier token stops working."""
     user = await db["users"].find_one({"user_id": user_id})
     if user is None:
         raise AccountAdminError("Account not found", 404)
@@ -197,15 +197,9 @@ async def reset_password(
     if not is_approved(user):
         raise AccountAdminError("This account is still waiting for approval", 409)
 
-    temporary_password = secrets.token_urlsafe(12)
-    await set_password(user_id, temporary_password, must_change_password=True)
+    await set_password(user_id, password, must_change_password=False)
     await _audit(reset_by, "PASSWORD_RESET", user_id, {"role": user.get("role")})
-    return {
-        "status": "password_reset",
-        "user_id": user_id,
-        "temporary_password": temporary_password,
-        "must_change_password": True,
-    }
+    return {"status": "password_reset", "user_id": user_id, "must_change_password": False}
 
 
 # ------------------------------------------------------------------ students

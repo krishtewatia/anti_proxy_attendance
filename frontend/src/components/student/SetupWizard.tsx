@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../services";
 import { ConsentNotice } from "../auth/ConsentNotice";
+import { SelfieCamera } from "./SelfieCamera";
 import type { ConsentNotice as Notice } from "../../utils/registration.ts";
 import {
   BLURRY_BELOW,
@@ -82,6 +83,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ initial, isChange, onD
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -313,28 +315,28 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ initial, isChange, onD
           {photos.length < photoLimits.max && !draft.consentAccepted && (
             <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--erp-text-muted)" }}>Accept the notice above to add photos.</p>
           )}
-          {photos.length < photoLimits.max && draft.consentAccepted && (
-            // Two ways in on a phone: the front camera now, or a photo already on the phone.
+          {photos.length < photoLimits.max && draft.consentAccepted && cameraOpen && (
+            <SelfieCamera onCapture={(file) => void addPhoto(file)} onClose={() => setCameraOpen(false)} />
+          )}
+          {photos.length < photoLimits.max && draft.consentAccepted && !cameraOpen && (
+            // Two ways in on a phone: the front camera in the page, or a photo already on the phone.
             <div className="erp-photo-buttons">
-              {[
-                { label: "Take a photo", capture: true },
-                { label: "Choose from gallery", capture: false },
-              ].map((way) => (
-                <label key={way.label} className={`erp-btn ${way.capture ? "erp-btn-primary" : "erp-btn-secondary"}`} style={{ cursor: "pointer" }}>
-                  {way.label}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    {...(way.capture ? { capture: "user" as const } : {})}
-                    disabled={!draft.consentAccepted}
-                    style={{ display: "none" }}
-                    onChange={(e) => {
-                      void addPhoto(e.target.files?.[0]);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-              ))}
+              <button type="button" className="erp-btn erp-btn-primary" onClick={() => setCameraOpen(true)}>
+                Take a photo
+              </button>
+              <label className="erp-btn erp-btn-secondary" style={{ cursor: "pointer" }}>
+                Choose from gallery
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={!draft.consentAccepted}
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    void addPhoto(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
             </div>
           )}
           <p style={{ margin: 0, color: "var(--erp-text-muted)", fontSize: "0.8rem" }}>

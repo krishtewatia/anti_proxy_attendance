@@ -4,7 +4,7 @@ import type { StudentProfileResponse } from "../../types";
 import { studentEditChanges, studentIdChangeWarning, type StudentEditFields } from "../../utils/accounts.ts";
 import { classChoices, classLabel } from "../../utils/catalog.ts";
 import { AuthenticatedImage } from "../common/AuthenticatedImage";
-import { AdminModal, TemporaryPasswordNotice } from "./shared";
+import { AdminModal, SetPasswordModal } from "./shared";
 import { dangerButton, errorText, fieldGap, smallButton, type AdminTabProps } from "./adminShared.ts";
 
 const EMPTY_STUDENT = {
@@ -32,7 +32,7 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
   const [editing, setEditing] = useState<StudentProfileResponse | null>(null);
   const [editForm, setEditForm] = useState<StudentEditFields | null>(null);
   const [saving, setSaving] = useState(false);
-  const [temporary, setTemporary] = useState<{ label: string; password: string } | null>(null);
+  const [resetting, setResetting] = useState<{ label: string; userId: string } | null>(null);
 
   // Active classes only: an archived class is not offered to a new student.
   const activeClasses = useMemo(() => academic?.classes || [], [academic]);
@@ -117,20 +117,7 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
     }
   };
 
-  const handleResetPassword = async (student: StudentProfileResponse) => {
-    if (
-      !window.confirm(
-        `Reset the password for '${student.name}'?\n\nThey will be signed out everywhere and must choose a new password with the temporary one you give them.`,
-      )
-    )
-      return;
-    try {
-      const result = await api.resetUserPassword(student.user_id);
-      setTemporary({ label: student.name, password: result.temporary_password });
-    } catch (err: unknown) {
-      notify({ type: "error", text: `Failed to reset the password: ${errorText(err)}` });
-    }
-  };
+  const handleResetPassword = (student: StudentProfileResponse) => setResetting({ label: student.name, userId: student.user_id });
 
   return (
     <div>
@@ -289,9 +276,7 @@ export const StudentsTab: React.FC<AdminTabProps> = ({ students, academic, notif
         </AdminModal>
       )}
 
-      {temporary && (
-        <TemporaryPasswordNotice accountLabel={temporary.label} temporaryPassword={temporary.password} onClose={() => setTemporary(null)} />
-      )}
+      {resetting && <SetPasswordModal accountLabel={resetting.label} userId={resetting.userId} onClose={() => setResetting(null)} />}
     </div>
   );
 };

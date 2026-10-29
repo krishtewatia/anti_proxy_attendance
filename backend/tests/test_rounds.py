@@ -102,9 +102,10 @@ async def test_frames_mark_only_the_open_round_and_lectures_follow(vision_frames
     assert lectures_by == {roster[0]: ["P", "A"], roster[1]: ["A", "P"]}
     assert view["round_info"]["open_round"] == "EXIT" and view["round_info"]["held"] == ["ENTRY", "EXIT"]
     assert view["round_info"]["periods"] == 2 and view["round_info"]["teacher_may_edit"] is True
-    lines = csv.strip().splitlines()
-    assert lines[0] == "Roll No,Student Name,ENTRY,ENTRY time,EXIT,EXIT time,Lectures"
-    assert {line.split(",")[2] + line.split(",")[4] + line.split(",")[6] for line in lines[1:]} == {"PA1/2", "AP1/2"}
+    assert csv.startswith("\ufeff")  # Excel reads it as UTF-8
+    lines = csv.lstrip("\ufeff").strip().splitlines()
+    assert lines[0] == "Date,Roll No,Student Name,ENTRY,ENTRY time,EXIT,EXIT time,Lectures present,Lectures held"
+    assert {"".join(line.split(",")[i] for i in (3, 5, 7, 8)) for line in lines[1:]} == {"PA12", "AP12"}
 
 
 @pytest.mark.anyio
@@ -180,7 +181,7 @@ async def test_entry_then_exit_each_finalized_then_the_session():
 
 
 @pytest.mark.anyio
-async def test_hand_changes_for_24_hours_after_a_round_is_finalized_then_locked():
+async def test_hand_changes_for_48_hours_after_a_round_is_finalized_then_locked():
     db = mongodb.get_database()
     async with _client() as client:
         session_id, teacher, admin, roster = await _session(client, periods=2)
@@ -191,9 +192,14 @@ async def test_hand_changes_for_24_hours_after_a_round_is_finalized_then_locked(
         await client.post(f"{base}/finalize", headers=teacher)
         mark = {"identity": roster[0], "status": "PRESENT", "reason": "was there"}
         within = await client.post(f"{base}/rounds/ENTRY/marks", headers=teacher, json=mark)
-        # ENTRY was finalized 25 h ago, EXIT just now: only EXIT may still change.
+        # Teachers may mark absent by hand too.
+        absent = await client.post(f"{base}/rounds/EXIT/marks", headers=teacher, json={**mark, "status": "ABSENT"})
+        # ENTRY was finalized 47 h ago: still open. 49 h ago, EXIT just now: only EXIT may still change.
         stale = dict((await db["sessions"].find_one({"session_id": session_id}))["rounds"])
-        stale["ENTRY"] = {**stale["ENTRY"], "finalized_at": datetime.now(timezone.utc) - timedelta(hours=25)}
+        stale["ENTRY"] = {**stale["ENTRY"], "finalized_at": datetime.now(timezone.utc) - timedelta(hours=47)}
+        await db["sessions"].update_one({"session_id": session_id}, {"$set": {"rounds": stale}})
+        entry_47h = await client.post(f"{base}/rounds/ENTRY/marks", headers=teacher, json=mark)
+        stale["ENTRY"] = {**stale["ENTRY"], "finalized_at": datetime.now(timezone.utc) - timedelta(hours=49)}
         await db["sessions"].update_one({"session_id": session_id}, {"$set": {"rounds": stale}})
         entry_late = await client.post(f"{base}/rounds/ENTRY/marks", headers=teacher, json=mark)
         exit_still = await client.post(f"{base}/rounds/EXIT/marks", headers=teacher, json=mark)
@@ -204,7 +210,12 @@ async def test_hand_changes_for_24_hours_after_a_round_is_finalized_then_locked(
         after_unlock = await client.post(f"{base}/rounds/ENTRY/marks", headers=teacher, json=mark)
         teacher_unlock = await client.post(f"/api/v1/admin/sessions/{session_id}/unlock", headers=teacher)
     assert within.status_code == 200
-    assert entry_late.status_code == 403 and "24 h" in entry_late.json()["detail"]
+    assert absent.status_code == 200
+    assert entry_47h.status_code == 200
+    assert entry_late.status_code == 403 and entry_late.json()["detail"] == {
+        "code": "edit_window_closed",
+        "message": "Your time window for marking present in this session has passed. Please contact the admin.",
+    }
     assert exit_still.status_code == 200
     assert view["round_info"]["rounds"]["ENTRY"]["may_edit"] is False and view["round_info"]["rounds"]["EXIT"]["may_edit"] is True
     assert admin_no_reason.status_code == 400 and admin_mark.status_code == 200
@@ -214,7 +225,7 @@ async def test_hand_changes_for_24_hours_after_a_round_is_finalized_then_locked(
 
 
 @pytest.mark.anyio
-async def test_an_ended_class_can_be_finished_by_hand_within_24_hours_only():
+async def test_an_ended_class_can_be_finished_by_hand_within_48_hours_only():
     db = mongodb.get_database()
     async with _client() as client:
         session_id, teacher, _, _ = await _session(client, periods=1)
@@ -227,7 +238,7 @@ async def test_an_ended_class_can_be_finished_by_hand_within_24_hours_only():
         )
         entry_done = await client.post(f"{base}/rounds/ENTRY/finalize", headers=teacher)
         await db["sessions"].update_one(
-            {"session_id": session_id}, {"$set": {"end_time": datetime.now(timezone.utc) - timedelta(hours=25)}}
+            {"session_id": session_id}, {"$set": {"end_time": datetime.now(timezone.utc) - timedelta(hours=49)}}
         )
         exit_late = await client.post(f"{base}/rounds/EXIT/finalize", headers=teacher)
     assert entry_done.status_code == 200
@@ -334,3 +345,51 @@ async def test_a_timetable_teacher_cannot_start_an_old_style_class():
             json={"course_name": "CN — DS-B", "class_code": "DS-B", "start_time": "2026-11-02T09:00:00Z", "end_time": "2026-11-02T10:00:00Z"},
         )
     assert old_style.status_code == 409 and "today's timetable" in old_style.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_the_session_csv_gives_college_dates_and_times_and_excel_safe_roll_numbers():
+    db = mongodb.get_database()
+    async with _client() as client:
+        session_id, teacher, _, roster = await _session(client, periods=1)
+        base = f"/api/v1/sessions/{session_id}"
+        for rnd in ("ENTRY", "EXIT"):
+            await client.post(f"{base}/rounds/{rnd}/open", headers=teacher)
+            await client.post(f"{base}/rounds/{rnd}/finalize", headers=teacher)
+        # Taken late on 28 Oct UTC, which is already 29 Oct in college time (IST).
+        session = await db["sessions"].find_one({"session_id": session_id})
+        rounds = dict(session["rounds"])
+        rounds["ENTRY"] = {**rounds["ENTRY"], "opened_at": datetime(2026, 10, 28, 19, 0, tzinfo=timezone.utc)}
+        await db["sessions"].update_one({"session_id": session_id}, {"$set": {"rounds": rounds}})
+        # Marked at 08:31 UTC, which is 14:01 in college time (IST).
+        at = datetime(2026, 10, 28, 8, 31, tzinfo=timezone.utc)
+        await db["attendance_records"].update_one(
+            {"session_id": session_id, "identity": roster[0]},
+            {"$set": {"rounds": {"ENTRY": {"status": "PRESENT", "at": at, "source": "RECOGNITION"}}}},
+            upsert=True,
+        )
+        text = (await client.get(f"/api/v1/attendance/{session_id}/export", headers=teacher)).text
+        class_id = session["class_id"]
+        from urllib.parse import quote
+
+        register = (await client.get(f"/api/v1/teachers/classes/{quote(class_id, safe='')}/register.csv", headers=teacher, params={"to": "2026-12-31"})).text
+    roll = (await db["student_profiles"].find_one({"identity": roster[0]}))["roll_number"]
+    row = next(line for line in text.splitlines() if roll in line).split(",")
+    assert row[1] == f'"=""{roll}"""'  # Excel keeps it as text, not 2.4E+12
+    assert row[0] == "29 Oct 2026" and row[3:5] == ["P", "14:01"]
+    assert register.lstrip("\ufeff").splitlines()[0].split(",")[2].startswith("29 Oct 2026 ")
+
+
+@pytest.mark.anyio
+async def test_the_sample_timetable_csv_has_the_import_columns_and_passes_the_check():
+    admin = await _user("admin_sample", "ADMIN")
+    teacher = await _user("t_sample", "TEACHER")
+    async with _client() as client:
+        sample = await client.get("/api/v1/admin/org/timetable/sample.csv", headers=admin)
+        refused = await client.get("/api/v1/admin/org/timetable/sample.csv", headers=teacher)
+        checked = await client.post(
+            "/api/v1/admin/org/timetable/import", headers=admin, params={"cohort_id": COHORT}, content=sample.content
+        )
+    assert sample.status_code == 200 and refused.status_code == 403
+    assert sample.text.splitlines()[0].split(",") == org.TIMETABLE_COLUMNS
+    assert checked.status_code == 200 and checked.json()["errors"] == []

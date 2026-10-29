@@ -157,7 +157,7 @@ async def test_settings_have_defaults_and_are_checked():
             await client.put(f"{BASE}/settings", json=body, headers=admin)
             for body in ({"edit_window_hours": 0}, {"shortage_threshold_percent": 101}, {"college_email_domain": "not a domain"})
         ]
-    assert defaults == {"college_email_domain": "niet.co.in", "edit_window_hours": 24, "shortage_threshold_percent": 75}
+    assert defaults == {"college_email_domain": "niet.co.in", "edit_window_hours": 48, "shortage_threshold_percent": 75}
     assert changed.status_code == 200
     assert changed.json() == {"college_email_domain": "niet.co.in", "edit_window_hours": 72, "shortage_threshold_percent": 75}
     assert [r.status_code for r in bad] == [400, 400, 400]

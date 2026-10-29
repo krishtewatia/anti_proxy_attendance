@@ -3,7 +3,7 @@
 // teacher sees while waiting for approval.
 
 import { readFileSync } from "node:fs";
-import { timetableSteps } from "../src/utils/organisation.ts";
+import { TIMETABLE_COLUMNS, timetableSteps } from "../src/utils/organisation.ts";
 import { TEACHER_PENDING_TEXT, isTeacherPendingError, registeredMessage } from "../src/utils/registration.ts";
 
 function expect(condition: boolean, message: string): void {
@@ -39,6 +39,10 @@ async function run() {
   expect(readFileSync("src/components/admin/academic/SettingsSection.tsx", "utf-8").includes("Save settings"), "settings have a Save button");
   const timetable = readFileSync("src/components/admin/academic/TimetableSection.tsx", "utf-8");
   expect(timetable.includes('"3. SAVE AS DRAFT"') && timetable.includes("4. Activate") && timetable.includes("1. Choose the timetable CSV"), "numbered timetable buttons");
+  expect(timetable.includes("Download sample CSV") && timetable.includes("TIMETABLE_SAMPLE_PATH") && timetable.includes("TIMETABLE_COLUMNS.join"), "a sample timetable CSV and its columns next to the upload");
+  const server = readFileSync("../backend/app/services/organisation_service.py", "utf-8");
+  const serverColumns = [...server.slice(server.indexOf("TIMETABLE_COLUMNS = ["), server.indexOf("]", server.indexOf("TIMETABLE_COLUMNS = ["))).matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+  expect(serverColumns.join() === TIMETABLE_COLUMNS.join(), `the listed columns are the importer's: ${serverColumns}`);
 
   console.log("[3/4] Student and teacher menus...");
   expect(menu("STUDENT").join() === "Home,My Setup,Attendance,Profile", `student menu: ${menu("STUDENT")}`);

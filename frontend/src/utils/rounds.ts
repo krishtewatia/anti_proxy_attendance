@@ -77,6 +77,15 @@ export function canEditFinal(info: RoundInfo, round: RoundName): boolean {
   return Boolean(info.complete) && info.rounds[round]?.may_edit !== false;
 }
 
+// What a teacher is told once the window has passed (the server says the same).
+export const EDIT_WINDOW_CLOSED_TEXT =
+  "Your time window for marking present in this session has passed. Please contact the admin.";
+
+// The window has passed for both rounds: only an administrator can change the class now.
+export function editWindowClosed(info: RoundInfo): boolean {
+  return Boolean(info.complete) && ROUND_NAMES.every((r) => info.rounds[r]?.may_edit === false);
+}
+
 // One line about a round: live, waiting, or finalized and until when it may change by hand.
 export function roundStatusText(info: RoundInfo, round: RoundName, formatTime: (iso: string) => string): string {
   const state = info.rounds[round];

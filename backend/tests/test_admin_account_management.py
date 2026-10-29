@@ -1,7 +1,8 @@
 """Admin account management.
 
-Accounts an administrator creates or resets must change their password at the
-next login; a password change or reset invalidates every earlier token; a
+Accounts an administrator creates must change their password at the next
+login; a reset sets the password the administrator typed, with no forced
+change; a password change or reset invalidates every earlier token; a
 student's ID can change without touching photos or attendance; a teacher is
 deleted without their history; the last administrator cannot be removed.
 
@@ -258,33 +259,36 @@ async def test_changing_a_password_invalidates_all_existing_tokens():
 
 
 @pytest.mark.anyio
-async def test_resetting_a_password_invalidates_tokens_and_forces_a_change():
+async def test_resetting_a_password_sets_the_admins_password_and_invalidates_tokens():
     admin = await _token("admin_acc", "ADMIN")
+    typed = "AdminTyped123"
     async with _client() as client:
         teacher_id, teacher = await _ready_teacher(client, admin)
 
-        reset = await client.post(f"{ADMIN}/users/{teacher_id}/reset-password", headers=admin)
+        too_short = await client.post(f"{ADMIN}/users/{teacher_id}/reset-password", headers=admin, json={"password": "short"})
+        reset = await client.post(f"{ADMIN}/users/{teacher_id}/reset-password", headers=admin, json={"password": typed})
+        assert too_short.status_code == 422
         assert reset.status_code == 200, reset.text
-        temporary = reset.json()["temporary_password"]
-        assert len(temporary) >= 12 and temporary not in (PASSWORD, NEW_PASSWORD)
+        # The password is the one the administrator typed; it is not sent back.
+        assert typed not in reset.text and reset.json()["must_change_password"] is False
 
         # The token from before the reset is dead; so is the old password.
         assert (await client.get("/api/v1/teachers/profile", headers=teacher)).status_code == 401
         assert (await _login(client, "t.acc1@accounts.test", NEW_PASSWORD)).status_code == 401
 
-        login = await _login(client, "t.acc1@accounts.test", temporary)
-        assert login.status_code == 200 and login.json()["must_change_password"] is True
+        # The person signs in with it and can work at once: no forced change.
+        login = await _login(client, "t.acc1@accounts.test", typed)
+        assert login.status_code == 200 and login.json()["must_change_password"] is False
         token = login.json()["access_token"]
-        assert (await client.get("/api/v1/teachers/profile", headers=_bearer(token))).status_code == 403
-        assert (await _change(client, token, temporary, "OwnersChoice321!")).status_code == 200
+        assert (await client.get("/api/v1/teachers/profile", headers=_bearer(token))).status_code == 200
 
     db = mongodb.get_database()
     user = await db["users"].find_one({"user_id": teacher_id})
-    assert verify_password("OwnersChoice321!", user["password_hash"])
-    # The temporary password is not kept anywhere, and the audit entry holds no secret.
+    assert verify_password(typed, user["password_hash"])
+    # The password is not kept anywhere in clear, and the audit entry holds no secret.
     stored = json.dumps([doc async for doc in db["users"].find({})], default=str)
     audit = json.dumps([doc async for doc in db["audit_events"].find({})], default=str)
-    assert temporary not in stored and temporary not in audit
+    assert typed not in stored and typed not in audit
     entries = await _audit("PASSWORD_RESET")
     assert len(entries) == 1
     assert entries[0]["resource_id"] == teacher_id and entries[0]["metadata"] == {"role": "TEACHER"}
@@ -295,10 +299,11 @@ async def test_reset_is_refused_for_yourself_unknown_and_pending_accounts():
     admin = await _token("admin_acc", "ADMIN")
     async with _client() as client:
         pending = await client.post("/api/v1/teachers/register", json=_teacher_payload())
-        own = await client.post(f"{ADMIN}/users/admin_acc/reset-password", headers=admin)
-        unknown = await client.post(f"{ADMIN}/users/nobody/reset-password", headers=admin)
+        body = {"password": "AdminTyped123"}
+        own = await client.post(f"{ADMIN}/users/admin_acc/reset-password", headers=admin, json=body)
+        unknown = await client.post(f"{ADMIN}/users/nobody/reset-password", headers=admin, json=body)
         waiting = await client.post(
-            f"{ADMIN}/users/{pending.json()['user_id']}/reset-password", headers=admin
+            f"{ADMIN}/users/{pending.json()['user_id']}/reset-password", headers=admin, json=body
         )
     assert (own.status_code, unknown.status_code, waiting.status_code) == (400, 404, 409)
 

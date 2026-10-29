@@ -3,7 +3,7 @@ import { api } from "../../services";
 import { AuthenticatedImage } from "../common/AuthenticatedImage";
 import { OrgNavigator } from "./OrgNavigator";
 import { PeopleCsvPanel } from "./PeopleCsvPanel";
-import { AdminModal, TemporaryPasswordNotice } from "./shared";
+import { AdminModal, SetPasswordModal } from "./shared";
 import { dangerButton, errorText, fieldGap, smallButton, type Banner } from "./adminShared.ts";
 import { selectionQuery, type NavSelection, type NavYear } from "../../utils/orgNavigator.ts";
 import { STATUS_BADGE, STATUS_LABELS, shortChoice, type RegistryStudent, type StudentRegistry, type StudentStatus } from "../../utils/registry.ts";
@@ -27,7 +27,7 @@ export const StudentRegistryTab: React.FC<StudentRegistryTabProps> = ({ years, s
   const [open, setOpen] = useState<RegistryStudent | null>(null);
   const [editing, setEditing] = useState<{ name: string; email: string; roll_number: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [temporary, setTemporary] = useState<{ label: string; password: string } | null>(null);
+  const [resetting, setResetting] = useState<{ label: string; userId: string } | null>(null);
   const noSetupView = status === "NO_SETUP";
 
   const load = useCallback(async () => {
@@ -46,15 +46,7 @@ export const StudentRegistryTab: React.FC<StudentRegistryTabProps> = ({ years, s
   const sets = years.flatMap((y) => y.branches).find((b) => b.cohortId === selection.cohortId)?.groupSets.map((s) => s.set_code) ?? [];
   const label = (s: RegistryStudent) => s.name || s.roll_number || s.email || "this student";
 
-  const resetPassword = async (student: RegistryStudent) => {
-    if (!window.confirm(`Reset the password for ${label(student)}? They are signed out everywhere and choose a new one with the temporary password.`)) return;
-    try {
-      const result = await api.resetUserPassword(student.user_id);
-      setTemporary({ label: label(student), password: result.temporary_password });
-    } catch (err: unknown) {
-      notify({ type: "error", text: `Failed to reset the password: ${errorText(err)}` });
-    }
-  };
+  const resetPassword = (student: RegistryStudent) => setResetting({ label: label(student), userId: student.user_id });
 
   const remove = async (student: RegistryStudent) => {
     if (!window.confirm(`Delete ${label(student)}? This removes the account, photos, face template, setup and attendance. It cannot be undone.`)) return;
@@ -195,7 +187,7 @@ export const StudentRegistryTab: React.FC<StudentRegistryTabProps> = ({ years, s
             <button type="button" className="erp-btn erp-btn-secondary" style={smallButton} onClick={() => setEditing({ name: open.name ?? "", email: open.email ?? "", roll_number: open.roll_number ?? "" })}>
               Edit
             </button>
-            <button type="button" className="erp-btn erp-btn-secondary" style={smallButton} onClick={() => void resetPassword(open)}>
+            <button type="button" className="erp-btn erp-btn-secondary" style={smallButton} onClick={() => resetPassword(open)}>
               Reset password
             </button>
             <button type="button" className="erp-btn erp-btn-secondary" style={dangerButton} onClick={() => void remove(open)}>
@@ -226,9 +218,7 @@ export const StudentRegistryTab: React.FC<StudentRegistryTabProps> = ({ years, s
         </AdminModal>
       )}
 
-      {temporary && (
-        <TemporaryPasswordNotice accountLabel={temporary.label} temporaryPassword={temporary.password} onClose={() => setTemporary(null)} />
-      )}
+      {resetting && <SetPasswordModal accountLabel={resetting.label} userId={resetting.userId} onClose={() => setResetting(null)} />}
     </div>
   );
 };

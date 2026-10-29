@@ -2,7 +2,7 @@
 // that contain ":" and "/", safe file names, and the wiring of the new views.
 
 import { readFileSync } from "node:fs";
-import { classPath, fileName, filterStudents, percentLabel, registerPath, type ClassStudentRow } from "../src/utils/classReports.ts";
+import { classPath, fileName, filterStudents, percentLabel, registerPath, sessionWhen, type ClassStudentRow } from "../src/utils/classReports.ts";
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
@@ -40,6 +40,13 @@ async function run(): Promise<void> {
   const flow = readFileSync(new URL("../src/pages/TeacherAttendanceFlow.tsx", import.meta.url), "utf-8");
   expect(!flow.includes(":8000"), "the session CSV no longer uses a hard-coded port");
   expect(flow.includes("<ClassDownloads />"), "teachers see Downloads in Sessions");
+  const downloads = readFileSync(new URL("../src/components/teacher/ClassDownloads.tsx", import.meta.url), "utf-8");
+  const buttons = [...downloads.matchAll(/<button[\s\S]*?<\/button>/g)].map((m) => m[0]);
+  expect(buttons.length === 1 && buttons[0].includes("Download CSV"), "one Download CSV button in Downloads");
+  expect(downloads.includes("registerPath(classId, from, to)") && !downloads.includes("students.csv") && !downloads.includes("/export"), "it downloads the register for the dates");
+  expect(!students.includes("Download CSV") && students.includes("{EDIT_WINDOW_CLOSED_TEXT}"), "no second download; the window message in My Classes");
+  expect(sessionWhen({ date: "2026-10-28", time: "09:10", taken_at: "14:01" }) === "28 Oct 2026, 09:10 · taken 14:01", "slot time and when it was taken");
+  expect(sessionWhen({ date: "2026-10-28", time: "09:10", taken_at: "09:12" }) === "28 Oct 2026, 09:10 · taken 09:12" && sessionWhen({ date: "2026-10-28", time: "09:10", taken_at: null }) === "28 Oct 2026, 09:10", "no taken time when not taken");
   expect(readFileSync(new URL("../src/components/teacher/MyClasses.tsx", import.meta.url), "utf-8").includes("<ClassStudents />"), "teachers see their students in My Classes");
   const student = readFileSync(new URL("../src/pages/StudentDashboard.tsx", import.meta.url), "utf-8");
   expect(student.includes("<SubjectAttendance />"), "students see attendance by subject");

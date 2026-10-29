@@ -54,9 +54,32 @@ TIMETABLE_COLUMNS = [
     "room",
     "note",
 ]
+# Example rows for the "Download sample CSV" link: a section class, a double
+# period and a year-wide group class. Written with TIMETABLE_COLUMNS, so the
+# sample always has the columns the importer reads.
+TIMETABLE_SAMPLE_ROWS = [
+    {"scope": "A", "group": "", "day": "MON", "start": "10:00", "end": "10:50", "periods": "1",
+     "subject_short": "CN", "subject_name": "Computer Networks", "room": "B317", "note": ""},
+    {"scope": "A", "group": "", "day": "TUE", "start": "09:10", "end": "10:50", "periods": "2",
+     "subject_short": "CN_LAB", "subject_name": "Computer Networks Lab", "room": "B317",
+     "note": "double period"},
+    {"scope": "B", "group": "", "day": "MON", "start": "10:00", "end": "10:50", "periods": "1",
+     "subject_short": "DT", "subject_name": "Design Thinking-II", "room": "B318", "note": ""},
+    {"scope": "ALL", "group": "G1", "day": "MON", "start": "09:10", "end": "10:00", "periods": "1",
+     "subject_short": "PROD", "subject_name": "Product Analytics (DE-III)", "room": "E203",
+     "note": "year-wide elective group"},
+]  # fmt: skip
 MAX_TIMETABLE_BYTES = 1_000_000
 # A period is about 50 minutes; anything well outside this is worth a look.
 MINUTES_PER_PERIOD = (40, 65)
+
+
+def timetable_sample_csv() -> str:
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=TIMETABLE_COLUMNS, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(TIMETABLE_SAMPLE_ROWS)
+    return out.getvalue()
 
 
 class OrganisationError(Exception):
@@ -562,9 +585,9 @@ CALENDAR = "calendar_exceptions"
 SETTINGS_ID = "pilot"
 DEFAULT_SETTINGS = {
     "college_email_domain": "niet.co.in",
-    # Teachers may correct a session until they finalize it or this many hours
-    # after it, whichever is first; then only an administrator can unlock it.
-    "edit_window_hours": 24,
+    # A teacher may change marks by hand for this many hours after each round
+    # was finalized; then only an administrator can unlock it.
+    "edit_window_hours": 48,
     "shortage_threshold_percent": 75,
 }
 CODE_STATUSES = ("CONFIRMED", "INCOMPLETE", "MISMATCH")

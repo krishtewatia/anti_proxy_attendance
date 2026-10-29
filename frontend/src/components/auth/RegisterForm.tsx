@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../services";
 import { classLabel, type PublicClass } from "../../utils/catalog.ts";
-import { emailPlaceholder, registrationProblem, type RegistrationRules } from "../../utils/registration.ts";
+import { duplicateRegistrationMessage, emailHint, emailPlaceholder, registrationProblem, type RegistrationRules } from "../../utils/registration.ts";
 import { ConsentNotice } from "./ConsentNotice";
 
 interface RegisterFormProps {
@@ -155,7 +155,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("409") || message.toLowerCase().includes("already exists")) {
-        setErrorMessage("An account with this email or roll number already exists.");
+        setErrorMessage(duplicateRegistrationMessage(message));
       } else {
         setErrorMessage(message || "Unable to complete registration. Please try again.");
       }
@@ -248,7 +248,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
           disabled={loading}
         />
         {domain && (
-          <small style={{ color: "#64748b", fontSize: "0.75rem" }}>Use your college email address (@{domain}).</small>
+          <small style={{ color: "#64748b", fontSize: "0.75rem" }}>{emailHint(domain, role)}</small>
         )}
       </div>
 

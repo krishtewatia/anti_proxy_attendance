@@ -5,6 +5,8 @@
 import { readFileSync } from "node:fs";
 import {
   emailAllowed,
+  duplicateRegistrationMessage,
+  emailHint,
   emailPlaceholder,
   FORGOT_PASSWORD_HINT,
   registeredMessage,
@@ -39,7 +41,11 @@ async function run() {
   expect(!emailAllowed("someone@gmail.com", "niet.co.in"), "another domain is refused");
   expect(!emailAllowed("x@niet.co.in.evil.test", "niet.co.in"), "the domain must end the address");
   expect(emailAllowed("someone@gmail.com", null), "any address while no structure exists");
-  expect(emailPlaceholder("niet.co.in", "STUDENT") === "rollno@niet.co.in", "student placeholder");
+  expect(emailPlaceholder("niet.co.in", "STUDENT") === "STUDENT_ERP@niet.co.in", "student placeholder is the ERP ID");
+  expect(emailHint("niet.co.in", "STUDENT") === "Use your college email (your ERP ID @niet.co.in).", "student email hint");
+  expect(duplicateRegistrationMessage("Roll number 2401331540142 is already registered.").startsWith("This roll number is already registered."), "says the roll number is taken");
+  expect(duplicateRegistrationMessage("A user with email 'a@niet.co.in' already exists").startsWith("An account with this email already exists."), "says the email is taken");
+  expect(duplicateRegistrationMessage("409").includes("Ask an administrator"), "points to an administrator");
   expect(emailPlaceholder("niet.co.in", "TEACHER") === "name@niet.co.in", "teacher placeholder");
 
   console.log("[2/4] What the form refuses before it sends anything...");

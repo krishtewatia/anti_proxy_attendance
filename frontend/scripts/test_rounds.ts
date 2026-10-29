@@ -2,7 +2,7 @@
 // round bar, no frames while no round is open, and the wiring.
 
 import { readFileSync } from "node:fs";
-import { canEditFinal, cardAction, finalLabel, lectureLabel, roundCardState, roundStatusText, shouldSendFrames, splitByRound, type RoundInfo } from "../src/utils/rounds.ts";
+import { EDIT_WINDOW_CLOSED_TEXT, canEditFinal, cardAction, editWindowClosed, finalLabel, lectureLabel, roundCardState, roundStatusText, shouldSendFrames, splitByRound, type RoundInfo } from "../src/utils/rounds.ts";
 
 function expect(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
@@ -40,7 +40,10 @@ async function run() {
   expect(label(base, "ENTRY", false) === "Finalize ENTRY", "a class that ended: its rounds can only be finalized");
   expect(!canEditFinal(afterEntry, "ENTRY"), "no hand changes before both rounds are finalized");
   const complete: RoundInfo = { ...afterEntry, complete: true, rounds: { ENTRY: done("2026-11-02T10:00:00Z"), EXIT: { ...done("2026-11-02T10:50:00Z"), may_edit: false } } };
-  expect(canEditFinal(complete, "ENTRY") && !canEditFinal(complete, "EXIT"), "after both: each round while its 24 h last");
+  expect(canEditFinal(complete, "ENTRY") && !canEditFinal(complete, "EXIT"), "after both: each round while its 48 h last");
+  const allLocked = { ...complete, rounds: { ENTRY: { ...complete.rounds.ENTRY, may_edit: false }, EXIT: { ...complete.rounds.EXIT, may_edit: false } } };
+  expect(!editWindowClosed(complete) && editWindowClosed(allLocked), "the window is closed once both rounds are locked");
+  expect(EDIT_WINDOW_CLOSED_TEXT === "Your time window for marking present in this session has passed. Please contact the admin.", "the owner's wording");
   const time = (iso: string) => iso.slice(11, 16);
   expect(roundStatusText(afterEntry, "ENTRY", time) === "✓ finalized 10:00 · editable by hand until 10:00", "a finalized round says until when");
   expect(roundStatusText({ ...afterEntry, rounds: { ...afterEntry.rounds, ENTRY: { ...done("2026-11-02T10:00:00Z"), may_edit: false } } }, "ENTRY", time).endsWith("locked"), "then locked");
@@ -67,6 +70,7 @@ async function run() {
   expect(!panel.includes("api.markRound(") && panel.includes("Finalize {round}") && panel.includes("Back to class"), "the round page is read-only, with Finalize and Back");
   const page = readFileSync("src/components/teacher/ClassPage.tsx", "utf-8");
   expect(page.includes("api.markRound(") && page.includes("canEditFinal(info, round)"), "hand changes only on the final attendance");
+  expect(page.includes("{EDIT_WINDOW_CLOSED_TEXT}"), "the window message instead of a technical error");
   expect(page.includes("disabled={finalizing || !info.complete}"), "Finalize attendance only after both rounds");
 
   console.log("\n✅ All rounds checks passed.");

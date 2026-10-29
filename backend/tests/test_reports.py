@@ -118,7 +118,7 @@ async def test_register_and_class_list_csv_and_who_may_download():
 
         as_student = await client.get(f"{base}/students.csv", headers={"Authorization": f"Bearer {create_access_token(user_id=uid0, role='STUDENT')}"})
 
-    lines = register.text.strip().splitlines()
+    lines = register.text.lstrip("\ufeff").strip().splitlines()
     header = lines[0].split(",")
     p1, p2 = int(slots[0]["periods"]), int(slots[1]["periods"])
     assert header[:2] == ["Roll No", "Name"] and header[-3:] == ["Present", "Held", "%"]
@@ -127,7 +127,7 @@ async def test_register_and_class_list_csv_and_who_may_download():
     assert row0[2:2 + p1 + p2] == ["P"] * p1 + ["A"] * p2
     assert row0[-3:-1] == [str(p1), str(p1 + p2)]
     assert len(first_day_only.text.strip().splitlines()[0].split(",")) == 2 + p1 + 3
-    assert class_list.text.splitlines()[0] == "Roll No,Name,Email,Section,DE-II,DE-III,DLDA"
+    assert class_list.text.lstrip("\ufeff").splitlines()[0] == "Roll No,Name,Email,Section,DE-II,DE-III,DLDA"
     assert len(class_list.text.strip().splitlines()) == 3 and ",B," in class_list.text.splitlines()[1]
     assert len(sessions) == 2 and all(s["rounds_held"] == ["ENTRY", "EXIT"] for s in sessions)
     assert [c["class_id"] for c in mine] == [cn["class_id"]]
@@ -184,7 +184,8 @@ async def test_the_teacher_sees_each_students_attendance_and_corrects_a_finalize
     # The same totals as the register.
     for line in register.strip().splitlines()[1:]:
         cells = line.split(",")
-        match = next(r for r in before["students"] if r["roll_number"] == cells[0])
+        # Roll numbers are written as ="2401..." so Excel keeps them as text.
+        match = next(r for r in before["students"] if r["roll_number"] == cells[0].strip('"='))
         assert [str(match["present"]), str(match["held"])] == cells[-3:-1]
     assert before["summary"]["students"] == 2 and before["summary"]["lectures_held"] == p1 + p2
     assert before["summary"]["below_threshold"] == sum(r["shortage"] for r in before["students"])
@@ -199,7 +200,7 @@ async def test_the_teacher_sees_each_students_attendance_and_corrects_a_finalize
 
 
 @pytest.mark.anyio
-async def test_only_complete_classes_count_and_an_unfinished_one_becomes_not_entered_after_24_hours():
+async def test_only_complete_classes_count_and_an_unfinished_one_becomes_not_entered_after_48_hours():
     from datetime import datetime, timezone
 
     from app.security.jwt import create_access_token
@@ -220,7 +221,7 @@ async def test_only_complete_classes_count_and_an_unfinished_one_becomes_not_ent
         uid0 = (await db["student_profiles"].find_one({"identity": students[0]}))["user_id"]
         student = {"Authorization": f"Bearer {create_access_token(user_id=uid0, role='STUDENT')}"}
         pending = next(r for r in (await client.get("/api/v1/students/attendance/subjects", headers=student)).json()["subjects"] if r["subject_key"] == "CN")
-        await db["sessions"].update_one({"session_id": sid}, {"$set": {"end_time": datetime.now(timezone.utc) - timedelta(hours=25)}})
+        await db["sessions"].update_one({"session_id": sid}, {"$set": {"end_time": datetime.now(timezone.utc) - timedelta(hours=49)}})
         lapsed = next(r for r in (await client.get("/api/v1/students/attendance/subjects", headers=student)).json()["subjects"] if r["subject_key"] == "CN")
         overview = (await client.get(f"/api/v1/teachers/classes/{cn['class_id']}/students", headers=teacher)).json()
 

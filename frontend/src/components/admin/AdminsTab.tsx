@@ -6,7 +6,7 @@ import {
   adminDeleteBlockedReason,
   type AdminAccount,
 } from "../../utils/accounts.ts";
-import { AdminModal, TemporaryPasswordNotice } from "./shared";
+import { AdminModal, SetPasswordModal } from "./shared";
 import { dangerButton, errorText, fieldGap, smallButton, type Banner } from "./adminShared.ts";
 
 const EMPTY_ADMIN = { name: "", email: "", password: "" };
@@ -19,7 +19,7 @@ export const AdminsTab: React.FC<{ user: UserResponse; notify: (banner: Banner) 
   const [loading, setLoading] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newAdmin, setNewAdmin] = useState(EMPTY_ADMIN);
-  const [temporary, setTemporary] = useState<{ label: string; password: string } | null>(null);
+  const [resetting, setResetting] = useState<{ label: string; userId: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -61,21 +61,7 @@ export const AdminsTab: React.FC<{ user: UserResponse; notify: (banner: Banner) 
     }
   };
 
-  const handleResetPassword = async (admin: AdminAccount) => {
-    if (
-      !window.confirm(
-        `Reset the password for ${admin.email}?\n\nThey will be signed out everywhere and must choose a new password with the temporary one you give them.`,
-      )
-    )
-      return;
-    try {
-      const result = await api.resetUserPassword(admin.user_id);
-      setTemporary({ label: admin.email, password: result.temporary_password });
-      await load();
-    } catch (err: unknown) {
-      notify({ type: "error", text: `Failed to reset the password: ${errorText(err)}` });
-    }
-  };
+  const handleResetPassword = (admin: AdminAccount) => setResetting({ label: admin.email, userId: admin.user_id });
 
   return (
     <div>
@@ -170,9 +156,7 @@ export const AdminsTab: React.FC<{ user: UserResponse; notify: (banner: Banner) 
         </AdminModal>
       )}
 
-      {temporary && (
-        <TemporaryPasswordNotice accountLabel={temporary.label} temporaryPassword={temporary.password} onClose={() => setTemporary(null)} />
-      )}
+      {resetting && <SetPasswordModal accountLabel={resetting.label} userId={resetting.userId} onClose={() => setResetting(null)} />}
     </div>
   );
 };

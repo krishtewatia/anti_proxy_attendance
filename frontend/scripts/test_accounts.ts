@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import {
   adminDeleteBlockedReason,
   isPasswordChangeRequired,
@@ -89,6 +90,14 @@ async function runAccountTests() {
   expect(adminDeleteBlockedReason(me, "admin_1", 1) !== null, "deleting yourself as the last admin must be blocked");
   expect(adminDeleteBlockedReason(other, "admin_1", 1) !== null, "deleting the last administrator must be blocked");
   expect(adminDeleteBlockedReason(other, "admin_1", 2) === null, "deleting another administrator must be allowed");
+
+  console.log("[+] A reset sets the password the administrator types...");
+  const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf-8");
+  const shared = read("src/components/admin/shared.tsx");
+  expect(shared.includes("api.resetUserPassword(userId, password)") && shared.includes("MIN_RESET_PASSWORD = 8"), "the administrator types the new password (8+ characters)");
+  for (const tab of ["AdminsTab", "StudentsTab", "StudentRegistryTab", "TeachersTab", "TeacherRegistryTab"]) {
+    expect(read(`src/components/admin/${tab}.tsx`).includes("<SetPasswordModal"), `${tab} resets with the typed password`);
+  }
 
   console.log("\n✅ All account management checks passed.");
 }

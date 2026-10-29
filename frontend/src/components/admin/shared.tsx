@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { api } from "../../services";
 
 interface AdminModalProps {
   title: string;
@@ -47,50 +48,76 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   </div>
 );
 
-// A temporary password is returned by the server once. It is shown here until
-// the administrator closes the box, and is kept nowhere else.
-export const TemporaryPasswordNotice: React.FC<{
-  accountLabel: string;
-  temporaryPassword: string;
-  onClose: () => void;
-}> = ({ accountLabel, temporaryPassword, onClose }) => {
-  const [copied, setCopied] = useState(false);
+// Reset a password: the administrator types the new one and gives it to the
+// person, who signs in with it (no forced change). It is sent once and kept
+// nowhere in the page.
+export const MIN_RESET_PASSWORD = 8;
 
-  const copy = async () => {
+export const SetPasswordModal: React.FC<{
+  accountLabel: string;
+  userId: string;
+  onClose: () => void;
+}> = ({ accountLabel, userId, onClose }) => {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const submit = async () => {
+    if (password.length < MIN_RESET_PASSWORD) {
+      setError(`The password must be at least ${MIN_RESET_PASSWORD} characters.`);
+      return;
+    }
+    if (password !== confirm) {
+      setError("The two passwords do not match.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
     try {
-      await navigator.clipboard.writeText(temporaryPassword);
-      setCopied(true);
-    } catch {
-      setCopied(false);
+      await api.resetUserPassword(userId, password);
+      setPassword("");
+      setConfirm("");
+      setDone(true);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
     }
   };
 
+  if (done) {
+    return (
+      <AdminModal title="Password reset" onClose={onClose}>
+        <p style={{ fontSize: "0.875rem", margin: 0 }}>
+          The password for <strong>{accountLabel}</strong> is set. Give it to them; they sign in with it.
+          Every device the account was signed in on has been signed out.
+        </p>
+      </AdminModal>
+    );
+  }
+
   return (
-    <AdminModal title="Temporary Password" onClose={onClose}>
-      <p style={{ fontSize: "0.875rem", marginBottom: "1rem" }}>
-        The password for <strong>{accountLabel}</strong> was reset. Give them this temporary
-        password; they will have to choose their own at the next sign-in.
+    <AdminModal title="Reset password" onClose={onClose} onSubmit={() => void submit()} submitLabel="Set password" busy={busy}>
+      <p style={{ fontSize: "0.875rem", marginTop: 0 }}>
+        Type a new password for <strong>{accountLabel}</strong> and give it to them. They sign in with it;
+        they are signed out everywhere else.
       </p>
-      <div
-        style={{
-          display: "flex",
-          gap: "0.5rem",
-          alignItems: "center",
-          padding: "0.75rem",
-          border: "1px solid var(--erp-border)",
-          borderRadius: "6px",
-          background: "var(--erp-surface-subtle)",
-        }}
-      >
-        <code style={{ flex: 1, fontSize: "1rem", wordBreak: "break-all" }}>{temporaryPassword}</code>
-        <button type="button" className="erp-btn erp-btn-secondary" onClick={copy}>
-          {copied ? "Copied" : "Copy"}
-        </button>
+      {error && (
+        <div className="alert-banner error" role="alert" style={{ marginBottom: "0.75rem" }}>
+          <span>{error}</span>
+        </div>
+      )}
+      <div className="form-group" style={{ marginBottom: "0.75rem" }}>
+        <label className="form-label" htmlFor="reset-password-new">New password</label>
+        <input id="reset-password-new" type="password" className="auth-input" autoComplete="new-password" minLength={MIN_RESET_PASSWORD} value={password} onChange={(e) => setPassword(e.target.value)} />
       </div>
-      <p style={{ fontSize: "0.8125rem", color: "#b45309", marginTop: "1rem" }}>
-        This is shown only once. It cannot be displayed again after you close this box. Every
-        device the account was signed in on has been signed out.
-      </p>
+      <div className="form-group">
+        <label className="form-label" htmlFor="reset-password-confirm">Type it again</label>
+        <input id="reset-password-confirm" type="password" className="auth-input" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+      </div>
+      <p style={{ fontSize: "0.8rem", color: "var(--erp-text-muted)", marginBottom: 0 }}>At least {MIN_RESET_PASSWORD} characters.</p>
     </AdminModal>
   );
 };

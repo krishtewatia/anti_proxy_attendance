@@ -16,14 +16,13 @@ computes in memory: no query per student or per day.
 
 from __future__ import annotations
 
-import csv
 from datetime import date, datetime, timedelta, timezone
-import io
 from typing import Any, Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.services import enrolment_service as enrolment
+from app.services.csv_export import excel_text, to_csv
 from app.services import organisation_service as org
 from app.services.rounds_service import (
     editable_until,
@@ -47,12 +46,28 @@ def today() -> date:
     return datetime.now(COLLEGE_TZ).date()
 
 
-def _local_time(value: Any) -> str:
+def local_time(value: Any) -> str:
     if isinstance(value, datetime):
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
         return value.astimezone(COLLEGE_TZ).strftime("%H:%M")
     return ""
+
+
+def session_day(session: dict) -> str:
+    """The college-time date a session was taken ("28 Oct 2026"), for CSVs.
+
+    From when ENTRY was opened, else the class's start time, both turned into
+    college time (IST), not UTC; the stored date only when neither exists.
+    """
+    entry = ((session.get("rounds") or {}).get("ENTRY") or {}).get("opened_at")
+    for value in (entry, session.get("start_time")):
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return value.astimezone(COLLEGE_TZ).strftime("%d %b %Y")
+    stored = session.get("date")
+    return date.fromisoformat(stored).strftime("%d %b %Y") if stored else ""
 
 
 def percentage(present: int, held: int) -> Optional[float]:
@@ -72,7 +87,7 @@ async def _held_sessions(
     # Only a complete class (ENTRY and EXIT both finalized) counts.
     held = [s for s in sessions if is_complete(s)]
     # Sorted by day and class time (the stored time may or may not carry a zone).
-    return sorted(held, key=lambda s: (s["date"], _local_time(s.get("start_time"))))
+    return sorted(held, key=lambda s: (s["date"], local_time(s.get("start_time"))))
 
 
 async def _not_entered(
@@ -264,16 +279,23 @@ async def student_lectures(db: AsyncIOMotorDatabase, user_id: str, subject_key: 
         if record is None:
             continue
         marks = record.get("rounds") or {}
+        held = held_rounds(session)
+
+        def round_status(name: str) -> Optional[str]:
+            # A held round without a mark: the camera never saw the student.
+            status = (marks.get(name) or {}).get("status")
+            return status or ("ABSENT" if name in held else None)
+
         for number, mark in enumerate(record.get("lectures") or [], start=1):
             items.append(
                 {
                     "date": session["date"],
-                    "time": _local_time(session.get("start_time")),
+                    "time": local_time(session.get("start_time")),
                     "lecture": number,
                     "status": mark,
                     "class": session.get("class_code"),
-                    "entry": (marks.get("ENTRY") or {}).get("status"),
-                    "exit": (marks.get("EXIT") or {}).get("status"),
+                    "entry": round_status("ENTRY"),
+                    "exit": round_status("EXIT"),
                 }
             )
     return {"subject_key": subject_key, "lectures": list(reversed(items))}
@@ -314,13 +336,6 @@ async def _class_students(db: AsyncIOMotorDatabase, class_id: str) -> list[dict]
     return students
 
 
-def _csv(rows: list[list[Any]]) -> str:
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerows(rows)
-    return out.getvalue()
-
-
 async def teacher_classes(db: AsyncIOMotorDatabase, user: dict) -> list[dict]:
     query = {} if user.get("role") == "ADMIN" else {"teacher_ids": user["user_id"]}
     subjects = {s["key"]: s async for s in db[org.SUBJECTS].find({}, {"_id": 0})}
@@ -358,7 +373,7 @@ async def class_list_csv(db: AsyncIOMotorDatabase, cls: dict) -> str:
         groups = _choices(s)
         rows.append(
             [
-                s.get("roll_number", ""),
+                excel_text(s.get("roll_number", "")),
                 s.get("name", ""),
                 s.get("email", ""),
                 s["enrolment"].get("section", ""),
@@ -367,7 +382,7 @@ async def class_list_csv(db: AsyncIOMotorDatabase, cls: dict) -> str:
                 groups["dlda"],
             ]
         )
-    return _csv(rows)
+    return to_csv(rows)
 
 
 def _identity(student: dict) -> str:
@@ -421,10 +436,10 @@ async def register_csv(
     sessions, students, counts = await _register(db, cls, since, until)
     header = ["Roll No", "Name"]
     for session in sessions:
-        label = date.fromisoformat(session["date"]).strftime("%d %b")
+        label = session_day(session)
         for i in range(int(session.get("periods") or 1)):
             header.append(
-                f"{label} {_local_time(session.get('start_time'))} L{i + 1}".replace("  ", " ")
+                f"{label} {local_time(session.get('start_time'))} L{i + 1}".replace("  ", " ")
             )
     header += ["Present", "Held", "%"]
     rows: list[list[Any]] = [header]
@@ -432,7 +447,7 @@ async def register_csv(
         pct = percentage(count["present"], count["held"])
         rows.append(
             [
-                student.get("roll_number", ""),
+                excel_text(student.get("roll_number", "")),
                 student.get("name", ""),
                 *count["cells"],
                 count["present"],
@@ -440,7 +455,7 @@ async def register_csv(
                 "" if pct is None else pct,
             ]
         )
-    return _csv(rows)
+    return to_csv(rows)
 
 
 async def class_overview(db: AsyncIOMotorDatabase, cls: dict) -> dict:
@@ -512,7 +527,7 @@ async def session_sheet(db: AsyncIOMotorDatabase, cls: dict, session_id: str) ->
     return {
         "session_id": session_id,
         "date": session.get("date"),
-        "time": _local_time(session.get("start_time")),
+        "time": local_time(session.get("start_time")),
         "periods": int(session.get("periods") or 1),
         "status": session.get("status"),
         "rounds_held": held_rounds(session),
@@ -533,7 +548,12 @@ async def class_sessions(db: AsyncIOMotorDatabase, cls: dict) -> list[dict]:
             {
                 "session_id": s["session_id"],
                 "date": s.get("date"),
-                "time": _local_time(s.get("start_time")),
+                "time": local_time(s.get("start_time")),
+                # When attendance was taken (ENTRY opened), which may differ from the slot.
+                "taken_at": local_time(
+                    ((s.get("rounds") or {}).get("ENTRY") or {}).get("opened_at")
+                )
+                or None,
                 "status": s.get("status"),
                 "rounds_held": held_rounds(s),
                 "periods": s.get("periods"),
