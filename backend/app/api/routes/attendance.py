@@ -1,5 +1,3 @@
-import csv
-import io
 import logging
 import time
 from datetime import datetime, timezone
@@ -32,7 +30,9 @@ from app.schemas.attendance_response import (
     AttendanceSummaryItem,
 )
 from app.services.audit_service import record_audit_event
+from app.services.csv_export import excel_text, to_csv
 from app.services.recognition_service import verify_and_mark
+from app.services.reports_service import local_time, session_day
 from app.services.vision_client import VisionServiceUnavailable, forward_frame_to_vision
 
 logger = logging.getLogger(__name__)
@@ -260,15 +260,25 @@ async def export_session_attendance_csv(
         if rec_ident not in roster_identities:
             roster_identities.append(rec_ident)
 
-    output = io.StringIO()
-    writer = csv.writer(output)
     # A session that was never taken has no absences to export.
     taken = session_was_taken(session, records)
+    rows: list[list] = []
 
     if session.get("slot_id"):
-        # Timetable session: both rounds and the lectures they give.
-        writer.writerow(
-            ["Roll No", "Student Name", "ENTRY", "ENTRY time", "EXIT", "EXIT time", "Lectures"]
+        # Timetable session: both rounds (times in college time) and the lectures they give.
+        day = session_day(session)
+        rows.append(
+            [
+                "Date",
+                "Roll No",
+                "Student Name",
+                "ENTRY",
+                "ENTRY time",
+                "EXIT",
+                "EXIT time",
+                "Lectures present",
+                "Lectures held",
+            ]
         )
         for ident in roster_identities:
             s_info = student_map.get(ident, {})
@@ -277,29 +287,30 @@ async def export_session_attendance_csv(
 
             def cell(name: str) -> tuple[str, str]:
                 mark = marks.get(name) or {}
-                at = mark.get("at")
                 return (
                     "P" if mark.get("status") == "PRESENT" else "A",
-                    at.strftime("%H:%M") if hasattr(at, "strftime") else "",
+                    local_time(mark.get("at")),
                 )
 
             entry, entry_at = cell("ENTRY")
             exit_, exit_at = cell("EXIT")
             lectures = rec.get("lectures") or []
-            writer.writerow(
+            rows.append(
                 [
-                    s_info.get("roll_number") or ident,
+                    day,
+                    excel_text(s_info.get("roll_number") or ident),
                     s_info.get("name", ident),
                     entry,
                     entry_at,
                     exit_,
                     exit_at,
-                    f"{lectures.count('P')}/{len(lectures) or int(session.get('periods') or 1)}",
+                    lectures.count("P"),
+                    len(lectures) or int(session.get("periods") or 1),
                 ]
             )
         roster_identities = []
     else:
-        writer.writerow(["Student ID", "Student Name", "Status"])
+        rows.append(["Student ID", "Student Name", "Status"])
 
     for ident in roster_identities:
         s_info = student_map.get(ident, {})
@@ -307,9 +318,9 @@ async def export_session_attendance_csv(
         stu_name = s_info.get("name", ident)
         rec = records_by_ident.get(ident)
         st = (rec.get("status", "ABSENT") if rec else "ABSENT") if taken else "Not taken"
-        writer.writerow([stu_id, stu_name, st])
+        rows.append([excel_text(stu_id), stu_name, st])
 
-    csv_data = output.getvalue()
+    csv_data = to_csv(rows)
     import re
 
     course_raw = session.get("course_name", "attendance")
@@ -318,7 +329,7 @@ async def export_session_attendance_csv(
 
     return Response(
         content=csv_data,
-        media_type="text/csv",
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

@@ -13,12 +13,16 @@ const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.ur
 async function run(): Promise<void> {
   console.log("Onboarding and phone checks");
   const flow = read("src/pages/TeacherAttendanceFlow.tsx");
-  expect(flow.includes("{step === 1 && hasTimetable && <TodayTimetable onOpenSession={handleOpenSlotSession} />}"), "Take Attendance starts classes from today's timetable");
-  expect(flow.includes("{step === 1 && !hasTimetable && ("), "the older form only without timetable classes");
+  expect(flow.includes("{step === 1 && <TodayTimetable onOpenSession={handleOpenSlotSession} />}"), "Take Attendance starts classes from today's timetable");
+  expect(!flow.includes("api.createSession(") && !flow.includes("START ATTENDANCE"), "no instant ad-hoc attendance");
+  expect(!flow.includes("Start New Attendance") && !flow.includes("Active Session: None"), "no old Start New Attendance card");
+  expect(!flow.includes("New Attendance"), "the completion page has no New Attendance");
 
   const wizard = read("src/components/student/SetupWizard.tsx");
-  expect(wizard.includes('label: "Take a photo", capture: true') && wizard.includes('label: "Choose from gallery", capture: false'), "two ways to add a photo");
-  expect(wizard.includes('{...(way.capture ? { capture: "user" as const } : {})}'), "only the camera button forces the camera");
+  expect(wizard.includes("Take a photo") && wizard.includes("Choose from gallery"), "two ways to add a photo");
+  expect(wizard.includes("<SelfieCamera") && !wizard.includes('capture: "user"'), "Take a photo opens the camera in the page, not the gallery");
+  const camera = read("src/components/student/SelfieCamera.tsx");
+  expect(camera.includes('facingMode: "user"') && camera.includes("Retake") && camera.includes('capture="user"'), "front camera with Retake, and the camera app when it cannot open");
 
   const app = read("src/App.tsx");
   const studentRoute = app.slice(app.indexOf("// Students do not change their own password"), app.indexOf("<StudentDashboard"));

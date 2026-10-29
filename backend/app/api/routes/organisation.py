@@ -10,7 +10,7 @@ from datetime import date
 import logging
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.dependencies.auth import require_admin
@@ -136,6 +136,18 @@ async def list_classes(
         query["subject_key"] = subject_key.upper()
     db = get_database()
     return [doc async for doc in db[org.CLASSES].find(query, {"_id": 0}).sort("class_id", 1)]
+
+
+@router.get(
+    "/timetable/sample.csv",
+    summary="A sample timetable sheet: the columns the import reads, with example rows",
+)
+async def timetable_sample(admin: Admin) -> Response:
+    return Response(
+        content=org.timetable_sample_csv(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="timetable_sample.csv"'},
+    )
 
 
 @router.post(

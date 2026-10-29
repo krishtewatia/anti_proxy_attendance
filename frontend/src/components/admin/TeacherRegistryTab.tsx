@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../../services";
 import { OrgNavigator } from "./OrgNavigator";
 import { PeopleCsvPanel } from "./PeopleCsvPanel";
-import { AdminModal, TemporaryPasswordNotice } from "./shared";
+import { AdminModal, SetPasswordModal } from "./shared";
 import { dangerButton, errorText, fieldGap, smallButton, type Banner } from "./adminShared.ts";
 import type { NavSelection, NavYear } from "../../utils/orgNavigator.ts";
 import { classLabel, teachersFor, type RegistryTeacher } from "../../utils/registry.ts";
@@ -26,7 +26,7 @@ export const TeacherRegistryTab: React.FC<TeacherRegistryTabProps> = ({ years, s
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_NEW);
   const [busy, setBusy] = useState(false);
-  const [temporary, setTemporary] = useState<{ label: string; password: string } | null>(null);
+  const [resetting, setResetting] = useState<{ label: string; userId: string } | null>(null);
   // Assigning classes: the year and branch's classes, and the ticked ones.
   const [assigning, setAssigning] = useState<RegistryTeacher | null>(null);
   const [classes, setClasses] = useState<OrgClass[]>([]);
@@ -98,15 +98,7 @@ export const TeacherRegistryTab: React.FC<TeacherRegistryTabProps> = ({ years, s
     }
   };
 
-  const resetPassword = async (t: RegistryTeacher) => {
-    if (!window.confirm(`Reset the password for ${label(t)}? They are signed out everywhere.`)) return;
-    try {
-      const result = await api.resetUserPassword(t.user_id);
-      setTemporary({ label: label(t), password: result.temporary_password });
-    } catch (err: unknown) {
-      notify({ type: "error", text: `Failed to reset the password: ${errorText(err)}` });
-    }
-  };
+  const resetPassword = (t: RegistryTeacher) => setResetting({ label: label(t), userId: t.user_id });
 
   const remove = async (t: RegistryTeacher) => {
     if (!window.confirm(`Delete ${label(t)}? The sessions and attendance they recorded are kept.`)) return;
@@ -149,7 +141,7 @@ export const TeacherRegistryTab: React.FC<TeacherRegistryTabProps> = ({ years, s
               <td>
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                   <button type="button" className="erp-btn erp-btn-primary" style={smallButton} onClick={() => void openAssign(t)}>Assign classes</button>
-                  <button type="button" className="erp-btn erp-btn-secondary" style={smallButton} onClick={() => void resetPassword(t)}>Reset password</button>
+                  <button type="button" className="erp-btn erp-btn-secondary" style={smallButton} onClick={() => resetPassword(t)}>Reset password</button>
                   <button type="button" className="erp-btn erp-btn-secondary" style={dangerButton} onClick={() => void remove(t)}>Delete</button>
                 </div>
               </td>
@@ -235,9 +227,7 @@ export const TeacherRegistryTab: React.FC<TeacherRegistryTabProps> = ({ years, s
         </AdminModal>
       )}
 
-      {temporary && (
-        <TemporaryPasswordNotice accountLabel={temporary.label} temporaryPassword={temporary.password} onClose={() => setTemporary(null)} />
-      )}
+      {resetting && <SetPasswordModal accountLabel={resetting.label} userId={resetting.userId} onClose={() => setResetting(null)} />}
     </div>
   );
 };

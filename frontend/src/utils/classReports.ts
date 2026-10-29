@@ -2,6 +2,8 @@
 // (in lectures, "not entered" apart) and the teacher's downloads.
 // Pure helpers only.
 
+import { formatDate } from "./dates.ts";
+
 export interface SubjectRow {
   subject_key: string;
   code: string;
@@ -43,10 +45,19 @@ export interface TeacherClassItem {
 export interface ClassSessionItem {
   session_id: string;
   date: string | null;
+  // The timetable slot's start, in college time ("09:10").
   time: string;
+  // When attendance was actually taken (ENTRY opened), in college time.
+  taken_at?: string | null;
   status: string;
   rounds_held: string[];
   periods: number | null;
+}
+
+// "28 Oct 2026, 09:10 · taken 14:01": the slot, and when it was taken if that differs.
+export function sessionWhen(session: Pick<ClassSessionItem, "date" | "time" | "taken_at">): string {
+  const when = [formatDate(session.date), session.time].filter(Boolean).join(", ");
+  return session.taken_at && session.taken_at !== session.time ? `${when} · taken ${session.taken_at}` : when;
 }
 
 export function percentLabel(value: number | null): string {

@@ -42,9 +42,28 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Digits only, of varying length (e.g. 2401331540142); not derived from the email.
 const ROLL_REGEX = /^[0-9]{8,20}$/;
 
+// A student's college email is their ERP ID at the college domain.
 export function emailPlaceholder(domain: string | null, role: "STUDENT" | "TEACHER"): string {
   if (!domain) return "your.email@college.edu";
-  return role === "STUDENT" ? `rollno@${domain}` : `name@${domain}`;
+  return role === "STUDENT" ? `STUDENT_ERP@${domain}` : `name@${domain}`;
+}
+
+export function emailHint(domain: string, role: "STUDENT" | "TEACHER"): string {
+  return role === "STUDENT"
+    ? `Use your college email (your ERP ID @${domain}).`
+    : `Use your college email address (@${domain}).`;
+}
+
+// What the form says when the email or roll number is already registered: the
+// server names which one; the person is pointed to an administrator.
+export function duplicateRegistrationMessage(serverMessage: string): string {
+  const text = serverMessage.toLowerCase();
+  const which = text.includes("roll number")
+    ? "This roll number is already registered."
+    : text.includes("email")
+      ? "An account with this email already exists."
+      : "An account with this email or roll number already exists.";
+  return `${which} Try signing in instead. ${FORGOT_PASSWORD_HINT}`;
 }
 
 export function emailAllowed(email: string, domain: string | null): boolean {

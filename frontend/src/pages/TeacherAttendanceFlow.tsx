@@ -69,28 +69,11 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   });
   const [spoofDetected, setSpoofDetected] = useState(false);
   const [notInClass, setNotInClass] = useState(0);
-  // A teacher with timetable classes starts classes only from the timetable.
-  const [hasTimetable, setHasTimetable] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getMyTeachingClasses()
-      .then((list) => {
-        if (!cancelled) setHasTimetable(list.length > 0);
-      })
-      .catch(() => {
-        // Not available (no timetable yet): the older form stays.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
   const [cameraOnline, setCameraOnline] = useState<boolean>(false);
   const [cameraStatus, setCameraStatus] = useState<
     "FREE" | "REQUESTING_CAMERA" | "CAMERA_READY" | "ATTENDANCE_ACTIVE" | "STOPPING_CAMERA" | "PERMISSION_DENIED" | "UNAVAILABLE"
   >("FREE");
   const [cameraErrorMessage, setCameraErrorMessage] = useState<string | null>(null);
-  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -114,7 +97,6 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       if (typeof navigator !== "undefined" && navigator.mediaDevices?.enumerateDevices) {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoInputs = devices.filter((d) => d.kind === "videoinput");
-        setAvailableCameras(videoInputs);
         if (videoInputs.length > 0 && !selectedCameraId) {
           setSelectedCameraId(videoInputs[0].deviceId);
         }
@@ -256,50 +238,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   const totalStudents = records.length;
   const presentCount = records.filter((r) => r.status === "PRESENT").length;
 
-  // ========================================================================
-  // STEP 1 -> STEP 2: START ATTENDANCE
-  // ========================================================================
-  const handleStartAttendance = async () => {
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      const now = new Date();
-      const in2h = new Date(now.getTime() + 120 * 60 * 1000);
-
-      // 1. Create Session
-      const session = await api.createSession({
-        course_name: selectedSubject ? `${selectedSubject} — ${selectedClass}` : selectedClass,
-        class_code: selectedClass,
-        subject: selectedSubject || undefined,
-        start_time: now.toISOString(),
-        end_time: in2h.toISOString(),
-        required_presence_percentage: 100.0,
-      });
-
-      setSessionId(session.session_id);
-
-      // 2. Start Session
-      await api.startSession(session.session_id);
-
-      // 4. Fetch roster
-      const attData = await api.getSessionAttendance(session.session_id);
-      applyAttendance(attData);
-
-      setCallout({ name: "Scanning", status: "IDLE" });
-      setViewedNotTaken(false);
-      setStep(2);
-      if (onSelectNav) onSelectNav("attendance");
-
-      // 5. Start browser webcam stream directly
-      await startCameraStream();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMessage(msg || "Failed to start attendance session.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Attendance is taken only for assigned timetable classes: a class is started
+  // from today's timetable, never as an instant ad-hoc session.
   // Open the attendance screen on a session started from the timetable.
   const handleOpenSlotSession = async (openedId: string, slot: TeacherSlot) => {
     setErrorMessage(null);
@@ -718,7 +658,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   };
 
   // ========================================================================
-  // STEP 3: MANUAL CORRECTION (PRESENT <-> ABSENT)
+  // STEP 3: MANUAL CORRECTION of an older ad-hoc session (PRESENT <-> ABSENT;
+  // timetable classes are corrected on their class page)
   // ========================================================================
   const handleToggleStudentStatus = async (item: AttendanceSummaryItem) => {
     if (!sessionId) return;
@@ -754,16 +695,6 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       .catch((err: unknown) => setErrorMessage(err instanceof Error ? err.message : "Failed to download the CSV."));
   };
 
-  const handleNewAttendance = () => {
-    stopCameraStream();
-    setStep(1);
-    setSessionId(null);
-    setRecords([]);
-    setCallout({ name: "Ready", status: "IDLE" });
-    setSpoofDetected(false);
-    fetchTeacherData();
-  };
-
   const hasActiveSession = Boolean(dashboardData?.active_session);
   const activeSess = dashboardData?.active_session;
   const previousSessions = dashboardData?.previous_sessions ?? [];
@@ -784,10 +715,10 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
         <p className="erp-page-subtitle">Faculty Attendance & Class Management Portal</p>
       </div>
 
-      {/* Active Session Overview */}
+      {/* A class that is running: back to its class page. Classes are started from today's timetable above. */}
+      {hasActiveSession && activeSess && (
       <div className="erp-section" style={{ marginBottom: "1.75rem" }}>
         <h2 className="erp-section-title">Today's Attendance</h2>
-        {hasActiveSession && activeSess ? (
           <div className="erp-active-session-card">
             <div className="erp-active-session-info">
               <span className="status-badge active">Active Session in Progress</span>
@@ -804,25 +735,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
               Continue Active Session →
             </button>
           </div>
-        ) : (
-          <div className="erp-empty-active-card">
-            <div>
-              <div className="erp-active-label">Active Session: None</div>
-              <div className="erp-active-desc">No ongoing attendance session currently in progress.</div>
-            </div>
-            <button
-              type="button"
-              className="erp-btn erp-btn-primary"
-              onClick={() => {
-                setStep(1);
-                if (onSelectNav) onSelectNav("attendance");
-              }}
-            >
-              Start New Attendance
-            </button>
-          </div>
-        )}
       </div>
+      )}
 
       {/* Assigned Classes */}
       <div className="erp-section" style={{ marginBottom: "1.75rem" }}>
@@ -890,7 +804,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                     </td>
                     <td>
                       {ps.rounds_complete === false && ps.status !== "ACTIVE" ? (
-                        <span className="status-badge warning" title="ENTRY and EXIT were not both finalized. Open it to finish by hand within 24 h of the class.">
+                        <span className="status-badge warning" title="ENTRY and EXIT were not both finalized. Open it to finish by hand within 48 h of the class.">
                           Not finalized
                         </span>
                       ) : (
@@ -922,102 +836,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
   // Tab 2: Attendance Workflow (Screens 1, 2, 3)
   const renderAttendanceWorkflow = () => (
     <div className="erp-attendance-flow">
-      {/* SCREEN 1 (pilot): a teacher with timetable classes starts them from today's timetable */}
-      {step === 1 && hasTimetable && <TodayTimetable onOpenSession={handleOpenSlotSession} />}
-
-      {/* SCREEN 1 (no timetable classes): the older class and subject form */}
-      {step === 1 && !hasTimetable && (
-        <div className="erp-start-attendance-card">
-          <div className="erp-card-header">
-            <h1 className="erp-page-title">Start Attendance</h1>
-            <p className="erp-page-subtitle">Select class and subject to begin taking attendance.</p>
-          </div>
-
-          {hasActiveSession && (
-            <div className="erp-alert-box warning" style={{ marginBottom: "1.25rem" }}>
-              An active attendance session is already running for {activeSess?.course_name}. Please finish or continue that session.
-            </div>
-          )}
-
-          {noClasses && (
-            <div className="erp-alert-box warning" style={{ marginBottom: "1.25rem" }}>
-              {noClassesMessage}
-            </div>
-          )}
-
-          <div className="erp-form-stack">
-            <div className="form-group">
-              <label className="form-label" htmlFor="erp-subject-select">Subject</label>
-              <select
-                id="erp-subject-select"
-                className="erp-select-input"
-                value={selectedSubject}
-                onChange={(e) => setSelectedSubject(e.target.value)}
-                disabled={hasActiveSession || loading || assignedSubjects.length === 0}
-              >
-                {assignedSubjects.length === 0 && <option value="">No subjects assigned</option>}
-                {assignedSubjects.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="erp-class-select">Class</label>
-              <select
-                id="erp-class-select"
-                className="erp-select-input"
-                value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
-                disabled={hasActiveSession || loading || noClasses}
-              >
-                {noClasses && <option value="">No classes assigned</option>}
-                {assignedClasses.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="erp-camera-select">Camera</label>
-              {availableCameras.length > 0 ? (
-                <select
-                  id="erp-camera-select"
-                  className="erp-select-input"
-                  value={selectedCameraId}
-                  onChange={(e) => setSelectedCameraId(e.target.value)}
-                  disabled={hasActiveSession || loading}
-                >
-                  {availableCameras.map((cam, idx) => (
-                    <option key={cam.deviceId || idx} value={cam.deviceId}>
-                      {cam.label || (idx === 0 ? "Integrated Camera" : `USB Webcam ${idx}`)}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="erp-select-input" style={{ color: "var(--text-muted)", cursor: "default" }}>
-                  Default PC / USB Webcam
-                </div>
-              )}
-              <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "0.35rem" }}>
-                Camera is not active. (Connects on Take Attendance)
-              </div>
-            </div>
-
-            <div style={{ marginTop: "1.5rem" }}>
-              <button
-                type="button"
-                className="erp-btn erp-btn-primary"
-                onClick={handleStartAttendance}
-                disabled={hasActiveSession || loading || !selectedClass}
-                style={{ width: "100%", padding: "0.85rem", fontSize: "1rem" }}
-              >
-                {loading ? "Starting Attendance Session..." : "START ATTENDANCE"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* SCREEN 1: classes are started only from today's timetable (assigned classes) */}
+      {step === 1 && <TodayTimetable onOpenSession={handleOpenSlotSession} />}
 
       {/* SCREEN 2: LIVE ATTENDANCE (Matches Section 7 Layout) */}
       {step === 2 && roundInfo && sessionId && roundPage === null && (
@@ -1206,10 +1026,11 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
       {/* SCREEN 3: ATTENDANCE COMPLETE (Matches Section 9 Layout) */}
       {step === 3 && (
         <div className="erp-complete-page">
-          {/* A timetable class left unfinished: finish it by hand (ENTRY, EXIT, finalize). */}
-          {roundInfo && sessionId && !roundInfo.complete && (
+          {/* A timetable class: its class page. Left unfinished, it is finished by hand (ENTRY, EXIT);
+              once final, absent students are marked present there within the time window. */}
+          {roundInfo && sessionId && (
             <div className="erp-card" style={{ padding: "1rem 1.25rem", marginBottom: "1rem", maxWidth: "48rem", width: "100%" }}>
-              <h2 className="erp-section-title" style={{ marginTop: 0 }}>Not finalized: finish this class</h2>
+              {!roundInfo.complete && <h2 className="erp-section-title" style={{ marginTop: 0 }}>Not finalized: finish this class</h2>}
               <ClassPage
                 sessionId={sessionId}
                 info={roundInfo}
@@ -1236,7 +1057,8 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
               </div>
             </div>
 
-            {/* Clean Attendance Table */}
+            {/* An older ad-hoc session: its register (timetable classes use the class page above) */}
+            {!roundInfo && (
             <div className="erp-table-container" style={{ margin: "1.5rem 0" }}>
               <table className="erp-table">
                 <thead>
@@ -1277,6 +1099,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                 </tbody>
               </table>
             </div>
+            )}
 
             {/* Actions */}
             <div className="erp-complete-actions" style={{ display: "flex", gap: "1rem" }}>
@@ -1286,7 +1109,7 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                 onClick={handleDownloadCsv}
                 style={{ flex: 1, padding: "0.75rem" }}
               >
-                📥 Download Attendance CSV
+                Download CSV
               </button>
               <button
                 type="button"
@@ -1295,14 +1118,6 @@ export const TeacherAttendanceFlow: React.FC<TeacherAttendanceFlowProps> = ({
                 style={{ flex: 1, padding: "0.75rem" }}
               >
                 Go to Dashboard
-              </button>
-              <button
-                type="button"
-                className="erp-btn erp-btn-secondary"
-                onClick={handleNewAttendance}
-                style={{ flex: 1, padding: "0.75rem" }}
-              >
-                New Attendance
               </button>
             </div>
           </div>

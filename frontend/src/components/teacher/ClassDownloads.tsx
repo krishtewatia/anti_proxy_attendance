@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../services";
-import { classPath, fileName, registerPath, type ClassSessionItem, type TeacherClassItem } from "../../utils/classReports.ts";
+import { sessionStatusBadgeClass, sessionStatusLabel } from "../../utils/sessions.ts";
+import { fileName, registerPath, sessionWhen, type ClassSessionItem, type TeacherClassItem } from "../../utils/classReports.ts";
 
-// Downloads for one of the teacher's classes: the class list, the register for
-// a date range (one column per lecture), and each
-// session's CSV. Files are fetched with the teacher's token.
+// Downloads for one of the teacher's classes: one "Download CSV", the register
+// for a date range (every student, one column per lecture, totals), and the
+// class's sessions with when they were taken. Files are fetched with the
+// teacher's token.
 export const ClassDownloads: React.FC = () => {
   const [classes, setClasses] = useState<TeacherClassItem[]>([]);
   const [classId, setClassId] = useState("");
@@ -50,9 +52,11 @@ export const ClassDownloads: React.FC = () => {
   const current = classes.find((c) => c.class_id === classId);
   const label = current?.label || current?.subject || "class";
 
-  const download = (path: string, name: string) => {
+  const download = () => {
     setError(null);
-    api.downloadFile(path, name).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+    api
+      .downloadFile(registerPath(classId, from, to), fileName(label, "attendance"))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   };
 
   return (
@@ -69,9 +73,6 @@ export const ClassDownloads: React.FC = () => {
         ))}
       </select>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "flex-end" }}>
-        <button type="button" className="erp-btn erp-btn-secondary" onClick={() => download(classPath(classId, "students.csv"), fileName(label, "class_list"))}>
-          Class list (CSV)
-        </button>
         <label className="form-group" style={{ margin: 0 }}>
           <span className="form-label">From</span>
           <input type="date" className="auth-input" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -80,26 +81,21 @@ export const ClassDownloads: React.FC = () => {
           <span className="form-label">To</span>
           <input type="date" className="auth-input" value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
-        <button type="button" className="erp-btn erp-btn-primary" onClick={() => download(registerPath(classId, from, to), fileName(label, "register"))}>
-          Register (CSV)
+        <button type="button" className="erp-btn erp-btn-primary" onClick={download}>
+          Download CSV
         </button>
+      </div>
+      <div style={{ fontSize: "0.8rem", color: "var(--erp-text-muted)" }}>
+        Every student of the class with one column per lecture and their totals. Leave the dates empty for the whole term so far.
       </div>
       <div style={{ fontSize: "0.85rem" }}>
         {sessions.length === 0 ? (
           <span style={{ color: "var(--erp-text-muted)" }}>No sessions for this class yet.</span>
         ) : (
           sessions.map((s) => (
-            <div key={s.session_id} style={{ display: "flex", gap: "0.75rem", alignItems: "center", padding: "0.3rem 0", borderBottom: "1px solid var(--erp-border)" }}>
-              <span style={{ minWidth: "7rem" }}>{s.date} {s.time}</span>
-              <span className="status-badge completed">{s.status}</span>
-              <button
-                type="button"
-                className="erp-btn erp-btn-secondary"
-                style={{ padding: "0.2rem 0.6rem", fontSize: "0.75rem", marginLeft: "auto" }}
-                onClick={() => download(`/api/v1/attendance/${encodeURIComponent(s.session_id)}/export`, fileName(`${label}_${s.date}`, "session"))}
-              >
-                CSV
-              </button>
+            <div key={s.session_id} style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center", padding: "0.3rem 0", borderBottom: "1px solid var(--erp-border)" }}>
+              <span>{sessionWhen(s)}</span>
+              <span className={`status-badge ${sessionStatusBadgeClass(s.status)}`}>{sessionStatusLabel(s.status)}</span>
             </div>
           ))
         )}

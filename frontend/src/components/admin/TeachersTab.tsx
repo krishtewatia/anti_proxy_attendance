@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { api } from "../../services";
 import type { TeacherProfileResponse } from "../../types";
 import { splitList, teacherEditChanges, type TeacherEditFields } from "../../utils/accounts.ts";
-import { AdminModal, ClassPicker, TemporaryPasswordNotice } from "./shared";
+import { AdminModal, ClassPicker, SetPasswordModal } from "./shared";
 import { dangerButton, errorText, fieldGap, smallButton, type AdminTabProps } from "./adminShared.ts";
 
 const EMPTY_TEACHER = {
@@ -36,7 +36,7 @@ export const TeachersTab: React.FC<AdminTabProps> = ({ teachers, academic, notif
   const [editing, setEditing] = useState<TeacherProfileResponse | null>(null);
   const [editForm, setEditForm] = useState<TeacherEditForm | null>(null);
   const [saving, setSaving] = useState(false);
-  const [temporary, setTemporary] = useState<{ label: string; password: string } | null>(null);
+  const [resetting, setResetting] = useState<{ label: string; userId: string } | null>(null);
 
   const classCodes = useMemo(() => (academic?.classes || []).map((c) => c.class_code), [academic]);
 
@@ -120,20 +120,7 @@ export const TeachersTab: React.FC<AdminTabProps> = ({ teachers, academic, notif
     }
   };
 
-  const handleResetPassword = async (teacher: TeacherProfileResponse) => {
-    if (
-      !window.confirm(
-        `Reset the password for '${teacher.name}'?\n\nThey will be signed out everywhere and must choose a new password with the temporary one you give them.`,
-      )
-    )
-      return;
-    try {
-      const result = await api.resetUserPassword(teacher.user_id);
-      setTemporary({ label: teacher.name, password: result.temporary_password });
-    } catch (err: unknown) {
-      notify({ type: "error", text: `Failed to reset the password: ${errorText(err)}` });
-    }
-  };
+  const handleResetPassword = (teacher: TeacherProfileResponse) => setResetting({ label: teacher.name, userId: teacher.user_id });
 
   return (
     <div>
@@ -294,9 +281,7 @@ export const TeachersTab: React.FC<AdminTabProps> = ({ teachers, academic, notif
         </AdminModal>
       )}
 
-      {temporary && (
-        <TemporaryPasswordNotice accountLabel={temporary.label} temporaryPassword={temporary.password} onClose={() => setTemporary(null)} />
-      )}
+      {resetting && <SetPasswordModal accountLabel={resetting.label} userId={resetting.userId} onClose={() => setResetting(null)} />}
     </div>
   );
 };

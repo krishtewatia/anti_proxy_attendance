@@ -3,9 +3,11 @@ import { api } from "../../services";
 import type { AttendanceSummaryItem } from "../../types";
 import { formatDateTime } from "../../utils/dates";
 import {
+  EDIT_WINDOW_CLOSED_TEXT,
   ROUND_NAMES,
   canEditFinal,
   cardAction,
+  editWindowClosed,
   finalLabel,
   roundStatusText,
   splitByRound,
@@ -27,7 +29,7 @@ interface ClassPageProps {
 
 // The class: ENTRY and EXIT as two cards (each opened on its own camera page),
 // the final attendance once both are finalized (the only place marks are
-// changed by hand), and Finalize attendance.
+// changed by hand, within the time window), and Finalize attendance.
 export const ClassPage: React.FC<ClassPageProps> = ({ sessionId, info, records, running, onOpenRound, onFinalizeSession, finalizing, onChanged }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +66,7 @@ export const ClassPage: React.FC<ClassPageProps> = ({ sessionId, info, records, 
     const present = student.rounds?.[round]?.status === "PRESENT";
     void run(() => api.markRound(sessionId, round, student.identity, present ? "ABSENT" : "PRESENT"));
   };
+  const closed = editWindowClosed(info);
 
   const shown = records.filter((r) => {
     const q = query.trim().toLowerCase();
@@ -108,13 +111,20 @@ export const ClassPage: React.FC<ClassPageProps> = ({ sessionId, info, records, 
         <h2 className="erp-section-title" style={{ marginTop: 0 }}>Final attendance</h2>
         {!info.complete ? (
           <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--erp-text-muted)" }}>
-            Shown once ENTRY and EXIT are both finalized. Marks can then be corrected here by hand for 24 hours after each round was finalized.
+            Shown once ENTRY and EXIT are both finalized. Marks can then be corrected here by hand for 48 hours after each round was finalized.
           </p>
         ) : (
           <>
-            <p style={{ margin: "0 0 0.5rem", fontSize: "0.8rem", color: "var(--erp-text-muted)" }}>
-              Tap IN or OUT to correct a student by hand.
-            </p>
+            {closed ? (
+              <div className="alert-banner warning" role="status" style={{ marginBottom: "0.5rem" }}>
+                <span>{EDIT_WINDOW_CLOSED_TEXT}</span>
+              </div>
+            ) : (
+              <p style={{ margin: "0 0 0.5rem", fontSize: "0.8rem", color: "var(--erp-text-muted)" }}>
+                Tap IN or OUT to correct a student by hand
+                {info.editable_until ? `. You can make changes until ${formatDateTime(info.editable_until)}.` : "."}
+              </p>
+            )}
             <input type="search" className="erp-search-input" placeholder="Search name or roll no" aria-label="Search students" value={query} onChange={(e) => setQuery(e.target.value)} style={{ marginBottom: "0.5rem" }} />
             <div className="erp-students-list">
               {shown.map((student) => (
@@ -134,7 +144,7 @@ export const ClassPage: React.FC<ClassPageProps> = ({ sessionId, info, records, 
                           className={`status-badge ${present ? "present" : "absent"}`}
                           style={{ border: "none", cursor: editable ? "pointer" : "default", minHeight: "32px", whiteSpace: "nowrap" }}
                           disabled={busy || !editable}
-                          title={editable ? `${round}: tap to mark ${present ? "absent" : "present"}` : `${round} is locked`}
+                          title={editable ? `${round}: tap to mark ${present ? "absent" : "present"}` : EDIT_WINDOW_CLOSED_TEXT}
                           onClick={() => toggle(student, round)}
                         >
                           {round === "ENTRY" ? "IN" : "OUT"} {present ? "P" : "A"}

@@ -150,8 +150,8 @@ Added 2026-10-09. Every route here requires an administrator, except changing yo
 
 **Passwords.**
 - Passwords are stored only as bcrypt hashes. No route returns a password or a hash, and administrators cannot see an existing password.
-- An account an administrator creates (student, teacher or administrator), the administrator created from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`, and any account whose password an administrator resets must choose a new password at the next sign-in. Until then every route answers 403 `password_change_required`; only `POST /api/v1/auth/change-password` works.
-- A reset generates a random temporary password and returns it once, in the response to the administrator who asked. It is stored only as a hash and is not written to the log or the audit trail.
+- An account an administrator creates (student, teacher or administrator) and the administrator created from `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` must choose a new password at the next sign-in. Until then every route answers 403 `password_change_required`; only `POST /api/v1/auth/change-password` works.
+- A reset sets a password the administrator types (8 to 128 characters) and gives to the person; the person signs in with it and is not forced to change it (owner decision, 29 Oct 2026). The administrator therefore knows that password until the person changes it themselves. It is stored only as a hash, is not sent back in the response, and is not written to the log or the audit trail.
 - Each user has a token version, carried in every token. Changing or resetting a password raises it in the same database update that stores the new hash, so every token issued before that is refused from then on. The caller of a password change gets a new token in the response.
 - An administrator cannot reset their own password this way; they use the change-password form, which requires the current password.
 

@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../services";
 import { formatDateTime } from "../../utils/dates";
+import { EDIT_WINDOW_CLOSED_TEXT } from "../../utils/rounds.ts";
+import { sessionStatusLabel } from "../../utils/sessions.ts";
 import {
-  classPath,
-  fileName,
   filterStudents,
+  sessionWhen,
   percentLabel,
   type ClassOverview,
   type ClassSessionItem,
@@ -19,7 +20,8 @@ type Round = "ENTRY" | "EXIT";
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 // The teacher's classes: each student's attendance in the class, and one
-// date's session where ENTRY / EXIT can be corrected (within the edit window).
+// date's session where ENTRY / EXIT can be corrected (within the time window).
+// The CSV is downloaded from Sessions → Downloads.
 export const ClassStudents: React.FC = () => {
   const [classes, setClasses] = useState<TeacherClassItem[]>([]);
   const [classId, setClassId] = useState("");
@@ -97,7 +99,6 @@ export const ClassStudents: React.FC = () => {
 
   if (classes.length === 0) return null;
   const current = classes.find((c) => c.class_id === classId);
-  const label = current?.label || current?.subject || "class";
   const isGroup = current?.audience?.kind === "GROUP";
 
   const mark = async (identity: string, round: Round, status: "PRESENT" | "ABSENT") => {
@@ -173,14 +174,6 @@ export const ClassStudents: React.FC = () => {
               <option value="roll">Sort by roll no</option>
               <option value="percentage">Sort by % (lowest first)</option>
             </select>
-            <button
-              type="button"
-              className="erp-btn erp-btn-secondary"
-              style={{ marginLeft: "auto" }}
-              onClick={() => api.downloadFile(classPath(classId, "students.csv"), fileName(label, "class_list")).catch((err: unknown) => setError(errorText(err)))}
-            >
-              Download CSV
-            </button>
           </div>
           <div className="erp-table-container">
             <table className="erp-table">
@@ -236,7 +229,7 @@ export const ClassStudents: React.FC = () => {
           ) : (
             <select className="erp-select-input" aria-label="Session" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
               {sessions.map((s) => (
-                <option key={s.session_id} value={s.session_id}>{s.date} {s.time} · {s.status}</option>
+                <option key={s.session_id} value={s.session_id}>{sessionWhen(s)} · {sessionStatusLabel(s.status)}</option>
               ))}
             </select>
           )}
@@ -244,12 +237,15 @@ export const ClassStudents: React.FC = () => {
             <>
               <div style={{ fontSize: "0.85rem", color: "var(--erp-text-muted)" }}>
                 {sheet.periods === 1 ? "Single period: Present needs both ENTRY and EXIT." : `${sheet.periods} periods: ENTRY gives the first lecture, EXIT the second.`}
-                {sheet.teacher_may_edit
-                  ? sheet.editable_until
-                    ? ` You can correct this class until ${formatDateTime(sheet.editable_until)}.`
-                    : ""
-                  : " Locked: past the 48 h window — ask an administrator to unlock."}
+                {sheet.teacher_may_edit && sheet.editable_until
+                  ? ` You can correct this class until ${formatDateTime(sheet.editable_until)}.`
+                  : ""}
               </div>
+              {!sheet.teacher_may_edit && (
+                <div className="alert-banner warning" role="status">
+                  <span>{EDIT_WINDOW_CLOSED_TEXT}</span>
+                </div>
+              )}
               <div className="erp-table-container">
                 <table className="erp-table">
                   <thead>

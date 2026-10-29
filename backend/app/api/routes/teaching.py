@@ -115,6 +115,10 @@ class RoundMark(BaseModel):
 
 
 def _round_http(exc: rounds.RoundError) -> HTTPException:
+    if exc.code:
+        return HTTPException(
+            status_code=exc.status_code, detail={"code": exc.code, "message": str(exc)}
+        )
     return HTTPException(status_code=exc.status_code, detail=str(exc))
 
 
@@ -146,7 +150,7 @@ async def close_round(
 
 @router.post(
     "/api/v1/sessions/{session_id}/rounds/{round_name}/finalize",
-    summary="Finalize ENTRY or EXIT: the camera stops for it; hand changes for 24 h",
+    summary="Finalize ENTRY or EXIT: the camera stops for it; hand changes for 48 h",
 )
 async def finalize_round(
     session_id: str, round_name: str, current_user: Annotated[dict, Depends(require_teacher)]
@@ -312,7 +316,7 @@ def _csv_response(text: str, filename: str) -> Response:
     safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in filename)
     return Response(
         content=text,
-        media_type="text/csv",
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{safe}"'},
     )
 

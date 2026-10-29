@@ -85,17 +85,26 @@ async def admin_update_teacher(
     return {"status": "updated", "user_id": user_id, **result}
 
 
+class PasswordResetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Typed by the administrator and given to the person; never returned or logged.
+    password: str = Field(min_length=8, max_length=128)
+
+
 @router.post(
     "/users/{user_id}/reset-password",
-    summary="Give an account a temporary password that must be changed at the next login",
+    summary="Set an account's password to one the administrator types",
 )
 async def admin_reset_password(
     user_id: str,
+    payload: PasswordResetRequest,
     current_user: Annotated[dict, Depends(require_admin)],
 ) -> dict[str, Any]:
-    """The temporary password is returned once, here, and never again."""
     try:
-        return await accounts.reset_password(get_database(), user_id, reset_by=current_user)
+        return await accounts.reset_password(
+            get_database(), user_id, payload.password, reset_by=current_user
+        )
     except AccountAdminError as exc:
         raise _refused(exc) from exc
 
