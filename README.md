@@ -30,7 +30,7 @@ A modern, privacy-conscious classroom attendance ERP powered by client-side brow
 - [CI/CD Security Gates](#cicd-security-gates)
 - [Security & Reliability](#security--reliability)
 - [Doorway Mode Status](#doorway-mode-status)
-- [Liveness (Anti-Spoofing)](#liveness-anti-spoofing)
+- [Liveness (Anti Spoofing)](#liveness-anti-spoofing)
 - [Known Limitations](#known-limitations)
 - [Future Improvements](#future-improvements)
 
