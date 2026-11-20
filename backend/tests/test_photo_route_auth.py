@@ -300,6 +300,12 @@ PUBLIC_ROUTES = {
     ("POST", "/auth/register"),
     # The sign-up form shows the college email domain and the photo notice.
     ("GET", "/auth/registration-rules"),
+    # The public demo: whether it is on, and the one-click demo sign-in. Its
+    # tokens only ever reach the demo copy of the data (test_public_demo.py).
+    ("GET", "/auth/demo"),
+    ("POST", "/auth/demo"),
+    # The landing page: whether the demo is on and the contact address.
+    ("GET", "/api/v1/site"),
     ("POST", "/api/v1/students/register"),
     ("POST", "/api/v1/teachers/register"),
     # The registration form lists the active classes before anyone has an account.

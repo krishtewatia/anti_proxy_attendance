@@ -339,6 +339,30 @@ is deleted straight afterwards, also when the call fails. On the instance
 they are read at every start into `/run/antiproxy/env`, a root-only file that
 exists in memory only.
 
+## Site settings: the public demo and "Contact us"
+
+Three settings live next to the secrets under `/antiproxy/prod` and reach the
+backend the same way, at every start. Nothing is rebuilt: the published
+images are the same for every site.
+
+| Setting | Values | Effect |
+|---|---|---|
+| `PUBLIC_DEMO_ENABLED` | `true` / `false` (default `false`) | the one-click demo on `/demo`; demo accounts see only the demo copy of the data |
+| `PUBLIC_DEMO_RESET_HOURS` | hours, 1 to 720 (default 24) | how often the demo data is wiped |
+| `CONTACT_EMAIL` | an email address (default empty) | the landing page's "Contact us" button; hidden when empty |
+
+```bash
+python infra/scripts/manage_secrets.py set PUBLIC_DEMO_ENABLED true
+python infra/scripts/manage_secrets.py set CONTACT_EMAIL you@example.com
+python infra/scripts/tf.py deploy
+```
+
+`tf.py deploy` restarts the stack on the current release, which reads the
+settings again (the instance must be running; otherwise `tf.py start`).
+
+`unset NAME` puts a setting back to its default. A new release deployed from
+GitHub also picks the settings up, because every deploy restarts the stack.
+
 ## Automatic deployment from GitHub
 
 After every merge to `main` the *Publish Images* workflow waits for the ten

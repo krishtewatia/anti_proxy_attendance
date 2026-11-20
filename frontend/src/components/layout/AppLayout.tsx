@@ -4,6 +4,8 @@ import "./layout.css";
 import { pendingBadgeText } from "../../utils/approvals.ts";
 import { getDashboardPath } from "../../utils/auth";
 import { APP_NAME, APP_TAGLINE } from "../../config/app.ts";
+import { auth } from "../../services";
+import { SiteFooter } from "../common/SiteFooter";
 
 interface AppLayoutProps {
   user: UserResponse;
@@ -226,6 +228,20 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   return (
     <div className="erp-app-shell">
+      {auth.isDemo() && (
+        <div className="erp-demo-bar" role="status">
+          <span>
+            <strong>Demo</strong> · You are signed in as a demo {getRoleDisplayName(user.role).toLowerCase()}. All data is
+            made up, shared with other visitors and reset daily.
+          </span>
+          <span className="erp-demo-bar-actions">
+            <a href="/demo">Switch role</a>
+            <button type="button" onClick={onLogout}>
+              Leave demo
+            </button>
+          </span>
+        </div>
+      )}
       {/* Institutional Top Navigation Bar */}
       <header className="erp-header">
         {/* The logo and name lead to the home page of the signed-in role. */}
@@ -380,6 +396,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         {/* Content Pane */}
         <main className="erp-content-pane">
           {children}
+          <SiteFooter variant="compact" />
         </main>
       </div>
     </div>

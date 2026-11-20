@@ -27,6 +27,8 @@ from app.api.routes.teaching import router as teaching_router
 from app.api.routes.academic import router as academic_router
 from app.api.routes.teachers import router as teachers_router
 from app.database import close_client, get_database, init_indexes
+from app.database.mongodb import demo_scope
+from app.security.jwt import decode_access_token
 from app.database.academic import seed_academic_data_if_empty
 
 
@@ -86,8 +88,15 @@ async def lifespan(app: FastAPI):
     await migrate_account_status(db)
     await bootstrap_first_admin(db)
     purge_task = asyncio.create_task(_purge_stale_registrations_periodically())
+    demo_task = None
+    if settings.PUBLIC_DEMO_ENABLED:
+        from app.services import demo_service
+
+        demo_task = asyncio.create_task(demo_service.reset_periodically())
     yield
     purge_task.cancel()
+    if demo_task is not None:
+        demo_task.cancel()
     # Shutdown: close active client connection
     close_client()
 
@@ -147,6 +156,51 @@ async def enforce_payload_size_limit(request: Request, call_next):
     return await call_next(request)
 
 
+class DemoTokenScope:
+    """Requests made with a demo token work on the demo copy of the data.
+
+    Pure ASGI, so the choice made here is visible to the route and everything
+    it calls (a context variable read by get_database). A demo token is
+    refused when the demo is switched off, and on routes that would lock other
+    visitors out of the shared demo accounts.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        demo = False
+        for name, value in scope.get("headers") or []:
+            if name == b"authorization":
+                raw = value.decode("latin-1")
+                if raw[:7].lower() == "bearer ":
+                    try:
+                        demo = bool(decode_access_token(raw[7:].strip()).get("demo"))
+                    except Exception:  # nosec B110 - an invalid token is refused later
+                        demo = False
+                break
+        if not demo:
+            return await self.app(scope, receive, send)
+
+        from app.services import demo_service
+
+        refusal = None
+        if not settings.PUBLIC_DEMO_ENABLED:
+            refusal = (401, "The demo is not available on this site.")
+        elif demo_service.is_blocked(scope.get("method", ""), scope.get("path", "")):
+            refusal = (403, "This is not available in the demo.")
+        if refusal:
+            response = JSONResponse(status_code=refusal[0], content={"detail": refusal[1]})
+            return await response(scope, receive, send)
+        with demo_scope():
+            return await self.app(scope, receive, send)
+
+
+app.add_middleware(DemoTokenScope)
+
+
 # Register API v1 routes
 app.include_router(events_router, prefix="/api/v1")
 app.include_router(attendance_router)
@@ -185,6 +239,16 @@ def health_check():
         "status": "healthy",
         "service": "anti-proxy-backend",
         "version": "0.1.0",
+    }
+
+
+@app.get("/api/v1/site")
+def site_info():
+    """What the public pages need to know about this site: is the demo on, whom to contact."""
+    email = settings.CONTACT_EMAIL
+    return {
+        "demo_enabled": settings.PUBLIC_DEMO_ENABLED,
+        "contact_email": email if "@" in email else None,
     }
 
 

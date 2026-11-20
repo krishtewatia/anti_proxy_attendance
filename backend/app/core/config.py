@@ -120,5 +120,18 @@ class Settings:
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() in {"true", "1", "yes"}
     DEMO_CAMERA_ID: str = os.getenv("DEMO_CAMERA_ID", "CAM_ROOM_101_DOOR")
 
+    # Public "try the demo" sign-in (POST /api/v1/auth/demo): visitors get an
+    # admin, teacher or student account in a separate demo copy of the data.
+    # Unrelated to DEMO_MODE above (the doorway camera rehearsal).
+    PUBLIC_DEMO_ENABLED: bool = os.getenv("PUBLIC_DEMO_ENABLED", "false").lower() in {
+        "true",
+        "1",
+        "yes",
+    }
+    # The demo copy is wiped and set up again this often.
+    PUBLIC_DEMO_RESET_HOURS: float = float(os.getenv("PUBLIC_DEMO_RESET_HOURS", "24"))
+    # Shown as "Contact us" on the landing page (GET /api/v1/site); empty hides it.
+    CONTACT_EMAIL: str = os.getenv("CONTACT_EMAIL", "").strip()
+
 
 settings = Settings()

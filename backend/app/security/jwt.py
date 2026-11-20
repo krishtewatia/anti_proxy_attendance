@@ -14,6 +14,7 @@ def create_access_token(
     user_id: str,
     role: str,
     token_version: int = 0,
+    demo: bool = False,
 ) -> str:
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -27,6 +28,9 @@ def create_access_token(
         "iat": now,
         "exp": expires_at,
     }
+    if demo:
+        # Every request made with this token works on the demo collections.
+        payload["demo"] = True
 
     return jwt.encode(
         payload,

@@ -5,6 +5,8 @@
     python infra/scripts/manage_secrets.py list           names and dates only
     python infra/scripts/manage_secrets.py rotate NAME    replace one generated secret
     python infra/scripts/manage_secrets.py remove-bootstrap
+    python infra/scripts/manage_secrets.py set NAME VALUE  change a site setting (below)
+    python infra/scripts/manage_secrets.py unset NAME      back to its default
     python infra/scripts/manage_secrets.py purge          delete all of them
 
 Every secret is new for the deployment: generated here, or typed at a hidden
@@ -20,6 +22,12 @@ What is stored under the deployment's path (default /antiproxy/prod):
     MONGODB_URL        built from a database user this script creates in Atlas
     DUCKDNS_TOKEN      typed at a hidden prompt
     BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD   typed; first start only
+
+Site settings (not secret; set with `set`, read at the next start):
+
+    PUBLIC_DEMO_ENABLED      true or false: the one-click demo on /demo
+    PUBLIC_DEMO_RESET_HOURS  how often the demo data is wiped (default 24)
+    CONTACT_EMAIL            the landing page's "Contact us" address
 
 The Atlas API key is read from the environment (MONGODB_ATLAS_PUBLIC_API_KEY
 and MONGODB_ATLAS_PRIVATE_API_KEY), the same variables Terraform uses.
@@ -44,6 +52,12 @@ from common import aws, cli_file_argument, fail, outputs, require_tools
 
 GENERATED = ["JWT_SECRET_KEY", "VISION_SERVICE_API_KEY", "RECOGNITION_SIGNING_KEY"]
 BOOTSTRAP = ["BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD"]
+# Site settings `set` may change, each with a check of its value.
+SITE_SETTINGS = {
+    "PUBLIC_DEMO_ENABLED": "true or false",
+    "PUBLIC_DEMO_RESET_HOURS": "a number of hours between 1 and 720",
+    "CONTACT_EMAIL": "an email address",
+}
 DATABASE_NAME = "anti_proxy_attendance"
 DATABASE_USER = "antiproxy_app"
 ATLAS_API = "https://cloud.mongodb.com/api/atlas/v2"
@@ -252,10 +266,53 @@ def command_rotate(store: Store, name: str) -> int:
     return 0
 
 
+def site_setting_value(name: str, value: str) -> str:
+    """The value to store for a site setting, or a plain error."""
+    if name not in SITE_SETTINGS:
+        fail(f"only these site settings can be set here: {', '.join(SITE_SETTINGS)}")
+    value = (value or "").strip()
+    if name == "PUBLIC_DEMO_ENABLED":
+        if value.lower() not in ("true", "false"):
+            fail("PUBLIC_DEMO_ENABLED must be true or false")
+        return value.lower()
+    if name == "PUBLIC_DEMO_RESET_HOURS":
+        try:
+            hours = float(value)
+        except ValueError:
+            hours = 0
+        if not 1 <= hours <= 720:
+            fail("PUBLIC_DEMO_RESET_HOURS must be a number of hours between 1 and 720")
+        return value
+    local, _, domain = value.partition("@")
+    if not local or "." not in domain or " " in value or "'" in value or len(value) > 254:
+        fail("CONTACT_EMAIL must be an email address such as name@example.com")
+    return value
+
+
+def command_set(store: Store, name: str, value: str) -> int:
+    store.put(name, site_setting_value(name, value))
+    print("The site reads it at its next start: run tf.py deploy (or tf.py start if it is stopped).")
+    return 0
+
+
+def command_unset(store: Store, name: str) -> int:
+    if name not in SITE_SETTINGS:
+        fail(f"only these site settings can be unset here: {', '.join(SITE_SETTINGS)}")
+    if name in store.names():
+        store.delete([name])
+    else:
+        print(f"  {name} is not set")
+    print("The site reads it at its next start: run tf.py deploy (or tf.py start if it is stopped).")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["init", "list", "rotate", "remove-bootstrap", "purge"])
-    parser.add_argument("name", nargs="?", help="for rotate: the secret to replace")
+    parser.add_argument(
+        "command", choices=["init", "list", "rotate", "remove-bootstrap", "set", "unset", "purge"]
+    )
+    parser.add_argument("name", nargs="?", help="for rotate: the secret; for set/unset: the setting")
+    parser.add_argument("value", nargs="?", help="for set: the new value")
     parser.add_argument("--if-missing", action="store_true", help="init: do nothing when everything exists")
     parser.add_argument("--region", help="default: from Terraform's outputs")
     parser.add_argument("--path", help="default: from Terraform's outputs")
@@ -275,6 +332,10 @@ def main() -> int:
         return 0
     if args.command == "rotate":
         return command_rotate(store, args.name or "")
+    if args.command == "set":
+        return command_set(store, args.name or "", args.value or "")
+    if args.command == "unset":
+        return command_unset(store, args.name or "")
     if args.command == "remove-bootstrap":
         present = [name for name in BOOTSTRAP if name in store.names()]
         store.delete(present) if present else print("  nothing to remove")

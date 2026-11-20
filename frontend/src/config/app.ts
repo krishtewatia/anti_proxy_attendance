@@ -17,3 +17,38 @@ function configuredName(): string | undefined {
 
 export const APP_NAME: string = configuredName() ?? DEFAULT_APP_NAME;
 export const APP_TAGLINE = "Face-recognition attendance";
+
+// Shown in every page footer.
+export const AUTHOR_NAME = "Krish Tewatia";
+export const AUTHOR_URL = "https://github.com/krishtewatia";
+
+// The "Contact us" address and whether the demo is on are settings of the
+// server (CONTACT_EMAIL, PUBLIC_DEMO_ENABLED), read from GET /api/v1/site, so
+// one published image serves every site.
+
+// Organisations that use the service. Each has its own page at /<slug> with
+// its sign-in and registration. One organisation per deployment for now: the
+// backend holds a single organisation's data.
+export interface Organisation {
+  slug: string;
+  shortName: string;
+  name: string;
+  place: string;
+  status: string;
+  description: string;
+}
+
+export const ORGANISATIONS: Organisation[] = [
+  {
+    slug: "niet",
+    shortName: "NIET",
+    name: "Noida Institute of Engineering and Technology",
+    place: "Greater Noida, Uttar Pradesh",
+    status: "Pilot",
+    description: "B.Tech CSE (Data Science), 3rd year: classes, timetable and attendance for every section.",
+  },
+];
+
+export function organisationBySlug(slug: string): Organisation | undefined {
+  return ORGANISATIONS.find((org) => org.slug === slug.toLowerCase());
+}

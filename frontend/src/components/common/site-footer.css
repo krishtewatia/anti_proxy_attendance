@@ -1,0 +1,39 @@
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--erp-text-muted);
+  text-align: center;
+}
+
+.site-footer-compact {
+  padding: 1.25rem 1rem 0.5rem;
+}
+
+.site-footer-full {
+  padding: 1.5rem 1rem;
+  border-top: 1px solid var(--erp-border);
+}
+
+.site-footer-made {
+  font-weight: 500;
+  color: var(--erp-text-body);
+}
+
+.site-footer-author {
+  color: var(--erp-primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.site-footer-author:hover,
+.site-footer-author:focus-visible {
+  text-decoration: underline;
+}
+
+.site-footer-sep {
+  color: var(--erp-text-subtle);
+}

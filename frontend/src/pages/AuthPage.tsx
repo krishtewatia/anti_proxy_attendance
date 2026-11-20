@@ -2,14 +2,16 @@ import React, { useState } from "react";
 import { AuthLayout } from "../components/auth/AuthLayout";
 import { LoginForm } from "../components/auth/LoginForm";
 import { RegisterForm } from "../components/auth/RegisterForm";
+import type { Organisation } from "../config/app.ts";
 import type { TokenResponse } from "../types";
 import { registeredMessage } from "../utils/registration.ts";
 
 interface AuthPageProps {
   onLoginSuccess: (response: TokenResponse) => void;
+  organisation?: Organisation;
 }
 
-export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
+export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, organisation }) => {
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
@@ -19,7 +21,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <AuthLayout>
+    <AuthLayout organisation={organisation}>
       <div className="auth-tabs" role="tablist" aria-label="Authentication modes">
         <button
           type="button"
