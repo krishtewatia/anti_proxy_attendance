@@ -43,8 +43,11 @@ ADD --checksum=sha256:2be5c295aefee7bf6356edbf6303b1827aab5d793e4a1898de4e11fb0f
 # ------------------------------------------------------------------------------
 FROM python:3.11-slim AS runtime
 
-# Install essential native libraries for OpenCV and ONNX Runtime
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install essential native libraries for OpenCV and ONNX Runtime, and pick up
+# fixed versions of base-image Debian packages that have known HIGH/CRITICAL
+# vulnerabilities (the container scan fails on any that has a fix).
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libgomp1 \

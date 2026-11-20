@@ -25,6 +25,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # ------------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
 
+# Pick up fixed versions of base-image Debian packages that have known
+# HIGH/CRITICAL vulnerabilities (the container scan fails on any that has a fix).
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 # Security: Create unprivileged system group and user
 RUN groupadd -g 10001 appgroup && \
     useradd -u 10001 -g appgroup -s /sbin/nologin -M -d /nonexistent appuser
