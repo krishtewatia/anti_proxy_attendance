@@ -22,19 +22,9 @@ export const APP_TAGLINE = "Face-recognition attendance";
 export const AUTHOR_NAME = "Krish Tewatia";
 export const AUTHOR_URL = "https://github.com/krishtewatia";
 
-function envValue(name: string): string | undefined {
-  const fromVite = (import.meta as { env?: Record<string, string | undefined> }).env?.[name];
-  if (fromVite && fromVite.trim()) {
-    return fromVite.trim();
-  }
-  const nodeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
-  const fromNode = nodeEnv?.[name];
-  return fromNode && fromNode.trim() ? fromNode.trim() : undefined;
-}
-
-// Where organisations interested in the service write to. Set
-// VITE_CONTACT_EMAIL at build time; without it the contact button is hidden.
-export const CONTACT_EMAIL: string | undefined = envValue("VITE_CONTACT_EMAIL");
+// The "Contact us" address and whether the demo is on are settings of the
+// server (CONTACT_EMAIL, PUBLIC_DEMO_ENABLED), read from GET /api/v1/site, so
+// one published image serves every site.
 
 // Organisations that use the service. Each has its own page at /<slug> with
 // its sign-in and registration. One organisation per deployment for now: the

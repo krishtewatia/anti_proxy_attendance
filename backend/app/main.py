@@ -242,6 +242,16 @@ def health_check():
     }
 
 
+@app.get("/api/v1/site")
+def site_info():
+    """What the public pages need to know about this site: is the demo on, whom to contact."""
+    email = settings.CONTACT_EMAIL
+    return {
+        "demo_enabled": settings.PUBLIC_DEMO_ENABLED,
+        "contact_email": email if "@" in email else None,
+    }
+
+
 @app.get("/ready")
 def readiness_check():
     return {

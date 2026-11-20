@@ -165,3 +165,18 @@ async def test_reset_drops_only_demo_collections():
     names = await real.list_collection_names()
     assert not [n for n in names if n.startswith(DEMO_PREFIX)]
     assert await real["users"].find_one({"user_id": "keep_me"})
+
+
+async def test_site_info_tells_the_landing_page_about_the_demo_and_the_contact(monkeypatch):
+    monkeypatch.setattr(settings, "CONTACT_EMAIL", "sales@example.com")
+    async with _client() as client:
+        assert (await client.get("/api/v1/site")).json() == {
+            "demo_enabled": True,
+            "contact_email": "sales@example.com",
+        }
+        monkeypatch.setattr(settings, "PUBLIC_DEMO_ENABLED", False)
+        monkeypatch.setattr(settings, "CONTACT_EMAIL", "")
+        assert (await client.get("/api/v1/site")).json() == {
+            "demo_enabled": False,
+            "contact_email": None,
+        }

@@ -304,6 +304,8 @@ PUBLIC_ROUTES = {
     # tokens only ever reach the demo copy of the data (test_public_demo.py).
     ("GET", "/auth/demo"),
     ("POST", "/auth/demo"),
+    # The landing page: whether the demo is on and the contact address.
+    ("GET", "/api/v1/site"),
     ("POST", "/api/v1/students/register"),
     ("POST", "/api/v1/teachers/register"),
     # The registration form lists the active classes before anyone has an account.

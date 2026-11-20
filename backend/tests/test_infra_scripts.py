@@ -551,3 +551,50 @@ def test_the_backup_stores_no_empty_photo_archive(tmp_path):
     (uploads / "student_profiles" / "x.jpg").write_bytes(b"not a photo")
     run_block()
     assert (work / "uploads.tar.gz").stat().st_size > 0
+
+
+# ------------------------------------------------------------------------------
+# Site settings: the public demo and the contact address
+# ------------------------------------------------------------------------------
+
+
+def test_site_settings_are_checked_and_stored(capsys):
+    store = MemoryStore()
+    assert manage_secrets.command_set(store, "PUBLIC_DEMO_ENABLED", "True") == 0
+    assert manage_secrets.command_set(store, "CONTACT_EMAIL", " sales@example.com ") == 0
+    assert manage_secrets.command_set(store, "PUBLIC_DEMO_RESET_HOURS", "12") == 0
+    assert store.values == {
+        "PUBLIC_DEMO_ENABLED": "true",
+        "CONTACT_EMAIL": "sales@example.com",
+        "PUBLIC_DEMO_RESET_HOURS": "12",
+    }
+    assert "next start" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "name,value",
+    [
+        ("PUBLIC_DEMO_ENABLED", "yes"),
+        ("PUBLIC_DEMO_RESET_HOURS", "0"),
+        ("CONTACT_EMAIL", "not-an-email"),
+        ("JWT_SECRET_KEY", "anything"),
+    ],
+)
+def test_bad_site_settings_are_refused(name, value):
+    store = MemoryStore()
+    with pytest.raises(SystemExit):
+        manage_secrets.command_set(store, name, value)
+    assert store.values == {}
+
+
+def test_unset_only_removes_site_settings():
+    class DeletingStore(MemoryStore):
+        def delete(self, names):
+            for name in names:
+                self.values.pop(name)
+
+    store = DeletingStore({"PUBLIC_DEMO_ENABLED": "true", "JWT_SECRET_KEY": SECRET})
+    assert manage_secrets.command_unset(store, "PUBLIC_DEMO_ENABLED") == 0
+    assert store.values == {"JWT_SECRET_KEY": SECRET}
+    with pytest.raises(SystemExit):
+        manage_secrets.command_unset(store, "JWT_SECRET_KEY")

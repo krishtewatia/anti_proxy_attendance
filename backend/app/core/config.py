@@ -130,6 +130,8 @@ class Settings:
     }
     # The demo copy is wiped and set up again this often.
     PUBLIC_DEMO_RESET_HOURS: float = float(os.getenv("PUBLIC_DEMO_RESET_HOURS", "24"))
+    # Shown as "Contact us" on the landing page (GET /api/v1/site); empty hides it.
+    CONTACT_EMAIL: str = os.getenv("CONTACT_EMAIL", "").strip()
 
 
 settings = Settings()

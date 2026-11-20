@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { SiteFooter } from "../components/common/SiteFooter";
-import { APP_NAME, CONTACT_EMAIL, ORGANISATIONS } from "../config/app.ts";
+import { APP_NAME, ORGANISATIONS } from "../config/app.ts";
+import { api } from "../services";
 import "./landing.css";
 
 interface LandingPageProps {
@@ -67,8 +68,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
     e.preventDefault();
     onNavigate(path);
   };
-  const contactHref = CONTACT_EMAIL
-    ? `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(`${APP_NAME} for our institution`)}`
+  // Set on the server (CONTACT_EMAIL); without it the card offers the demo instead.
+  const [contactEmail, setContactEmail] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .siteInfo()
+      .then((site) => !cancelled && setContactEmail(site.contact_email))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const contactHref = contactEmail
+    ? `mailto:${contactEmail}?subject=${encodeURIComponent(`${APP_NAME} for our institution`)}`
     : undefined;
 
   return (

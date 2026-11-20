@@ -173,6 +173,10 @@ export const api = {
     });
   },
 
+  siteInfo(): Promise<{ demo_enabled: boolean; contact_email: string | null }> {
+    return request<{ demo_enabled: boolean; contact_email: string | null }>("/api/v1/site");
+  },
+
   demoAvailable(): Promise<{ enabled: boolean }> {
     return request<{ enabled: boolean }>("/api/v1/auth/demo");
   },

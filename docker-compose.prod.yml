@@ -91,6 +91,8 @@ services:
       # The public "Try the demo" sign-in (made-up data, kept apart from the real data).
       PUBLIC_DEMO_ENABLED: ${PUBLIC_DEMO_ENABLED:-false}
       PUBLIC_DEMO_RESET_HOURS: ${PUBLIC_DEMO_RESET_HOURS:-24}
+      # The landing page's "Contact us" address; empty hides the button.
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-}
       VISION_SERVICE_URL: http://vision-service:8088
       # The page and the API share one origin, so only that origin is allowed.
       CORS_ALLOWED_ORIGINS: https://${SITE_ADDRESS}
