@@ -91,6 +91,16 @@ registration_rate_limiter = _SettingLimiter("REGISTRATION_RATE_LIMIT_PER_HOUR", 
 registration_identity_rate_limiter = _SettingLimiter(
     "REGISTRATION_ATTEMPTS_PER_IDENTITY_PER_HOUR", window_seconds=3600
 )
+# Public demo sign-ins, per address; kept apart from the sign-up budget.
+demo_login_rate_limiter = SlidingWindowRateLimiter(limit_per_minute=20)
+
+
+async def check_demo_login_rate_limit(request: Request) -> None:
+    await demo_login_rate_limiter.check(
+        f"demo:{client_ip(request)}", "demo sign-ins from one address"
+    )
+
+
 # Face photo checks during the student setup: per signed-in student, not per address.
 photo_check_rate_limiter = _SettingLimiter("PHOTO_CHECKS_PER_HOUR", window_seconds=3600)
 

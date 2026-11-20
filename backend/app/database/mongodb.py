@@ -1,10 +1,19 @@
 """MongoDB connection and database dependency management."""
 
-from typing import Optional
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Iterator, Optional
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app.core.config import settings
 
 import asyncio
+
+# Visitors trying the public demo work on their own copy of every collection,
+# in the same database, with this prefix. A request made with a demo token sees
+# only those collections (see DemoDatabase), so demo visitors never read or
+# change an organisation's real data, and the demo can be wiped on its own.
+DEMO_PREFIX = "demo__"
+_demo_request: ContextVar[bool] = ContextVar("demo_request", default=False)
 
 _client: Optional[AsyncIOMotorClient] = None
 
@@ -51,10 +60,52 @@ def close_client():
         _client = None
 
 
-def get_database() -> AsyncIOMotorDatabase:
-    """FastAPI dependency to retrieve the application database."""
+class DemoDatabase:
+    """The database as a demo request sees it: every collection name is prefixed.
+
+    Only ``db[name]`` and ``command`` are offered. The code reaches collections
+    only by ``db[name]`` (no ``$lookup`` or other cross-collection stages), so
+    nothing can name a real collection from here.
+    """
+
+    def __init__(self, real: AsyncIOMotorDatabase):
+        self._real = real
+        self.name = real.name
+
+    def __getitem__(self, name: str):
+        return self._real[f"{DEMO_PREFIX}{name}"]
+
+    def command(self, *args, **kwargs):
+        return self._real.command(*args, **kwargs)
+
+
+def real_database() -> AsyncIOMotorDatabase:
     client = get_client()
     return client[settings.DATABASE_NAME]
+
+
+def get_database() -> AsyncIOMotorDatabase:
+    """FastAPI dependency to retrieve the application database.
+
+    For a request made with a demo token this is the demo's copy of it.
+    """
+    if _demo_request.get():
+        return DemoDatabase(real_database())  # type: ignore[return-value]
+    return real_database()
+
+
+def in_demo() -> bool:
+    return _demo_request.get()
+
+
+@contextmanager
+def demo_scope(active: bool = True) -> Iterator[None]:
+    """Run the enclosed code against the demo collections (or, with False, the real ones)."""
+    token = _demo_request.set(active)
+    try:
+        yield
+    finally:
+        _demo_request.reset(token)
 
 
 async def init_indexes(db: AsyncIOMotorDatabase):

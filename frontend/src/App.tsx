@@ -1,5 +1,8 @@
 import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { AuthPage } from "./pages/AuthPage";
+import { DemoPage } from "./pages/DemoPage";
+import { LandingPage } from "./pages/LandingPage";
+import { ORGANISATIONS, organisationBySlug } from "./config/app.ts";
 import { AuthLayout } from "./components/auth/AuthLayout";
 import { ChangePasswordForm } from "./components/auth/ChangePasswordForm";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
@@ -279,16 +282,29 @@ export function App() {
     );
   }
 
-  // Fallback for any unknown route: if authenticated, redirect to role dashboard, else render AuthPage
-  if (currentPath !== "/" && currentPath !== "/login") {
-    if (currentUser && auth.isAuthenticated()) {
+  // The public demo: open to everyone, also to switch roles while in the demo.
+  if (currentPath === "/demo") {
+    return <DemoPage onLoginSuccess={handleLoginSuccess} onNavigate={navigate} />;
+  }
+
+  // An organisation's own page: /niet (and the older /login) sign in and register.
+  const organisation =
+    currentPath === "/login" ? ORGANISATIONS[0] : organisationBySlug(currentPath.replace(/^\/+|\/+$/g, ""));
+
+  // Fallback for any unknown route: if authenticated, redirect to role dashboard.
+  if (currentPath !== "/") {
+    if (currentUser && auth.isAuthenticated() && !(organisation && auth.isDemo())) {
       navigate(getDashboardPath(currentUser.role));
       return null;
     }
   }
 
-  // Default route: / or /login (AuthPage)
-  return <AuthPage onLoginSuccess={handleLoginSuccess} />;
+  if (organisation) {
+    return <AuthPage onLoginSuccess={handleLoginSuccess} organisation={organisation} />;
+  }
+
+  // Default route: the product's home page.
+  return <LandingPage onNavigate={navigate} />;
 }
 
 export default App;

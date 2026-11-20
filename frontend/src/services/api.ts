@@ -166,6 +166,17 @@ export const api = {
     });
   },
 
+  demoLogin(role: "ADMIN" | "TEACHER" | "STUDENT"): Promise<TokenResponse> {
+    return request<TokenResponse>("/api/v1/auth/demo", {
+      method: "POST",
+      body: JSON.stringify({ role }),
+    });
+  },
+
+  demoAvailable(): Promise<{ enabled: boolean }> {
+    return request<{ enabled: boolean }>("/api/v1/auth/demo");
+  },
+
   changePassword(currentPassword: string, newPassword: string): Promise<TokenResponse> {
     return request<TokenResponse>("/api/v1/auth/change-password", {
       method: "POST",

@@ -124,13 +124,14 @@ async def authenticate_user(
     return issue_token(user)
 
 
-def issue_token(user: dict) -> TokenResponse:
+def issue_token(user: dict, *, demo: bool = False) -> TokenResponse:
     """A token for the user as they are now (current token version)."""
     return TokenResponse(
         access_token=create_access_token(
             user_id=user["user_id"],
             role=user["role"],
             token_version=int(user.get("token_version", 0) or 0),
+            demo=demo,
         ),
         token_type="bearer",  # nosec: B106
         user=UserResponse(

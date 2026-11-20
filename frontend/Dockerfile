@@ -18,6 +18,9 @@ RUN npm ci
 # The name shown in the interface (APP_NAME in .env, passed by Compose).
 ARG VITE_APP_NAME="Anti-Proxy Attendance System"
 ENV VITE_APP_NAME=${VITE_APP_NAME}
+# The landing page's "Contact us" address (CONTACT_EMAIL in .env); hidden when empty.
+ARG VITE_CONTACT_EMAIL=""
+ENV VITE_CONTACT_EMAIL=${VITE_CONTACT_EMAIL}
 
 # The browser calls the API on the address the page came from (nginx here, or
 # the reverse proxy in front of it), never on a separate backend port.

@@ -418,3 +418,35 @@
     line-height: 1.2;
   }
 }
+
+/* Shown above the app while a demo account is signed in. */
+.erp-demo-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--erp-warning-bg);
+  border-bottom: 1px solid var(--erp-warning-border);
+  color: var(--erp-warning-text);
+  font-size: 0.82rem;
+}
+
+.erp-demo-bar-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.erp-demo-bar-actions a,
+.erp-demo-bar-actions button {
+  font: inherit;
+  font-weight: 700;
+  color: var(--erp-warning-text);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}

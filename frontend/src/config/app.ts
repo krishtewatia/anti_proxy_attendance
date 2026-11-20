@@ -17,3 +17,48 @@ function configuredName(): string | undefined {
 
 export const APP_NAME: string = configuredName() ?? DEFAULT_APP_NAME;
 export const APP_TAGLINE = "Face-recognition attendance";
+
+// Shown in every page footer.
+export const AUTHOR_NAME = "Krish Tewatia";
+export const AUTHOR_URL = "https://github.com/krishtewatia";
+
+function envValue(name: string): string | undefined {
+  const fromVite = (import.meta as { env?: Record<string, string | undefined> }).env?.[name];
+  if (fromVite && fromVite.trim()) {
+    return fromVite.trim();
+  }
+  const nodeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  const fromNode = nodeEnv?.[name];
+  return fromNode && fromNode.trim() ? fromNode.trim() : undefined;
+}
+
+// Where organisations interested in the service write to. Set
+// VITE_CONTACT_EMAIL at build time; without it the contact button is hidden.
+export const CONTACT_EMAIL: string | undefined = envValue("VITE_CONTACT_EMAIL");
+
+// Organisations that use the service. Each has its own page at /<slug> with
+// its sign-in and registration. One organisation per deployment for now: the
+// backend holds a single organisation's data.
+export interface Organisation {
+  slug: string;
+  shortName: string;
+  name: string;
+  place: string;
+  status: string;
+  description: string;
+}
+
+export const ORGANISATIONS: Organisation[] = [
+  {
+    slug: "niet",
+    shortName: "NIET",
+    name: "Noida Institute of Engineering and Technology",
+    place: "Greater Noida, Uttar Pradesh",
+    status: "Pilot",
+    description: "B.Tech CSE (Data Science), 3rd year: classes, timetable and attendance for every section.",
+  },
+];
+
+export function organisationBySlug(slug: string): Organisation | undefined {
+  return ORGANISATIONS.find((org) => org.slug === slug.toLowerCase());
+}

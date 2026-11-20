@@ -1,12 +1,15 @@
 import React from "react";
 import "./auth.css";
-import { APP_NAME, APP_TAGLINE } from "../../config/app.ts";
+import { APP_NAME, APP_TAGLINE, type Organisation } from "../../config/app.ts";
+import { SiteFooter } from "../common/SiteFooter";
 
 interface AuthLayoutProps {
   children: React.ReactNode;
+  // The organisation whose sign-in page this is (shown above the form).
+  organisation?: Organisation;
 }
 
-export const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
+export const AuthLayout: React.FC<AuthLayoutProps> = ({ children, organisation }) => {
   return (
     <div className="erp-auth-wrapper">
       <main className="erp-auth-container">
@@ -23,13 +26,26 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children }) => {
           <p className="erp-auth-subtitle">{APP_TAGLINE}</p>
         </header>
 
+        {organisation && (
+          <div className="erp-auth-org" aria-label="Organisation">
+            <span className="erp-auth-org-badge">{organisation.shortName}</span>
+            <div className="erp-auth-org-text">
+              <span className="erp-auth-org-name">{organisation.name}</span>
+              <span className="erp-auth-org-meta">
+                {organisation.place} · {organisation.status}
+              </span>
+            </div>
+            <a className="erp-auth-org-switch" href="/#organisations">
+              Change
+            </a>
+          </div>
+        )}
+
         <section className="erp-auth-card" aria-label="Portal Authentication">
           {children}
         </section>
 
-        <footer className="erp-auth-footer-tag">
-          <span>{APP_NAME}</span>
-        </footer>
+        <SiteFooter variant="compact" />
       </main>
     </div>
   );

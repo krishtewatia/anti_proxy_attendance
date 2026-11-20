@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.dependencies.rate_limiter import (
+    check_demo_login_rate_limit,
     check_registration_identity,
     check_registration_rate_limit,
 )
@@ -17,6 +18,7 @@ from typing import Annotated
 
 from app.api.dependencies.auth import get_authenticated_user
 from app.schemas.auth import (
+    DemoLoginRequest,
     PasswordChangeRequest,
     TokenResponse,
     UserCreate,
@@ -65,6 +67,29 @@ async def registration_rules() -> dict:
         "college_email_domain": await college_email_domain(get_database()),
         "consent_notice": CONSENT_NOTICE,
     }
+
+
+@router.post(
+    "/demo",
+    response_model=TokenResponse,
+    summary="Sign in to the public demo as an administrator, teacher or student",
+    dependencies=[Depends(check_demo_login_rate_limit)],
+)
+async def demo_login(body: DemoLoginRequest) -> TokenResponse:
+    """A token for a demo account. It works only on the demo copy of the data."""
+    from app.services import demo_service
+
+    try:
+        return await demo_service.sign_in(body.role)
+    except demo_service.DemoUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/demo", summary="Whether this site offers the public demo")
+async def demo_available() -> dict:
+    from app.core.config import settings
+
+    return {"enabled": settings.PUBLIC_DEMO_ENABLED}
 
 
 @router.post(

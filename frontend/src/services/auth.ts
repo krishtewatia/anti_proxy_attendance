@@ -9,6 +9,7 @@ import { api } from "./api.ts";
 const TOKEN_KEY = "anti_proxy_access_token";
 const USER_KEY = "anti_proxy_user";
 const MUST_CHANGE_KEY = "anti_proxy_must_change_password";
+const DEMO_KEY = "anti_proxy_demo";
 
 class MemoryStorage {
   private store = new Map<string, string>();
@@ -72,6 +73,7 @@ export function clearStoredAuth(): void {
   storage.removeItem(TOKEN_KEY);
   storage.removeItem(USER_KEY);
   storage.removeItem(MUST_CHANGE_KEY);
+  storage.removeItem(DEMO_KEY);
 }
 
 // Whether the signed-in account has to choose a new password before anything else.
@@ -93,9 +95,25 @@ export function isAuthenticated(): boolean {
 
 export async function login(credentials: UserLogin): Promise<TokenResponse> {
   const response = await api.login(credentials);
+  getStorage().removeItem(DEMO_KEY);
   setStoredAuth(response.access_token, response.user);
   setMustChangePassword(Boolean(response.must_change_password));
   return response;
+}
+
+// One-click sign-in to the public demo; the account sees only demo data.
+export async function demoLogin(role: "ADMIN" | "TEACHER" | "STUDENT"): Promise<TokenResponse> {
+  const response = await api.demoLogin(role);
+  clearStoredAuth();
+  setStoredAuth(response.access_token, response.user);
+  setMustChangePassword(false);
+  getStorage().setItem(DEMO_KEY, "1");
+  return response;
+}
+
+// Whether the signed-in account is a demo account (the app shows a demo bar).
+export function isDemo(): boolean {
+  return isAuthenticated() && getStorage().getItem(DEMO_KEY) === "1";
 }
 
 // Every earlier token stops working; the new one replaces the stored token.
@@ -116,6 +134,8 @@ export function logout(): void {
 
 export const auth = {
   login,
+  demoLogin,
+  isDemo,
   changePassword,
   mustChangePassword,
   setMustChangePassword,
