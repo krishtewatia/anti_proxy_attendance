@@ -31,7 +31,7 @@ RUN npm run build
 # ------------------------------------------------------------------------------
 # Stage 2: Serve with Unprivileged Nginx
 # ------------------------------------------------------------------------------
-FROM nginxinc/nginx-unprivileged:1.30-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
 
 # Pick up fixed versions of base-image packages that have known HIGH/CRITICAL
 # vulnerabilities (the container scan fails on any that has a fix available).
